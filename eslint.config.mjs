@@ -1,0 +1,12 @@
+import nextConfig from "eslint-config-next";
+import prettierConfig from "eslint-config-prettier";
+
+const config = [
+  ...nextConfig,
+  prettierConfig,
+  {
+    ignores: [".next/**", "node_modules/**", "src/generated/**"],
+  },
+];
+
+export default config;

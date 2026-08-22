@@ -1,0 +1,1528 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Technical placeholder used to verify the database connection, migration,
+// and seed pipeline during FASE 0.
+model HealthCheck {
+  id        String   @id @default(cuid())
+  status    String   @default("ok")
+  checkedAt DateTime @default(now())
+}
+
+// FASE 2 — Authentication Models
+// Shape follows Auth.js's standard Prisma adapter schema (User/Account/
+// Session/VerificationToken) so @auth/prisma-adapter works without a custom
+// adapter. Curriculum/domain models are introduced in FASE 4.
+
+enum UserRole {
+  LEARNER
+  PREMIUM_LEARNER
+  ADMINISTRATOR
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  /// Set once the learner verifies their email (authentication.md — "Every
+  /// email account should be verified before full activation").
+  emailVerified DateTime?
+  image         String?
+  /// Null for OAuth-only accounts (e.g. Google Sign-In has no local password).
+  passwordHash  String?
+  role          UserRole  @default(LEARNER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts               Account[]
+  sessions               Session[]
+  learnerProfile         LearnerProfile?
+  lessonCompletions      LearnerLessonCompletion[]
+  lessonProgress         LearnerLessonProgress[]
+  exerciseAttempts       ExerciseAttempt[]
+  quizAttempts           QuizAttempt[]
+  aiConversation         AiConversation?
+  aiUsageLogs            AiUsageLog[]
+  speakingSessions       SpeakingSession[]
+  writingAttempts        WritingAttempt[]
+  missionAttempts        MissionAttempt[]
+  progressEvidence       ProgressEvidence[]
+  reviewCompletions      ReviewCompletion[]
+  reflectionReports      LessonReflectionReport[]
+  vocabularyInteractions LearnerVocabularyInteraction[]
+  vocabularyQuizAttempts VocabularyQuizAttempt[]
+  scenarioCompletions    ScenarioCompletion[]
+  placementSessions      PlacementSession[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Deliberately separate from VerificationToken: both are keyed by email, and
+// sharing one table would let a password-reset request delete a pending
+// email-verification token for the same address (and vice versa).
+model PasswordResetToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// FASE 3 — Learner Profile
+// Option values below come from ui.md and settings.md where those docs
+// state them explicitly (level, languages, correction/explanation/
+// conversation style). "Skill priorities" reuse the MVP competency names
+// from progress.md rather than inventing new ones. Daily study target has
+// no documented option set, so it's a plain minute count, not an enum.
+
+enum InterfaceLanguage {
+  EN
+  ES
+}
+
+enum ExplanationLanguage {
+  EN
+  ES
+  ZH
+}
+
+/// HSK_1_2 added 2026-08-15 (user report): self-reported level bottomed
+/// out at HSK_3, so a true beginner (Foundations' BEGINNER
+/// ScenarioDifficulty tier, added 2026-08-09) had no honest option and
+/// Han defaulted to HSK3+ register for them.
+enum ChineseLevel {
+  HSK_1_2
+  HSK_3
+  HSK_4
+  HSK_5
+  HSK_6
+  HSK_7_9
+  UNSURE
+}
+
+enum LearningGoal {
+  SPEAK_CONFIDENTLY
+  HSK_PREPARATION
+  TRAVEL
+  WORK
+  STUDY
+  PERSONAL_INTEREST
+}
+
+enum SkillPriority {
+  LISTENING
+  SPEAKING
+  READING
+  WRITING
+  GRAMMAR
+  VOCABULARY
+}
+
+enum CorrectionStyle {
+  IMMEDIATE
+  AFTER_CONVERSATION
+  ONLY_IMPORTANT
+}
+
+enum ExplanationStyle {
+  SHORT
+  DETAILED
+}
+
+enum ConversationStyle {
+  FRIENDLY
+  PROFESSIONAL
+  STRICT_TEACHER
+}
+
+model LearnerProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  /// Has a default and no dedicated onboarding step (3.2's step list doesn't
+  /// include one) — set elsewhere (or left default) rather than tracked as
+  /// an onboarding resume point.
+  interfaceLanguage       InterfaceLanguage    @default(EN)
+  /// No default: null means "not yet answered", used to resume interrupted
+  /// onboarding (3.3). A sensible default is applied where this is read
+  /// (e.g. FASE 8's AI Teacher), not here.
+  explanationLanguage     ExplanationLanguage?
+  currentLevel            ChineseLevel?
+  learningGoals           LearningGoal[]
+  skillPriorities         SkillPriority[]
+  dailyStudyTargetMinutes Int?
+
+  correctionStyle   CorrectionStyle?
+  explanationStyle  ExplanationStyle?
+  conversationStyle ConversationStyle?
+
+  /// Points & Leveling System (docs/02_academy/points_system.md, added
+  /// 2026-08-15) - the earned General Level, 0-2000, mapped to HSK 1-9.
+  /// Derived, not an incrementing counter: recomputed as the sum of
+  /// ScenarioCompletion.earnedPoints (+ future Lab points) whenever a
+  /// scenario is completed or redone, so a redo's replacement is always
+  /// reflected correctly. Distinct from the self-reported `currentLevel`
+  /// above - this is the precise, evidence-based signal Han should treat
+  /// as authoritative when the two disagree.
+  generalLevelPoints Float @default(0)
+
+  /// Null until onboarding is finished — the single source of truth for
+  /// whether a returning user should see onboarding again (3.3).
+  onboardingCompletedAt DateTime?
+
+  /// FASE 8.6 "Store conversations only when enabled" - when false, the AI
+  /// Teacher still answers but nothing is written to AiConversation/
+  /// AiMessage, and no prior history is sent as context on the next
+  /// message (see src/lib/ai-teacher-data.ts).
+  aiConversationStorageEnabled Boolean @default(true)
+
+  /// FASE 14.4 "Edit default AI mode" - what AiTeacherProvider starts in on
+  /// login, before the learner (or a lesson step) changes it.
+  defaultAiMode AiTeacherModeDefault @default(TUTOR)
+
+  /// Han always writes the reply internally; this controls whether/how a
+  /// spoken version is also generated and shown. AUDIO_ONLY (2026-08-21)
+  /// still generates the text (Han needs it to speak), it just hides the
+  /// chat bubble in the UI - see ai-teacher-chat.tsx. New default for
+  /// signups from 2026-08-21 onward; existing profiles were left on
+  /// whatever they already had (see migration 20260821_add_audio_only_han_response_mode).
+  hanResponseMode HanResponseMode @default(AUDIO_ONLY)
+  /// Restricted to "cedar" only (2026-08-21, user request) - see
+  /// HAN_VOICES in actions/settings.ts for the enforced allow-list and the
+  /// migration that backfilled every existing profile to "cedar".
+  hanVoice        String          @default("cedar")
+
+  /// FASE 14.4 "Edit recording-retention preference" - null means keep
+  /// Speaking Lab recordings indefinitely. Stores the *preference* only;
+  /// there is no scheduled job that actually enforces/deletes on a timer
+  /// yet (no job-scheduler infrastructure exists in this project) - a
+  /// documented gap, not a bug.
+  recordingRetentionDays Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Mirrors src/lib/ai-context.ts's `AiTeacherMode` type (TUTOR/PRACTICE).
+/// REVIEW removed 2026-08-15 (user request) - superfluous chat mode tab.
+enum AiTeacherModeDefault {
+  TUTOR
+  PRACTICE
+}
+
+enum HanResponseMode {
+  TEXT_ONLY
+  TEXT_AND_AUDIO
+  /// 2026-08-21 - text is still generated (Han always writes internally),
+  /// this mode just hides the chat bubble and only plays the audio.
+  AUDIO_ONLY
+}
+
+// ============================================================================
+// FASE 4 — Educational Content
+//
+// Two real contradictions found in the docs while designing this (see the
+// FASE 4.1 note in TASKS.md for the short version):
+// - "Domain" names differ between curriculum_structure.md and
+//   scenario_system.md — modeled as a real table (not an enum) so seed data
+//   can pick a concrete list without the schema itself taking a side.
+// - lesson_design.md's canonical lesson step sequence (12 steps, including
+//   "Objective" and "AI Challenge") differs from TASKS.md's FASE 6.3 list
+//   (11 steps, includes "Quiz", omits those two). LessonStepType below is
+//   the union of both so neither this phase nor FASE 6 is blocked by it.
+//
+// draft/published status and the ContentVersion history log are not
+// specified by any doc (only the *concept* of a publication gate and
+// "historical records should never be overwritten" are) — both are this
+// phase's own design.
+// ============================================================================
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// BEGINNER added 2026-08-09 - every scenario before this was HSK3+
+/// ("INTERMEDIATE" and up); there was no tier for a learner starting
+/// Chinese from zero (Learning Journey content expansion, user request).
+enum ScenarioDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  UPPER_INTERMEDIATE
+  ADVANCED
+}
+
+enum LessonStepType {
+  SITUATION
+  OBJECTIVE
+  DIALOGUE
+  COMPREHENSION
+  VOCABULARY
+  GRAMMAR
+  GUIDED_PRACTICE
+  SPEAKING
+  WRITING
+  AI_CHALLENGE
+  QUIZ
+  MISSION
+  REFLECTION
+}
+
+/// competency_framework.md's "Language Skills" dimension. Grammar and
+/// Vocabulary are NOT competencies per that doc — they're tracked by their
+/// own mastery systems (VocabularyItem/GrammarPoint), not this framework.
+enum CompetencyCategory {
+  LANGUAGE_SKILL
+  COMMUNICATION_ABILITY
+}
+
+enum CompetencyName {
+  LISTENING
+  SPEAKING
+  READING
+  WRITING
+  DAILY_COMMUNICATION
+  SOCIAL_COMMUNICATION
+  TRAVEL_COMMUNICATION
+  PROFESSIONAL_COMMUNICATION
+  ACADEMIC_COMMUNICATION
+}
+
+/// competency_framework.md: "HanGo uses five mastery stages."
+enum CompetencyStage {
+  EXPOSURE
+  PRACTICE
+  FUNCTIONAL
+  CONFIDENT
+  MASTERY
+}
+
+model Domain {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scenarios Scenario[]
+}
+
+model Scenario {
+  id                    String        @id @default(cuid())
+  domainId              String
+  name                  String
+  slug                  String        @unique
+  description           String?
+  /// scenario_system.md "Context": location, participants, situation.
+  context               String?
+  communicationOutcomes String[]
+  status                ContentStatus @default(DRAFT)
+  order                 Int           @default(0)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  domain              Domain               @relation(fields: [domainId], references: [id])
+  levels              ScenarioLevel[]
+  learningObjectives  LearningObjective[]
+  missions            Mission[]
+  speakingSessions    SpeakingSession[]
+  writingTasks        WritingTask[]
+  scenarioCompletions ScenarioCompletion[]
+}
+
+/// Not explicitly named as its own entity in any doc (see file-level note) —
+/// TASKS.md 4.1 requires it explicitly, and scenario_system.md's
+/// "Difficulty Level" concept (Restaurant - Intermediate / Upper
+/// Intermediate / Advanced) needs somewhere to live.
+model ScenarioLevel {
+  id         String             @id @default(cuid())
+  scenarioId String
+  difficulty ScenarioDifficulty
+  order      Int                @default(0)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  lessons  Lesson[]
+
+  @@unique([scenarioId, difficulty])
+}
+
+model Lesson {
+  id                       String        @id @default(cuid())
+  scenarioLevelId          String
+  title                    String
+  slug                     String        @unique
+  communicationObjective   String
+  estimatedDurationMinutes Int?
+  hskReference             Int?
+  status                   ContentStatus @default(DRAFT)
+  version                  Int           @default(1)
+  order                    Int           @default(0)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  scenarioLevel            ScenarioLevel             @relation(fields: [scenarioLevelId], references: [id], onDelete: Cascade)
+  steps                    LessonStep[]
+  learningObjectives       LearningObjective[]
+  competencies             LessonCompetency[]
+  dialogues                Dialogue[]
+  vocabulary               LessonVocabulary[]
+  grammarPoints            LessonGrammarPoint[]
+  exercises                Exercise[]
+  quizzes                  Quiz[]
+  missions                 Mission[]
+  learnerLessonCompletions LearnerLessonCompletion[]
+  learnerProgress          LearnerLessonProgress[]
+  speakingSessions         SpeakingSession[]
+  writingTasks             WritingTask[]
+  reflectionReports        LessonReflectionReport[]
+  vocabularyQuizAttempts   VocabularyQuizAttempt[]
+
+  @@index([scenarioLevelId, order])
+}
+
+/// Remaining Lesson Steps Upgrade Phase G (2026-08-08): the Reflection
+/// step's scored report card. One row per (user, lesson) - generated once
+/// when the learner reaches Reflection with enough data, then served from
+/// cache on revisit (not regenerated every time). See
+/// src/lib/reflection.ts.
+model LessonReflectionReport {
+  id                 String   @id @default(cuid())
+  userId             String
+  lessonId           String
+  /// Coverage (words opened) - kept for the narrative note ("X of Y words
+  /// explored"), no longer the Vocabulary score's basis (see
+  /// vocabularyScore below).
+  vocabularyCovered  Int
+  vocabularyTotal    Int
+  /// Points & Leveling System (docs/02_academy/points_system.md, added
+  /// 2026-08-16) - real quiz accuracy (% correct) from
+  /// VocabularyQuizAttempt, replacing coverage as the Vocabulary (20 pts)
+  /// basis. Null when the lesson has no vocabulary quiz questions.
+  vocabularyScore    Int?
+  /// Null when the lesson has no comprehension/grammar exercises to score,
+  /// or no speaking conversation was long enough to evaluate yet.
+  comprehensionScore Int?
+  grammarScore       Int?
+  speakingScore      Int?
+  /// Full SpeakingConversationFeedback-shaped dimension breakdown (see
+  /// src/lib/reflection-prompt.ts) - extends Speaking Lab's rubric with
+  /// vocabularyUsageRatio/objectiveCompletionRatio.
+  speakingDimensions Json?
+  /// Points & Leveling System - the session score (0-100): Vocabulary(20) +
+  /// Grammar(20) + Comprehension(30) + Speaking(30), Situation unscored.
+  /// Null until all four sub-scores are available. 70+ is a pass.
+  totalScore         Int?
+  hanNarrative       String
+  strengths          Json
+  improvements       Json
+  createdAt          DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+/// Tracks which vocabulary words a learner has actually opened/listened to
+/// (Phase G) - the basis for Vocabulary's Reflection "coverage" score,
+/// since there's no correct/incorrect answer for exploring a word.
+model LearnerVocabularyInteraction {
+  id               String   @id @default(cuid())
+  userId           String
+  vocabularyItemId String
+  createdAt        DateTime @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vocabularyItemId])
+}
+
+/// Points & Leveling System (docs/02_academy/points_system.md, added
+/// 2026-08-15) - real quiz accuracy for the Vocabulary Step's checks
+/// (meaning/pinyin/chineseForm/fill-blank), replacing the coverage-only
+/// signal LearnerVocabularyInteraction provides. `questionKey` mirrors the
+/// UI's own question identity (e.g. "meaning", "pinyin", "chineseForm",
+/// "fillblank:0") - see vocabulary-step.tsx's `${currentItem.id}:${field}`
+/// pattern. `lessonId` is denormalized (not derived through the
+/// VocabularyItem<->Lesson many-to-many) so scoring can look up a lesson's
+/// per-question point value without an extra join. Like ExerciseAttempt,
+/// multiple rows per question are allowed (retries) - scoring uses the
+/// first by createdAt, same convention as computeExerciseScore().
+model VocabularyQuizAttempt {
+  id               String   @id @default(cuid())
+  userId           String
+  vocabularyItemId String
+  lessonId         String
+  questionKey      String
+  isCorrect        Boolean
+  createdAt        DateTime @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+  lesson         Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lessonId])
+  @@index([userId, vocabularyItemId, questionKey])
+}
+
+/// Sequences which step types appear in a lesson and in what order. The
+/// actual rich content for each step (dialogue, vocabulary list, exercises,
+/// mission...) lives in its own table linked directly to Lesson, not here —
+/// this is a pointer/order table, not a content container.
+model LessonStep {
+  id       String         @id @default(cuid())
+  lessonId String
+  type     LessonStepType
+  title    String?
+  order    Int
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, order])
+}
+
+/// Attached to either a Scenario or a Lesson (curriculum_structure.md lists
+/// objectives at both levels) — exactly one of the two must be set.
+model LearningObjective {
+  id          String  @id @default(cuid())
+  scenarioId  String?
+  lessonId    String?
+  description String
+  order       Int     @default(0)
+
+  scenario Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  lesson   Lesson?   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId])
+  @@index([lessonId])
+}
+
+/// Fixed reference list (9 rows, seeded once) — competency_framework.md's
+/// Language Skills + Communication Abilities dimensions. Per-learner
+/// progress against these belongs to FASE 13 (Progress Evidence), not here.
+model Competency {
+  id       String             @id @default(cuid())
+  name     CompetencyName     @unique
+  category CompetencyCategory
+
+  lessons  LessonCompetency[]
+  evidence ProgressEvidence[]
+}
+
+model LessonCompetency {
+  lessonId     String
+  competencyId String
+
+  lesson     Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, competencyId])
+}
+
+/// Append-only version history (database.md: "Historical records should
+/// never be overwritten"). Generic across content types rather than one
+/// snapshot table per model, since no doc specifies a snapshot shape.
+model ContentVersion {
+  id          String        @id @default(cuid())
+  contentType String
+  contentId   String
+  version     Int
+  status      ContentStatus
+  snapshot    Json
+  createdAt   DateTime      @default(now())
+
+  @@unique([contentType, contentId, version])
+  @@index([contentType, contentId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.2 — Dialogue
+// DialogueSpeaker/DialogueLine as separate relational tables are this
+// phase's own normalization choice — dialogue_system.md only names flat
+// "Participants" + "Complete transcript" fields, not distinct tables.
+// ---------------------------------------------------------------------------
+
+model Dialogue {
+  id                     String        @id @default(cuid())
+  lessonId               String
+  title                  String
+  communicationObjective String?
+  contextDescription     String?
+  status                 ContentStatus @default(DRAFT)
+  /// Storage key for the merged full-conversation audio (all lines'
+  /// generated clips, concatenated) - lets the player support seeking/
+  /// rewinding, which per-line clips alone can't. Generated lazily on first
+  /// "Play conversation", built from each line's own cached audio.
+  audioFilePath          String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  lesson   Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  speakers DialogueSpeaker[]
+  lines    DialogueLine[]
+
+  @@index([lessonId])
+}
+
+model DialogueSpeaker {
+  id         String  @id @default(cuid())
+  dialogueId String
+  name       String
+  role       String?
+  order      Int     @default(0)
+  /// Explicit TTS voice override (e.g. "nova", "echo") for speakers whose
+  /// gender is confidently inferable from their name/title (foreign
+  /// transliteration, kinship term, or a strongly gender-coded Chinese
+  /// given name) - overrides dialogue-audio.ts's order-based alloy/onyx
+  /// alternation, which otherwise ignores the character's actual gender
+  /// (2026-08-16 user report: a male/female dialogue got two same-gender-
+  /// sounding voices). Left null for genuinely gender-neutral role titles
+  /// (客服, 顾客, 服务员, etc.) where the source text never specified a
+  /// gender - those keep the existing alternating fallback.
+  voice      String?
+
+  dialogue Dialogue       @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
+  lines    DialogueLine[]
+}
+
+model DialogueLine {
+  id            String  @id @default(cuid())
+  dialogueId    String
+  speakerId     String
+  order         Int
+  chineseText   String
+  pinyin        String
+  translation   String
+  /// Storage key (not a public URL) for generated line audio, resolved via
+  /// StorageProvider.getUrl() at read time — same pattern as Attempt.
+  /// audioFilePath. Generated lazily on first playback, not at seed time.
+  audioFilePath String?
+
+  dialogue Dialogue        @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
+  speaker  DialogueSpeaker @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+
+  @@unique([dialogueId, order])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.3 — Vocabulary
+// ---------------------------------------------------------------------------
+
+model VocabularyItem {
+  id            String        @id @default(cuid())
+  chineseForm   String
+  pinyin        String
+  meaning       String
+  /// No enumerated list given in docs — free text (e.g. "verb", "noun").
+  partOfSpeech  String?
+  hskLevel      Int?
+  /// Storage key for the word's pronunciation audio - same lazy
+  /// generate-once-cache pattern as DialogueLine.audioFilePath.
+  audioFilePath String?
+  status        ContentStatus @default(DRAFT)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  lessons      LessonVocabulary[]
+  examples     VocabularyExample[]
+  interactions LearnerVocabularyInteraction[]
+  quizAttempts VocabularyQuizAttempt[]
+
+  @@index([chineseForm])
+}
+
+/// Lesson Interactivity Upgrade Phase B (2026-08-08): example sentences
+/// replaced the old exampleSentence* fields on VocabularyItem (never
+/// actually populated by any seed lesson). Originally AI-generated on
+/// first request and cached here; that live AI fallback was removed
+/// 2026-08-14 - every word's examples are now expected to be hand-authored
+/// seed content, same as GrammarExample. See src/lib/vocabulary-interactivity.ts.
+model VocabularyExample {
+  id               String   @id @default(cuid())
+  vocabularyItemId String
+  order            Int
+  chineseText      String
+  pinyin           String
+  translation      String
+  /// Same storage-key pattern as DialogueLine.audioFilePath.
+  audioFilePath    String?
+  createdAt        DateTime @default(now())
+
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@unique([vocabularyItemId, order])
+}
+
+model LessonVocabulary {
+  lessonId         String
+  vocabularyItemId String
+  order            Int    @default(0)
+
+  lesson         Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, vocabularyItemId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.4 — Grammar
+// ---------------------------------------------------------------------------
+
+model GrammarPoint {
+  id                   String        @id @default(cuid())
+  name                 String
+  communicationPurpose String?
+  structure            String
+  explanation          String
+  /// Remaining Lesson Steps Upgrade Phase E (2026-08-08): a richer,
+  /// multi-paragraph, intermediate/advanced-level explanation - AI
+  /// generated once and cached, shown instead of `explanation` when
+  /// present. See src/lib/grammar-interactivity.ts.
+  detailedExplanation  String?
+  commonMistake        String?
+  hskLevel             Int?
+  status               ContentStatus @default(DRAFT)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  examples  GrammarExample[]
+  exercises Exercise[]
+  lessons   LessonGrammarPoint[]
+}
+
+model GrammarExample {
+  id             String  @id @default(cuid())
+  grammarPointId String
+  chineseText    String
+  pinyin         String
+  /// Storage key for this example's pronunciation audio - same
+  /// generate-once-cache pattern as DialogueLine/VocabularyExample.
+  audioFilePath  String?
+  translation    String
+  order          Int     @default(0)
+
+  grammarPoint GrammarPoint @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+}
+
+model LessonGrammarPoint {
+  lessonId       String
+  grammarPointId String
+  order          Int    @default(0)
+
+  lesson       Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  grammarPoint GrammarPoint @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, grammarPointId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.5 — Exercises, Quizzes, Missions
+// ExerciseType intentionally matches FASE 7.2's MVP list exactly (six
+// types), not exercises_system.md's much longer illustrative example list —
+// that doc gives examples, not a closed enum, and the extra ones aren't in
+// MVP scope. QuizQuestion reuses the same enum for the same reason, even
+// though quiz_system.md's own list is broader (includes audio/voice/
+// paragraph types that depend on FASE 9-11 infrastructure that doesn't
+// exist yet).
+// ---------------------------------------------------------------------------
+
+enum ExerciseType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_IN_BLANK
+  SENTENCE_ORDERING
+  MATCHING
+  SHORT_RESPONSE
+}
+
+enum ExerciseDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model Exercise {
+  id             String             @id @default(cuid())
+  lessonId       String
+  /// Remaining Lesson Steps Upgrade Phase E (2026-08-08): when set, this
+  /// exercise belongs to the Grammar step's practice section for this
+  /// specific grammar point, not the lesson's general Comprehension/Guided
+  /// Practice pool - `getExercisesForLesson` excludes these explicitly.
+  /// Hand-authored, not AI-generated (AI fallback removed 2026-08-14 - see
+  /// src/lib/grammar-interactivity.ts).
+  grammarPointId String?
+  type           ExerciseType
+  difficulty     ExerciseDifficulty @default(BEGINNER)
+  prompt         String
+  /// Flexible by design: correct option id(s), accepted string list, or
+  /// correct order array, depending on `type`.
+  correctAnswer  Json
+  explanation    String?
+  status         ContentStatus      @default(DRAFT)
+  order          Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  lesson       Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  grammarPoint GrammarPoint?     @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+  options      ExerciseOption[]
+  hints        ExerciseHint[]
+  attempts     ExerciseAttempt[]
+
+  @@index([lessonId])
+  @@index([grammarPointId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 7.1 - one row per submission, not per exercise, so retries (7.1
+// "Support retry") are visible history rather than overwritten state.
+// `isCorrect` is nullable because SHORT_RESPONSE has no auto-gradable
+// answer (exercises_system.md gives it to AI/self-assessment, not exact
+// match) - a null attempt is "submitted, not graded", not "wrong".
+// ---------------------------------------------------------------------------
+
+model ExerciseAttempt {
+  id            String   @id @default(cuid())
+  userId        String
+  exerciseId    String
+  answer        Json
+  isCorrect     Boolean?
+  attemptNumber Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([userId, exerciseId])
+}
+
+/// Used by MULTIPLE_CHOICE, TRUE_FALSE, and MATCHING; unused by the other
+/// types (their answer shape lives in Exercise.correctAnswer instead).
+model ExerciseOption {
+  id         String  @id @default(cuid())
+  exerciseId String
+  content    String
+  isCorrect  Boolean @default(false)
+  order      Int     @default(0)
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+}
+
+/// exercises_system.md's 5-level progressive hint system, verbatim roles:
+/// 1 general guidance, 2 grammar reminder, 3 vocabulary suggestion,
+/// 4 partial solution, 5 complete explanation.
+model ExerciseHint {
+  id         String @id @default(cuid())
+  exerciseId String
+  level      Int
+  text       String
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, level])
+}
+
+enum QuizCategory {
+  VOCABULARY
+  GRAMMAR
+  LISTENING
+  READING
+  SPEAKING
+  WRITING
+  MIXED
+}
+
+enum QuizDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  ADAPTIVE
+}
+
+model Quiz {
+  id                       String         @id @default(cuid())
+  lessonId                 String
+  title                    String
+  category                 QuizCategory
+  difficulty               QuizDifficulty @default(EASY)
+  estimatedDurationMinutes Int?
+  status                   ContentStatus  @default(DRAFT)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  lesson    Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([lessonId])
+}
+
+model QuizQuestion {
+  id            String       @id @default(cuid())
+  quizId        String
+  type          ExerciseType
+  prompt        String
+  correctAnswer Json
+  explanation   String?
+  order         Int          @default(0)
+
+  quiz    Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options QuizQuestionOption[]
+  answers QuizAnswer[]
+}
+
+model QuizQuestionOption {
+  id             String  @id @default(cuid())
+  quizQuestionId String
+  content        String
+  isCorrect      Boolean @default(false)
+  order          Int     @default(0)
+
+  quizQuestion QuizQuestion @relation(fields: [quizQuestionId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// FASE 7.4 - a full pass through a Quiz. `score` is a 0-100 percentage,
+// computed once from its QuizAnswers when the attempt is completed (not
+// kept live) - see completeQuizAttempt in src/lib/quiz-progress-data.ts.
+// A learner can have multiple attempts per quiz (7.4 "Allow retry").
+// ---------------------------------------------------------------------------
+
+model QuizAttempt {
+  id          String    @id @default(cuid())
+  userId      String
+  quizId      String
+  score       Int       @default(0)
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz    Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers QuizAnswer[]
+
+  @@index([userId, quizId])
+}
+
+model QuizAnswer {
+  id             String  @id @default(cuid())
+  quizAttemptId  String
+  quizQuestionId String
+  answer         Json
+  isCorrect      Boolean
+
+  quizAttempt  QuizAttempt  @relation(fields: [quizAttemptId], references: [id], onDelete: Cascade)
+  quizQuestion QuizQuestion @relation(fields: [quizQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([quizAttemptId, quizQuestionId])
+}
+
+/// missions_system.md's 5 named difficulty levels.
+enum MissionDifficulty {
+  GUIDED
+  SUPPORTED
+  INDEPENDENT
+  ADAPTIVE
+  EXPERT
+}
+
+/// Exactly one of lessonId (a per-lesson mission, 12.3) or scenarioId (a
+/// scenario's final mission, 12.4) is set — missions_system.md and ui.md
+/// both distinguish these as different things, not the same table used two
+/// ways by coincidence.
+model Mission {
+  id                       String            @id @default(cuid())
+  lessonId                 String?
+  scenarioId               String?
+  title                    String
+  context                  String?
+  objective                String
+  learnerRole              String?
+  aiRole                   String?
+  difficulty               MissionDifficulty @default(GUIDED)
+  estimatedDurationMinutes Int?
+  status                   ContentStatus     @default(DRAFT)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+
+  lesson             Lesson?                      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  scenario           Scenario?                    @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  successConditions  MissionSuccessCondition[]
+  evaluationCriteria MissionEvaluationCriterion[]
+  attempts           MissionAttempt[]
+
+  @@index([lessonId])
+  @@index([scenarioId])
+}
+
+model MissionSuccessCondition {
+  id          String @id @default(cuid())
+  missionId   String
+  description String
+  order       Int    @default(0)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+}
+
+model MissionEvaluationCriterion {
+  id          String  @id @default(cuid())
+  missionId   String
+  name        String
+  description String?
+  order       Int     @default(0)
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// FASE 5 - minimal completion signal only (userId, lessonId, completedAt).
+// FASE 6.1 explicitly owns the richer "Learner Lesson Progress" concept
+// (current step, completed steps, learner responses, autosave) - that model
+// is expected to set/reuse this table when a lesson actually finishes,
+// not duplicate it. This exists now only because 5.4's lesson-unlocking
+// rules genuinely can't be built without knowing what's been completed.
+// ---------------------------------------------------------------------------
+
+model LearnerLessonCompletion {
+  id          String   @id @default(cuid())
+  userId      String
+  lessonId    String
+  completedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+/// Points & Leveling System (docs/02_academy/points_system.md, added
+/// 2026-08-15) - one row per (user, scenario), holding what that scenario
+/// contributed to the learner's General Level. `earnedPoints` is
+/// `scenario_points_budget * (weightedReflectionAverage / 100)` (see the
+/// doc's formula) - `scenario_points_budget` itself isn't stored here, it's
+/// derived from the curriculum's hskReference weighting at read time
+/// (src/lib/points-system.ts), so it never goes stale if content changes.
+/// Redoing a scenario **upserts** this row - the new attempt replaces the
+/// old one entirely, never stacks or averages with it (explicit user
+/// requirement: redo must not let a learner farm points by repeating).
+model ScenarioCompletion {
+  id                        String   @id @default(cuid())
+  userId                    String
+  scenarioId                String
+  earnedPoints              Float
+  weightedReflectionAverage Float
+  completedAt               DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scenarioId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 6.1 - in-progress state for a single learner working through a single
+// lesson: which step they're on, which steps they've finished, and whatever
+// they've entered so far (exercise answers, etc.), for autosave + resume.
+// `completedStepIds` stores LessonStep.id, not `order`, so progress survives
+// content edits that reorder steps. On reaching the last step this does NOT
+// write LearnerLessonCompletion itself in the schema - the app layer sets
+// that row (see src/lib/lesson-progress.ts) once the lesson is actually
+// finished, per the ownership note on LearnerLessonCompletion above.
+// ---------------------------------------------------------------------------
+
+model LearnerLessonProgress {
+  id               String    @id @default(cuid())
+  userId           String
+  lessonId         String
+  currentStepId    String
+  completedStepIds String[]  @default([])
+  /// Keyed by LessonStep.id -> whatever the learner entered for that step
+  /// (e.g. exercise answers). Shape is intentionally loose (JSON) since
+  /// different step types store very different response shapes.
+  responses        Json      @default("{}")
+  startedAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 8 - AI Teacher conversation storage and usage metering.
+// One conversation per user (docs/03_engineering/ai_architecture.md frames
+// the AI Teacher as "the learner's permanent tutor", a single ongoing
+// thread, not one thread per lesson). Writes here are skipped entirely
+// when LearnerProfile.aiConversationStorageEnabled is false (8.6) - see
+// src/lib/ai-teacher-data.ts.
+// ---------------------------------------------------------------------------
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+}
+
+model AiMessage {
+  id              String        @id @default(cuid())
+  conversationId  String
+  role            AiMessageRole
+  content         String        @db.Text
+  /// Snapshot of the AiTeacherContext active when this message was sent
+  /// (scenario/lesson/step/selected item) - lets past turns be understood
+  /// later even after the learner has moved to a different step.
+  contextSnapshot Json?
+  createdAt       DateTime      @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+/// FASE 8.1 "Record usage and cost metadata" - one row per completed AI
+/// request, independent of whether the conversation itself gets persisted.
+model AiUsageLog {
+  id               String   @id @default(cuid())
+  userId           String
+  provider         String
+  model            String
+  inputTokens      Int
+  outputTokens     Int
+  estimatedCostUsd Float
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 10 - Speaking Lab. A Session is one practice pass through a speaking
+// activity (10.1); it can contain multiple Attempts (retry, 10.2 "Retry
+// recording") - each Attempt is one recording + its transcript + feedback.
+// `lessonId`/`scenarioId` are both optional and independent (mirrors
+// Mission's own "exactly one of lessonId/scenarioId" pattern) - Pronunciation/
+// Shadowing draw from a lesson's dialogue/vocabulary, Guided Conversation/
+// Scenario Role Play draw from a scenario's mission.
+// ---------------------------------------------------------------------------
+
+enum SpeakingActivityType {
+  PRONUNCIATION
+  SHADOWING
+  GUIDED_CONVERSATION
+  SCENARIO_ROLE_PLAY
+}
+
+enum SpeakingCompletionState {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model SpeakingSession {
+  id              String                  @id @default(cuid())
+  userId          String
+  activityType    SpeakingActivityType
+  lessonId        String?
+  scenarioId      String?
+  prompt          String
+  completionState SpeakingCompletionState @default(IN_PROGRESS)
+  startedAt       DateTime                @default(now())
+  completedAt     DateTime?
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson   Lesson?           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  scenario Scenario?         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  attempts SpeakingAttempt[]
+
+  @@index([userId, startedAt])
+}
+
+/// `audioFilePath` is a storage key, not file bytes (docs/03_engineering/
+/// storage.md - "DB stores metadata only", never blobs in Postgres). Served
+/// back only through an authenticated, ownership-checked route - see
+/// src/lib/storage.
+model SpeakingAttempt {
+  id                      String   @id @default(cuid())
+  sessionId               String
+  audioFilePath           String?
+  durationSeconds         Float?
+  transcript              String?  @db.Text
+  transcriptionConfidence Float?
+  /// { pronunciation, fluency, accuracy, complexity, communicationEffectiveness (0-100 each), notes, recommendedNextStep }
+  feedback                Json?
+  createdAt               DateTime @default(now())
+
+  session SpeakingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 11 - Writing Lab. WritingTask is real content (unlike Speaking Lab's
+// prompts, which are sourced from existing lesson content) - TASKS.md 11.1
+// explicitly requires it as its own model. One WritingAttempt per submission
+// attempt; `rewriteOfAttemptId` links a rewrite back to what it's rewriting
+// (11.1 "Store rewrite relationship") - a self-relation, not a new attempt
+// replacing the old one, so the original stays visible for comparison.
+// ---------------------------------------------------------------------------
+
+/// SENTENCE removed (2026-08-08) - too basic to give the AI anything worth
+/// correcting; single-sentence spoken production is already covered by
+/// Speaking Lab. TRANSLATION_CHALLENGE added the same day. SHORT_MESSAGE and
+/// PRACTICAL_WRITING removed the same day too (Writing Lab redesign,
+/// round 2) - "Custom Writing" (a free-form, ephemeral mode with no
+/// WritingTask row at all, see free-topic-practice.tsx's Speaking Lab
+/// precedent) covers that use case with learner-specified characteristics
+/// instead of a fixed catalog entry per format.
+enum WritingTaskType {
+  PARAGRAPH
+  TRANSLATION_CHALLENGE
+}
+
+model WritingTask {
+  id              String          @id @default(cuid())
+  title           String
+  type            WritingTaskType
+  prompt          String
+  /// TRANSLATION_CHALLENGE only - the ideal Chinese translation, used solely
+  /// as grading context for the AI feedback prompt. Never shown to the
+  /// learner (that would give away the answer).
+  referenceAnswer String?         @db.Text
+  lessonId        String?
+  scenarioId      String?
+  status          ContentStatus   @default(DRAFT)
+  order           Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lesson   Lesson?          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  scenario Scenario?        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  attempts WritingAttempt[]
+}
+
+/// `draft` is the live, autosaved text (11.4); `submittedResponse` is a
+/// snapshot taken at submit time so an autosave after submitting can't
+/// silently change what feedback was actually graded against. `taskId` is
+/// null for Custom Writing attempts (2026-08-15 redesign) - a one-off,
+/// learner-defined prompt with no backing WritingTask row; `customPrompt`
+/// holds the CustomWritingCharacteristics graded against instead.
+model WritingAttempt {
+  id                 String    @id @default(cuid())
+  userId             String
+  taskId             String?
+  /// CustomWritingCharacteristics { topic, level?, format?, tone?, extra? } - set only when taskId is null.
+  customPrompt       Json?
+  draft              String    @default("") @db.Text
+  submittedResponse  String?   @db.Text
+  /// { grammar, vocabulary, naturalness, communicationClarity (0-100 each), correctedVersion, importantChanges (string[]), overallNotes }
+  feedback           Json?
+  correctedVersion   String?   @db.Text
+  rewriteOfAttemptId String?
+  submittedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task      WritingTask?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  rewriteOf WritingAttempt?  @relation("Rewrites", fields: [rewriteOfAttemptId], references: [id])
+  rewrites  WritingAttempt[] @relation("Rewrites")
+
+  @@index([userId, taskId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 12 - Mission System. A MissionAttempt holds its own isolated
+// conversation transcript (not the FASE 8 AiConversation - a mission's
+// interaction has to stay a clean, boundable thing to evaluate against
+// success conditions when it ends, not mixed in with unrelated AI Teacher
+// chat history). `report` is only set once the attempt is completed.
+// ---------------------------------------------------------------------------
+
+enum MissionCompletionState {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model MissionAttempt {
+  id                        String                 @id @default(cuid())
+  userId                    String
+  missionId                 String
+  completionState           MissionCompletionState @default(IN_PROGRESS)
+  /// [{ role: "user" | "assistant", content: string }, ...] - the full role-play exchange.
+  transcript                Json                   @default("[]")
+  /// { communicationSuccess, taskCompletion, vocabularyUsage, grammarUsage, clarity (0-100 each), successConditions: [{description, met}], respondedToUnexpectedEvent, overallNotes, recommendedNextStep }
+  report                    Json?
+  unexpectedEventIntroduced Boolean                @default(false)
+  startedAt                 DateTime               @default(now())
+  completedAt               DateTime?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, missionId])
+}
+
+// ---------------------------------------------------------------------------
+// FASE 13 - Progress and Review. ProgressEvidence is written once per graded
+// activity (exercise/quiz/speaking/writing/mission), not derived on the fly
+// from every attempt table each time progress is viewed - keeps the
+// competency-stage computation independent of which activity type produced
+// the evidence. `relatedActivityId` is a loose reference (no FK - the
+// source table varies by `source`), only for traceability/debugging.
+//
+// Grammar/Vocabulary tracking (13.3) is deliberately NOT modeled as
+// Competency evidence here - competency_framework.md (FASE 4's note) is
+// explicit that grammar/vocabulary are their own mastery systems, not
+// Competencies. The Progress screen shows them as a simpler "items
+// encountered" count instead (src/lib/progress-data.ts), not a 5-stage
+// competency.
+// ---------------------------------------------------------------------------
+
+enum ProgressEvidenceSource {
+  EXERCISE
+  QUIZ
+  SPEAKING
+  WRITING
+  MISSION
+}
+
+model ProgressEvidence {
+  id                String                 @id @default(cuid())
+  userId            String
+  competencyId      String
+  source            ProgressEvidenceSource
+  /// 0-1 normalized success/score for this one piece of evidence.
+  result            Float
+  /// 1-5 normalized difficulty weight, snapshotted at evidence time (13.2 "Difficulty affects evidence").
+  difficulty        Int                    @default(3)
+  relatedActivityId String
+  createdAt         DateTime               @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, competencyId])
+}
+
+/// Tracks that a review-queue item was acted on, so the queue (recomputed
+/// fresh each time, not stored) can exclude recently-reviewed items (13.6
+/// "Reschedule unresolved content", "Remove resolved items") without a full
+/// spaced-repetition scheduler.
+model ReviewCompletion {
+  id        String   @id @default(cuid())
+  userId    String
+  itemType  String
+  itemKey   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, itemType, itemKey, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Adaptive placement exam (project/TASKS.md, "Adaptive placement exam" -
+// 2026-08-16 pilot, HSK1-2 only). Deliberately its own models rather than
+// reusing Exercise/ExerciseOption: placement questions are tagged by HSK
+// level + syllabus category for stratified-coverage selection (must see
+// >=2 correct per category before crediting a level as mastered, not just
+// a handful of lucky items) - a shape Exercise has no need for elsewhere.
+// Speaking is deliberately not modeled here yet - see TASKS.md's OpenAI
+// spec for why (needs live-audio pronunciation/fluency grading).
+// ---------------------------------------------------------------------------
+
+enum PlacementSkill {
+  VOCABULARY
+  GRAMMAR
+  READING
+  LISTENING
+}
+
+enum PlacementSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Added 2026-08-16 (user request): ordering questions "that use grammar
+/// and vocabulary together, a bit intricate" - same SENTENCE_ORDERING
+/// concept already shipped for Grammar/Vocabulary exercises earlier this
+/// session, extended to the placement exam's own question bank.
+enum PlacementQuestionType {
+  MULTIPLE_CHOICE
+  SENTENCE_ORDERING
+}
+
+model PlacementQuestion {
+  id            String                @id @default(cuid())
+  skill         PlacementSkill
+  hskLevel      Int
+  /// The official HSK 3.0 syllabus category this question targets for
+  /// Grammar (e.g. "能愿动词", "是字句1", read directly from the official
+  /// syllabus PDF), the lexical stratum for Vocabulary ("noun", "verb",
+  /// "adjective", "function"), or "comprehension" for Reading/Listening
+  /// (single-stratum skills - each passage/script is its own evidence).
+  category      String
+  type          PlacementQuestionType @default(MULTIPLE_CHOICE)
+  prompt        String
+  /// READING only: the passage text. LISTENING's script lives on
+  /// PlacementListeningScript instead, since it needs per-line audio.
+  passage       String?
+  /// SENTENCE_ORDERING only: `{ order: string[] }`, the correct token
+  /// sequence - same convention as Exercise.correctAnswer. Null for
+  /// MULTIPLE_CHOICE, which grades from PlacementQuestionOption.isCorrect
+  /// instead.
+  correctAnswer Json?
+  order         Int                   @default(0)
+  createdAt     DateTime              @default(now())
+
+  options   PlacementQuestionOption[]
+  listening PlacementListeningScript?
+  attempts  PlacementAttempt[]
+
+  @@index([skill, hskLevel, category])
+}
+
+/// MULTIPLE_CHOICE only - same shape as ExerciseOption. SENTENCE_ORDERING
+/// questions have no rows here; their answer shape lives on
+/// PlacementQuestion.correctAnswer instead (see its own doc comment).
+model PlacementQuestionOption {
+  id         String  @id @default(cuid())
+  questionId String
+  content    String
+  isCorrect  Boolean @default(false)
+  order      Int     @default(0)
+
+  question PlacementQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+/// One Listening question's audio script - mirrors Dialogue/DialogueSpeaker/
+/// DialogueLine's shape, including the gender-aware voice override fixed
+/// today (`voice`), but kept separate since placement content isn't
+/// lesson-bound the way Dialogue is.
+model PlacementListeningScript {
+  id            String  @id @default(cuid())
+  questionId    String  @unique
+  /// Storage key for the merged full-script audio - same generate-once-
+  /// cache-forever pattern as Dialogue.audioFilePath.
+  audioFilePath String?
+
+  question PlacementQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  lines    PlacementListeningLine[]
+}
+
+model PlacementListeningLine {
+  id            String  @id @default(cuid())
+  scriptId      String
+  speaker       String
+  /// TTS voice override - same DialogueSpeaker.voice pattern fixed today.
+  voice         String?
+  order         Int
+  chineseText   String
+  audioFilePath String?
+
+  script PlacementListeningScript @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+
+  @@unique([scriptId, order])
+}
+
+model PlacementSession {
+  id          String                 @id @default(cuid())
+  userId      String
+  status      PlacementSessionStatus @default(IN_PROGRESS)
+  startedAt   DateTime               @default(now())
+  completedAt DateTime?
+
+  /// Per-skill result (points_system.md discussion, 2026-08-16): never a
+  /// single number - reading/grammar mastery and real speech production
+  /// are different skills, so each gets its own detected level. Null while
+  /// IN_PROGRESS, or if that skill's block never ran (e.g. the session cut
+  /// early before reaching Listening).
+  vocabularyHskLevel Int?
+  grammarHskLevel    Int?
+  readingHskLevel    Int?
+  listeningHskLevel  Int?
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts PlacementAttempt[]
+
+  @@index([userId, status])
+}
+
+model PlacementAttempt {
+  id               String   @id @default(cuid())
+  sessionId        String
+  questionId       String
+  /// MULTIPLE_CHOICE only.
+  selectedOptionId String?
+  /// SENTENCE_ORDERING only: the learner's submitted token order,
+  /// `{ order: string[] }` - same convention as PlacementQuestion.correctAnswer.
+  submittedOrder   Json?
+  isCorrect        Boolean
+  createdAt        DateTime @default(now())
+
+  session  PlacementSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question PlacementQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}

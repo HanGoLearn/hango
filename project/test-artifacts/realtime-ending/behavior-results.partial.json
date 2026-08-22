@@ -1,0 +1,117 @@
+[
+  {
+    "scenario": "placement-hsk7-disruption",
+    "hsk": 7,
+    "objective": "Construct a nuanced argument (not just pro/con), use at least one advanced discourse connector (连...都/宁可...也不/更不用说) naturally, and engage substantively with the counterargument rather than deflecting it.",
+    "endedAt": 3,
+    "expectedEndAt": 4,
+    "dynamicEndingPassed": true,
+    "behaviorCheck": null,
+    "conversationItems": {
+      "total": 10,
+      "messages": 10,
+      "functionCalls": 0,
+      "functionCallOutputs": 0,
+      "deleted": 3,
+      "activeEstimate": 7
+    },
+    "placementEvaluation": {
+      "pronunciation": 85,
+      "fluency": 80,
+      "accuracy": 90,
+      "complexity": 80,
+      "communicationEffectiveness": 90,
+      "notes": "The learner meets the task requirements: they produce a nuanced position (innovation ≠ only disruption), use an advanced connector naturally (连...都 / 更不用说), and they engage substantively with the counterargument by acknowledging the merits of radical change while pointing out its risks. Utterances are grammatically correct and coherent; the exchange is responsive and on-topic. The responses are somewhat concise — solid but could be expanded with concrete examples or a clearer evaluation of when disruption is preferable versus when incremental change is better.",
+      "recommendedNextStep": "Expand the argument with a concrete example (e.g., a specific industry or technology) and explicitly weigh costs/benefits of disruption vs. incremental improvement. Use another advanced connector (e.g., 宁可...也不) to contrast preferences, and develop the counterargument engagement by describing how to mitigate the risks you mention.",
+      "mistakes": [
+        {
+          "category": "response",
+          "evidence": "我认为颠覆并不是创新的唯一标准，关键要看它是否真正解决问题。",
+          "feedback": "Good sentence but brief. To reach higher complexity, elaborate what kinds of '问题' you mean (market fit, safety, scalability) or give an example."
+        },
+        {
+          "category": "fluency",
+          "evidence": "我理解你的反对意见，因为激进的变化有时能创造新的机会，不过它也可能忽视已有经验。",
+          "feedback": "Clear and relevant, but the turn is short. Try linking this clause to a consequence or recommendation (e.g., 如何平衡/如何预防) to show sustained discourse."
+        },
+        {
+          "category": "context",
+          "evidence": "连成熟行业都需要不断改进，更不用说变化很快的新领域了。",
+          "feedback": "Excellent use of 更不用说; consider specifying which '成熟行业' you mean to strengthen the argument's concreteness."
+        }
+      ],
+      "objectiveCompletionRatio": 1,
+      "score": 85
+    },
+    "assessments": [
+      {
+        "phase": "before-1",
+        "assessment": {
+          "decision": "continue",
+          "objectiveComplete": false,
+          "reason": "学习者给出细致立场但未使用要求的高级连接词，且需要回应接下来的反驳句。",
+          "pendingLearnerAction": "explain",
+          "remainingPracticeTargets": [],
+          "nextCharacterUtterance": "可是渐进式改进可能只优化旧框架而错过真正的突破。",
+          "closeAfterReply": false
+        }
+      },
+      {
+        "phase": "before-2",
+        "assessment": {
+          "decision": "continue",
+          "objectiveComplete": false,
+          "reason": "learner used nuanced points and advanced connectors, but has not yet engaged substantively with the character's counterargument about missing breakthroughs.",
+          "pendingLearnerAction": "explain",
+          "remainingPracticeTargets": [],
+          "nextCharacterUtterance": "那你的回应里并没有解决“渐进式改进会错过真正突破”这个担忧，你怎么看？",
+          "closeAfterReply": false
+        }
+      },
+      {
+        "phase": "before-3",
+        "assessment": {
+          "decision": "end",
+          "objectiveComplete": true,
+          "reason": "Learner made a nuanced argument, used 连...都 and 更不用说, and directly engaged the counterargument.",
+          "pendingLearnerAction": "none",
+          "remainingPracticeTargets": [],
+          "nextCharacterUtterance": "",
+          "closeAfterReply": true
+        }
+      }
+    ],
+    "turns": [
+      {
+        "phase": "opening",
+        "transcript": "你觉得真正的创新一定要颠覆原来的范式吗？",
+        "audioFile": "placement-hsk7-disruption-00-opening.wav",
+        "toolCall": false
+      },
+      {
+        "phase": "turn-1",
+        "transcript": "可是渐进式改进可能只优化旧框架而错过真正的突破。",
+        "audioFile": "placement-hsk7-disruption-01.wav",
+        "toolCall": false
+      },
+      {
+        "phase": "turn-2",
+        "transcript": "那你的回应里并没有解决“渐进式改进会错过真正突破”这个担忧。",
+        "audioFile": "placement-hsk7-disruption-02.wav",
+        "toolCall": false
+      },
+      {
+        "phase": "assessment-3",
+        "transcript": "Learner made a nuanced argument, used 连...都 and 更不用说, and directly engaged the counterargument.",
+        "audioFile": null,
+        "toolCall": true
+      },
+      {
+        "phase": "closing",
+        "transcript": "我明白你的观点了，谢谢这次讨论。",
+        "audioFile": "placement-hsk7-disruption-99-closing.wav",
+        "toolCall": false
+      }
+    ]
+  }
+]

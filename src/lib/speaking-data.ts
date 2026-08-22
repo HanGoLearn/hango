@@ -1,0 +1,277 @@
+import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
+import { getStorageProvider } from "@/lib/storage";
+import { getSttProvider, SttProviderError } from "@/lib/speech";
+import {
+  assessHanTranscript,
+  HAN_STT_REPEAT_MESSAGE,
+} from "@/lib/speech/transcript-quality";
+import { getAiProvider, AiProviderError } from "@/lib/ai";
+import {
+  buildSpeakingFeedbackPrompt,
+  parseSpeakingFeedback,
+  DEFAULT_SPEAKING_FEEDBACK,
+  type SpeakingFeedback,
+} from "@/lib/speaking-feedback";
+import {
+  recordProgressEvidence,
+  getLessonCompetencyIds,
+} from "@/lib/progress-evidence";
+import { recomputeGeneralLevelPoints } from "@/lib/general-level";
+
+/** Only lesson-scoped sessions produce evidence - Competency has no scenario-level link (see progress-evidence.ts). */
+async function recordSpeakingEvidence(
+  userId: string,
+  session: { lessonId: string | null },
+  feedback: SpeakingFeedback,
+  attemptId: string,
+) {
+  const competencyIds = await getLessonCompetencyIds(
+    session.lessonId,
+    "SPEAKING",
+  );
+  const result =
+    (feedback.pronunciation +
+      feedback.fluency +
+      feedback.accuracy +
+      feedback.complexity +
+      feedback.communicationEffectiveness) /
+    500;
+  await recordProgressEvidence(
+    userId,
+    competencyIds,
+    "SPEAKING",
+    result,
+    null,
+    attemptId,
+  );
+}
+
+export async function createSpeakingSession(
+  userId: string,
+  activityType:
+    | "PRONUNCIATION"
+    | "SHADOWING"
+    | "GUIDED_CONVERSATION"
+    | "SCENARIO_ROLE_PLAY",
+  prompt: string,
+  refs: { lessonId?: string; scenarioId?: string },
+) {
+  return db.speakingSession.create({
+    data: {
+      userId,
+      activityType,
+      prompt,
+      lessonId: refs.lessonId,
+      scenarioId: refs.scenarioId,
+    },
+  });
+}
+
+// Each attempt below triggers a paid AI feedback call (and, for recordings,
+// an STT call too) - same abuse/cost protection as the AI Teacher chat and
+// Mission chat (16.5 "Rate limiting").
+const MAX_TEXT_LENGTH = 1000;
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const RATE_LIMIT_MAX_ATTEMPTS = 15;
+const recentAttemptTimestamps = new Map<string, number[]>();
+
+export class SpeakingInputError extends Error {}
+export class SpeakingRateLimitError extends Error {}
+
+function checkRateLimit(userId: string): void {
+  const now = Date.now();
+  const timestamps = (recentAttemptTimestamps.get(userId) ?? []).filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS,
+  );
+  if (timestamps.length >= RATE_LIMIT_MAX_ATTEMPTS) {
+    throw new SpeakingRateLimitError(
+      "You've submitted a lot of attempts in a short time. Please wait a bit before continuing.",
+    );
+  }
+  timestamps.push(now);
+  recentAttemptTimestamps.set(userId, timestamps);
+}
+
+async function assertOwnedSession(userId: string, sessionId: string) {
+  const session = await db.speakingSession.findUniqueOrThrow({
+    where: { id: sessionId },
+  });
+  if (session.userId !== userId) throw new Error("Not authorized");
+  return session;
+}
+
+/** Never throws for AI failure (10/8.6 pattern) - falls back to DEFAULT_SPEAKING_FEEDBACK. */
+async function generateFeedback(
+  activityType: string,
+  prompt: string,
+  transcript: string,
+): Promise<SpeakingFeedback> {
+  try {
+    const provider = getAiProvider();
+    const result = await provider.complete({
+      systemPrompt: buildSpeakingFeedbackPrompt(
+        activityType,
+        prompt,
+        transcript,
+      ),
+      messages: [
+        { role: "user", content: transcript || "(no speech detected)" },
+      ],
+      maxOutputTokens: 300,
+    });
+    return parseSpeakingFeedback(result.content);
+  } catch (error) {
+    if (error instanceof AiProviderError) return DEFAULT_SPEAKING_FEEDBACK;
+    throw error;
+  }
+}
+
+/**
+ * The core Speaking Lab pipeline (10.2-10.6): store the recording, transcribe
+ * it, generate feedback, save the attempt. STT failure downgrades to an
+ * empty transcript with zero confidence rather than blocking the attempt
+ * (10.4 "Handle provider failure") - feedback generation still runs (on an
+ * empty transcript) so the learner always gets a result.
+ */
+export async function submitRecording(
+  userId: string,
+  sessionId: string,
+  audio: Buffer,
+  mimeType: string,
+  durationSeconds: number,
+  /** Real tone-contour score computed client-side (tone-analysis.ts) - never trusted for competency evidence, see recordSpeakingEvidence. */
+  toneScore: number | null = null,
+) {
+  checkRateLimit(userId);
+  const session = await assertOwnedSession(userId, sessionId);
+
+  const storage = getStorageProvider();
+  const key = `speaking/${userId}/${sessionId}-${Date.now()}.webm`;
+  await storage.upload(key, audio, mimeType);
+
+  let transcript = "";
+  let confidence: number | null = null;
+  try {
+    const stt = getSttProvider();
+    const result = await stt.transcribe(audio, mimeType, "mandarin");
+    const assessment = assessHanTranscript(
+      result.transcript,
+      result.confidence,
+    );
+    if (!assessment.ok) {
+      try {
+        await storage.delete(key);
+      } catch {
+        // A cleanup failure must not turn a repeatable learner-input problem
+        // into a generic submission error.
+      }
+      throw new SpeakingInputError(HAN_STT_REPEAT_MESSAGE);
+    }
+    transcript = assessment.transcript;
+    confidence = result.confidence;
+  } catch (error) {
+    if (!(error instanceof SttProviderError)) throw error;
+  }
+
+  const feedback: SpeakingFeedback = {
+    ...(await generateFeedback(
+      session.activityType,
+      session.prompt,
+      transcript,
+    )),
+    toneScore,
+  };
+
+  const attempt = await db.speakingAttempt.create({
+    data: {
+      sessionId,
+      audioFilePath: key,
+      durationSeconds,
+      transcript,
+      transcriptionConfidence: confidence,
+      feedback: feedback as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await recordSpeakingEvidence(userId, session, feedback, attempt.id);
+
+  return attempt;
+}
+
+/** 10.2 "Provide text fallback" - no microphone/recording involved, transcript is exactly what the learner typed. */
+export async function submitTextFallback(
+  userId: string,
+  sessionId: string,
+  text: string,
+) {
+  if (text.trim().length === 0) {
+    throw new SpeakingInputError("Response can't be empty.");
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    throw new SpeakingInputError(
+      `Response is too long (max ${MAX_TEXT_LENGTH} characters).`,
+    );
+  }
+  checkRateLimit(userId);
+  const session = await assertOwnedSession(userId, sessionId);
+  const feedback = await generateFeedback(
+    session.activityType,
+    session.prompt,
+    text,
+  );
+
+  const attempt = await db.speakingAttempt.create({
+    data: {
+      sessionId,
+      transcript: text,
+      transcriptionConfidence: 1,
+      feedback: feedback as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await recordSpeakingEvidence(userId, session, feedback, attempt.id);
+
+  return attempt;
+}
+
+export async function completeSpeakingSession(
+  userId: string,
+  sessionId: string,
+) {
+  await assertOwnedSession(userId, sessionId);
+  const session = await db.speakingSession.update({
+    where: { id: sessionId },
+    data: { completionState: "COMPLETED", completedAt: new Date() },
+  });
+  // Points & Leveling System (2026-08-16): a newly-completed session can
+  // change Speaking Lab's contribution to the General Level.
+  await recomputeGeneralLevelPoints(userId);
+  return session;
+}
+
+export async function getSpeakingSessionWithAttempts(
+  userId: string,
+  sessionId: string,
+) {
+  const session = await assertOwnedSession(userId, sessionId);
+  const attempts = await db.speakingAttempt.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: "asc" },
+  });
+  return { session, attempts };
+}
+
+/** 10.3 "Support deletion" - removes both the stored audio file and the database row. */
+export async function deleteSpeakingAttempt(userId: string, attemptId: string) {
+  const attempt = await db.speakingAttempt.findUniqueOrThrow({
+    where: { id: attemptId },
+    include: { session: { select: { userId: true } } },
+  });
+  if (attempt.session.userId !== userId) throw new Error("Not authorized");
+
+  if (attempt.audioFilePath) {
+    await getStorageProvider().delete(attempt.audioFilePath);
+  }
+  await db.speakingAttempt.delete({ where: { id: attemptId } });
+}

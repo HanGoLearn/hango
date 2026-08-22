@@ -1,0 +1,370 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens (2026-08-21 repalette: "Tinta Cálida" / "Porcelana" — see
+ * project/learning-journey-optimization.md and the approved palette-
+ * directions artifact this session for the full derivation). Colors are
+ * derived directly from the real mascot artwork (public/mascot/*.png -
+ * crimson-red ear/heart, sage-green leaf, porcelain body, warm charcoal
+ * screen), not invented independently of the brand's existing visual
+ * assets. Two full themes now exist:
+ *   - "Tinta Cálida" (Warm Ink) — dark, the default/fallback with no JS,
+ *     no cookie, no data-theme attribute. Replaces the previous "Laca y
+ *     bambú" dark palette (2026-08-07) with a warmer, less violet-cast
+ *     neutral ramp and a deeper, less "alert"-reading primary red.
+ *   - "Porcelana" (Porcelain) — light, built from the same family (the
+ *     mascot's own porcelain body color as the page background, not an
+ *     unrelated white). Applies on `prefers-color-scheme: light` (when
+ *     the learner hasn't made an explicit choice) or `[data-theme="light"]`
+ *     (explicit choice, wins regardless of OS preference).
+ * All ramps generated via HSL interpolation pinned to the 5 approved
+ * anchor swatches per direction (script-generated, not hand-picked), then
+ * every text/background pairing that's actually used together was
+ * contrast-verified (WCAG 1.4.3/1.4.11) - see the per-token comments
+ * below for the real measured ratios, not the previous palette's numbers
+ * (none of those carry over to new hex values).
+ *
+ * Spacing intentionally reuses Tailwind's default scale: it already matches
+ * the documented 4/8/12/16/20/24/32/40/48/64 scale exactly (0.25rem = 4px
+ * base unit), so no override is defined here.
+ *
+ * Breakpoints intentionally reuse Tailwind's defaults (sm/md/lg/xl/2xl) —
+ * no exact pixel breakpoints are specified in the docs, and these map
+ * reasonably onto the documented mobile/tablet/laptop/desktop categories.
+ */
+@theme {
+  /* Primary — "Tinta Cálida" wine/crimson, anchored to the mascot's ear/
+   * heart red (#C42A3E). Deliberately a crimson-leaning red, not the more
+   * orange-red used for the error state below, so the two never get
+   * confused at a glance. */
+  --color-primary-50: #fbeef0;
+  --color-primary-100: #f7d8dc;
+  --color-primary-200: #eeb0b8;
+  --color-primary-300: #e48390;
+  --color-primary-400: #da5466;
+  --color-primary-500: #c42a3e;
+  --color-primary-600: #a72435;
+  --color-primary-700: #871d2b;
+  --color-primary-800: #6a1721;
+  --color-primary-900: #501119;
+
+  /* Secondary — sage green, anchored to the mascot's leaf sprig (#6E9271) -
+   * softer/more muted than the previous forest-jade green. */
+  --color-secondary-50: #f0f4f1;
+  --color-secondary-100: #e3eae3;
+  --color-secondary-200: #c9d7ca;
+  --color-secondary-300: #adc1af;
+  --color-secondary-400: #90ab92;
+  --color-secondary-500: #6e9271;
+  --color-secondary-600: #5e7d61;
+  --color-secondary-700: #4d664f;
+  --color-secondary-800: #3d513e;
+  --color-secondary-900: #2e3e30;
+
+  /* Accent — gold, used sparingly for milestones and HSK badges. Unchanged
+   * from the previous palette except accent-300, which is redefined below
+   * for the light theme only (the dark-theme value here stays valid:
+   * verified 9.72:1 as text/numerals on the page background). */
+  --color-accent-50: #fbf3e1;
+  --color-accent-100: #f5e2b8;
+  --color-accent-300: #e3b65c;
+  --color-accent-500: #c7972e;
+  --color-accent-700: #8c6a1f;
+
+  /* Neutral — "Tinta Cálida": full-dark strategy, neutral-900/800/700 are
+   * the actual page/surface/elevated backgrounds, a warm ink cast (H~37,
+   * amber-leaning) rather than the previous palette's cool ink-violet.
+   * neutral-50/0 are the light end, used for text and rare light-surface
+   * needs. Every text-role pairing below is contrast-verified against
+   * neutral-900 (the page): text-primary 15.88:1, text-secondary 6.45:1,
+   * text-muted 5.15:1 (4.58:1 against surface/neutral-800) - all clear
+   * WCAG AA for normal text, primary/secondary clear AAA too. */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f1eeea;
+  --color-neutral-100: #d8d1c6;
+  --color-neutral-200: #c0b4a2;
+  --color-neutral-300: #a7977e;
+  --color-neutral-400: #988567;
+  --color-neutral-500: #766851;
+  --color-neutral-600: #554b3a;
+  --color-neutral-700: #342d23;
+  --color-neutral-800: #241f18;
+  --color-neutral-900: #17140f;
+
+  /* Semantic colors — deliberately distinct hues from primary/secondary/
+   * accent so a state is never mistaken for the brand palette. Must never
+   * be the only signal; pair with icon/text. Not yet re-tuned per theme
+   * (flagged as a follow-up, not touched in this pass - see
+   * project/learning-journey-optimization.md): these values are verified
+   * for the dark theme only. */
+  --color-success-50: #e8f5ec;
+  --color-success-500: #2f8f52;
+  --color-success-700: #1f6b3b;
+
+  --color-warning-50: #fdf1e0;
+  --color-warning-500: #c97a1f;
+  --color-warning-700: #8f5612;
+
+  --color-error-50: #fbeae7;
+  --color-error-500: #d14a2e;
+  --color-error-700: #9b3520;
+
+  /* Info reuses the old primary blue, now decoupled from the brand color —
+   * blue still reads universally as "informational" and gives the mostly
+   * red/green/gold palette a clear fourth signal. */
+  --color-info-50: #eaf1fc;
+  --color-info-500: #2f5bc0;
+  --color-info-700: #1d3a7d;
+
+  /* Semantic surface/text/border roles — components should reference these,
+   * not raw palette steps, so theme adjustments stay centralized. This
+   * alias layer is declared ONCE, here, for both themes - the light-theme
+   * override blocks below only ever redefine the raw neutral and primary
+   * color steps these point to, never the aliases themselves, so a theme
+   * switch needs no component changes anywhere.
+   * Named without a "bg-"/"text-" prefix on the CSS variable itself so the
+   * generated Tailwind utilities read naturally (bg-page, not bg-bg-page). */
+  --color-page: var(--color-neutral-900);
+  --color-surface: var(--color-neutral-800);
+  --color-elevated: var(--color-neutral-700);
+  --color-text-primary: var(--color-neutral-50);
+  --color-text-secondary: var(--color-neutral-300);
+  --color-text-muted: var(--color-neutral-400);
+  --color-border: var(--color-neutral-700);
+  /* Not aliased to a neutral step: independently contrast-solved per theme
+   * for WCAG 1.4.11's 3:1 non-text contrast requirement against the page
+   * background. Dark-theme value here verified at 5.01:1. */
+  --color-border-strong: #91846e;
+
+  /* Fixed (never redefined per theme) icon/text-on-colored-fill roles
+   * (2026-08-21) - deliberately NOT --color-neutral-0/900: those invert
+   * meaning between themes (0=white in dark theme, near-black in light
+   * theme, by design - see the neutral ramp comment above), which breaks
+   * any component pairing an inverting neutral step with a brand-color
+   * fill that *doesn't* invert (primary/secondary/accent/info stay
+   * roughly the same lightness in both themes). Found via real contrast
+   * checks, not assumed: Button's primary variant, Checkbox's check icon,
+   * and 4 of `navigation.ts`'s nav badges all previously paired
+   * `text-neutral-0`/`text-neutral-900` with such a fill and silently
+   * fell below WCAG AA in whichever theme flipped the wrong way - fixed
+   * to reference these two fixed tokens instead. Use `on-color-light` for
+   * text/icons on a medium-to-dark colored fill (primary-500, info-500),
+   * `on-color-dark` for a light colored fill (accent-500, secondary-300).
+   * Warm-tinted (not pure #fff/#000) to match the palette family. */
+  --color-on-color-light: #faf7f2;
+  --color-on-color-dark: #1c1712;
+
+  /* Typography */
+  --font-interface:
+    var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-chinese: var(--font-noto-sans-sc), var(--font-interface);
+  /* Display face — Display/PageTitle/SectionTitle only (Phase 1 option A);
+   * everything else stays on --font-interface so this reads as a
+   * deliberate accent, not a wholesale font swap. */
+  --font-display: var(--font-fraunces), Georgia, "Songti SC", serif;
+
+  --text-display: 2.75rem;
+  --text-display--line-height: 1.15;
+  --text-page-title: 1.875rem;
+  --text-page-title--line-height: 1.25;
+  --text-section-title: 1.375rem;
+  --text-section-title--line-height: 1.3;
+  --text-card-title: 1.125rem;
+  --text-card-title--line-height: 1.4;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-chinese-body: 1.125rem;
+  --text-chinese-body--line-height: 1.9;
+  --text-supporting: 0.875rem;
+  --text-supporting--line-height: 1.5;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+
+  /* Border radius — a touch friendlier than the original scale. Kept
+   * moderate (not the full-pill buttons from the first, reverted attempt)
+   * so this phase isolates typography/surface, not shape. */
+  --radius-control: 0.5rem;
+  --radius-card: 0.875rem;
+  --radius-panel: 1.25rem;
+
+  /* Shadows — dark-theme values, de-emphasized on purpose: on a dark
+   * surface, a drop shadow barely reads, so elevation comes primarily from
+   * the neutral-900 -> 800 -> 700 background steps (see Card/Modal). The
+   * light theme below redefines these with real, visible, warm-tinted
+   * shadows instead - the same background-step trick barely works on
+   * near-white surfaces that don't differentiate much by lightness alone. */
+  --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.24), 0 4px 12px rgb(0 0 0 / 0.2);
+  --shadow-modal: 0 16px 48px rgb(0 0 0 / 0.45);
+
+  /* Motion — short, smooth, predictable; never blocks a learning action. */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * "Porcelana" (Porcelain) — light theme. Same custom-property names as
+ * the @theme block above; Tailwind's generated utility classes (bg-page,
+ * text-text-secondary, etc.) reference `var(--color-*)`, so redefining the
+ * variable here is enough for every existing component to adapt with zero
+ * class-name changes. Applies automatically when the OS prefers light and
+ * the learner hasn't made an explicit in-app choice yet (guarded by
+ * `:not([data-theme="dark"])` so an explicit dark choice always wins over
+ * OS preference); the `[data-theme="light"]` block right after it applies
+ * the same values for an explicit choice, regardless of OS preference.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-primary-50: #fceef0;
+    --color-primary-100: #f7d6db;
+    --color-primary-200: #efaab4;
+    --color-primary-300: #e57889;
+    --color-primary-400: #dc455c;
+    --color-primary-500: #b8233a;
+    --color-primary-600: #9d1e31;
+    --color-primary-700: #7f1828;
+    --color-primary-800: #63131f;
+    --color-primary-900: #4b0e17;
+
+    --color-secondary-50: #f0f5f1;
+    --color-secondary-100: #dde9e0;
+    --color-secondary-200: #bcd4c0;
+    --color-secondary-300: #97bb9d;
+    --color-secondary-400: #70a279;
+    --color-secondary-500: #4f7a57;
+    --color-secondary-600: #446a4b;
+    --color-secondary-700: #39583f;
+    --color-secondary-800: #2e4733;
+    --color-secondary-900: #253928;
+
+    /* Only accent-300 changes: it's used as text/numerals directly on the
+     * page background (CompetencyList's bar-color cycle, TopBar's streak
+     * chip) - the dark-theme value measures 9.72:1 there but only 1.68:1
+     * on this theme's light page, so it needs its own, darker value here.
+     * Contrast-solved: 4.64:1 on this theme's page. */
+    --color-accent-300: #886720;
+
+    /* Same reasoning as accent-300 above: warning-500 is used as plain text
+     * on the page background (Dashboard's streak-at-risk nudge, 2026-08-21)
+     * - the dark-theme value measures 5.50:1 there but only 2.96:1 on this
+     * theme's light page, below WCAG AA. Contrast-solved: 4.64:1. */
+    --color-warning-500: #9b5e18;
+
+    /* "Porcelana": full-light strategy, neutral-900/800 are the actual
+     * page/surface backgrounds (surface deliberately brighter than page,
+     * same page<surface<elevated elevation logic as the dark theme just
+     * running in the opposite numeric direction - matches how neutral-800
+     * was already brighter than neutral-900 in the pre-existing dark
+     * palette too). neutral-50/0 are the dark end, used for text. Every
+     * text-role pairing contrast-verified against neutral-900 (the page):
+     * text-primary 14.39:1, text-secondary 7.02:1, text-muted 4.56:1 -
+     * all clear WCAG AA, primary/secondary clear AAA too. */
+    --color-neutral-0: #13100c;
+    --color-neutral-50: #242017;
+    --color-neutral-100: #373023;
+    --color-neutral-200: #49402f;
+    --color-neutral-300: #5b503a;
+    --color-neutral-400: #7a6c4e;
+    --color-neutral-500: #a79675;
+    --color-neutral-600: #c7bca7;
+    --color-neutral-700: #e7e3da;
+    --color-neutral-800: #fcfcfb;
+    --color-neutral-900: #f3f1ed;
+
+    /* Contrast-solved independently for this theme: 3.31:1 against the
+     * light page, clearing the 3:1 non-text requirement. */
+    --color-border-strong: #8f836c;
+
+    /* Real, visible shadows - the dark theme's background-step elevation
+     * trick barely works when surface/page are both near-white. Warm-
+     * tinted to match the palette rather than a neutral grey shadow. */
+    --shadow-elevated:
+      0 1px 2px rgb(80 60 30 / 0.08), 0 4px 16px rgb(80 60 30 / 0.1);
+    --shadow-modal: 0 16px 48px rgb(60 45 20 / 0.22);
+  }
+}
+
+[data-theme="light"] {
+  --color-primary-50: #fceef0;
+  --color-primary-100: #f7d6db;
+  --color-primary-200: #efaab4;
+  --color-primary-300: #e57889;
+  --color-primary-400: #dc455c;
+  --color-primary-500: #b8233a;
+  --color-primary-600: #9d1e31;
+  --color-primary-700: #7f1828;
+  --color-primary-800: #63131f;
+  --color-primary-900: #4b0e17;
+
+  --color-secondary-50: #f0f5f1;
+  --color-secondary-100: #dde9e0;
+  --color-secondary-200: #bcd4c0;
+  --color-secondary-300: #97bb9d;
+  --color-secondary-400: #70a279;
+  --color-secondary-500: #4f7a57;
+  --color-secondary-600: #446a4b;
+  --color-secondary-700: #39583f;
+  --color-secondary-800: #2e4733;
+  --color-secondary-900: #253928;
+
+  --color-accent-300: #886720;
+  --color-warning-500: #9b5e18;
+
+  --color-neutral-0: #13100c;
+  --color-neutral-50: #242017;
+  --color-neutral-100: #373023;
+  --color-neutral-200: #49402f;
+  --color-neutral-300: #5b503a;
+  --color-neutral-400: #7a6c4e;
+  --color-neutral-500: #a79675;
+  --color-neutral-600: #c7bca7;
+  --color-neutral-700: #e7e3da;
+  --color-neutral-800: #fcfcfb;
+  --color-neutral-900: #f3f1ed;
+
+  --color-border-strong: #8f836c;
+
+  --shadow-elevated:
+    0 1px 2px rgb(80 60 30 / 0.08), 0 4px 16px rgb(80 60 30 / 0.1);
+  --shadow-modal: 0 16px 48px rgb(60 45 20 / 0.22);
+}
+
+/* Directional card-in transition (Vocabulary carousel, 2026-08-10):
+ * `--card-slide-x` is set inline per-instance (positive = enters from the
+ * right, "Next"; negative = "Back") so one keyframes definition covers
+ * both directions. */
+@keyframes card-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--card-slide-x, 24px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-page);
+  color: var(--color-text-primary);
+  font-family: var(--font-interface);
+}

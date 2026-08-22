@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Production build artifacts
+build/
+dist/
+
+# Environment variables (may contain secrets)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Prisma generated client (regenerated via `npm run db:generate`)
+/src/generated/prisma
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Test artifacts
+coverage/
+
+# Local file storage (FASE 10) — dev-only stand-in for real cloud storage,
+# see src/lib/storage. Never committed: it holds learner voice recordings.
+/.storage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
