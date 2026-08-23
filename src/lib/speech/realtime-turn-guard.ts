@@ -18,6 +18,16 @@ export const MIN_SIGNAL_TO_NOISE_RATIO = 1.8;
 export const MIN_RMS_VARIATION_RATIO = 0.08;
 export const INITIAL_AMBIENT_NOISE_FLOOR_RMS = 0.004;
 
+// Interruption is deliberately stricter than accepting a completed turn.
+// A cough, music, or a television may briefly trip server VAD, but should not
+// cut off Han before the learner has produced sustained foreground speech.
+export const REALTIME_BARGE_IN_CONFIRMATION_MS = 360;
+const MIN_BARGE_IN_DURATION_MS = 300;
+const MIN_BARGE_IN_VOICED_MS = 180;
+const MIN_BARGE_IN_PEAK_RMS = 0.016;
+const MIN_BARGE_IN_SIGNAL_TO_NOISE_RATIO = 2.6;
+const MIN_BARGE_IN_VARIATION_RATIO = 0.14;
+
 const AMBIENT_FLOOR_RISE_ALPHA = 0.002;
 const AMBIENT_FLOOR_FALL_ALPHA = 0.03;
 
@@ -26,6 +36,23 @@ const MIN_SHORT_MANDARIN_VOICED_MS = 160;
 const MIN_SHORT_MANDARIN_PEAK_RMS = 0.012;
 const MIN_SHORT_MANDARIN_SIGNAL_TO_NOISE_RATIO = 2.2;
 const MIN_SHORT_MANDARIN_VARIATION_RATIO = 0.12;
+export const MIN_FREE_TOPIC_TRANSCRIPT_CONFIDENCE = 0.25;
+
+export function freeTopicUnclosedTurnTimeoutMs(level?: string): number {
+  if (level === "Pre-HSK") return 4_500;
+  const explicitLevel = level?.match(/HSK\s*([1-9])/iu)?.[1];
+  const hskLevel = explicitLevel ? Number(explicitLevel) : null;
+  if (hskLevel === 1) return 6_000;
+  if (hskLevel === 2) return 8_000;
+  return 12_000;
+}
+
+/** Preserve a likely real long utterance; discard an unclosed noise buffer. */
+export function stuckFreeTopicTurnAction(
+  signal: RealtimeVoiceTurnSignal | null | undefined,
+): "commit" | "clear" {
+  return isConfidentLearnerBargeIn(signal) ? "commit" : "clear";
+}
 
 /**
  * Learns the room level between turns without absorbing the beginning of the
@@ -97,6 +124,45 @@ export function isLikelyLearnerSpeech(
 }
 
 /**
+ * Confirms foreground learner speech before the browser manually interrupts
+ * a live free-topic answer. Missing/invalid measurements fail closed here:
+ * the completed transcript can still be accepted after Han finishes, but
+ * uncertain room audio must never silence an answer in progress.
+ */
+export function isConfidentLearnerBargeIn(
+  signal: RealtimeVoiceTurnSignal | null | undefined,
+): boolean {
+  if (!signal) return false;
+
+  const values = [
+    signal.durationMs,
+    signal.voicedMs,
+    signal.peakRms,
+    signal.noiseFloorRms,
+    signal.meanRms,
+    signal.rmsStandardDeviation,
+  ];
+  if (values.some((value) => !Number.isFinite(value) || value < 0))
+    return false;
+
+  const requiredPeak = Math.max(
+    MIN_BARGE_IN_PEAK_RMS,
+    signal.noiseFloorRms * MIN_BARGE_IN_SIGNAL_TO_NOISE_RATIO,
+  );
+  const variationRatio =
+    signal.meanRms > 0
+      ? signal.rmsStandardDeviation / signal.meanRms
+      : Number.POSITIVE_INFINITY;
+
+  return (
+    signal.durationMs >= MIN_BARGE_IN_DURATION_MS &&
+    signal.voicedMs >= MIN_BARGE_IN_VOICED_MS &&
+    signal.peakRms >= requiredPeak &&
+    variationRatio >= MIN_BARGE_IN_VARIATION_RATIO
+  );
+}
+
+/**
  * Short Mandarin results deserve extra caution because a biased STT prompt
  * can turn ambiguous room noise into a plausible beginner word such as 你好.
  * Real short speech still passes when it has a clear foreground peak,
@@ -130,4 +196,21 @@ export function isLikelyLearnerUtterance(
     signal.peakRms >= requiredPeak &&
     variationRatio >= MIN_SHORT_MANDARIN_VARIATION_RATIO
   );
+}
+
+/**
+ * Free-topic practice has no lesson turn to anchor the recognizer, so faint
+ * room audio is more likely to become a plausible invented sentence. When
+ * Realtime supplies acoustic log probabilities, require a modest confidence
+ * floor in addition to the existing foreground-signal checks. Missing
+ * logprobs keep the signal-only fallback for compatibility.
+ */
+export function isLikelyFreeTopicLearnerUtterance(
+  signal: RealtimeVoiceTurnSignal | null | undefined,
+  transcript: string,
+  confidence: number | null,
+): boolean {
+  if (confidence !== null && confidence < MIN_FREE_TOPIC_TRANSCRIPT_CONFIDENCE)
+    return false;
+  return isLikelyLearnerUtterance(signal, transcript);
 }

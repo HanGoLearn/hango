@@ -32,7 +32,7 @@ describe("buildSpeakingConversationFeedbackPrompt", () => {
       scenario,
       transcript,
     );
-    expect(prompt).toContain("not a phonetic analysis");
+    expect(prompt).toContain("Do not invent acoustic detail");
     expect(prompt).toContain("pronunciation");
   });
 
@@ -51,44 +51,83 @@ describe("buildSpeakingConversationFeedbackPrompt", () => {
   });
 
   it("requests evidence-based Speaking errors and forbids invented tone feedback", () => {
-    const prompt = buildSpeakingConversationFeedbackPrompt(scenario, transcript);
-    expect(prompt).toContain("quote brief evidence from the learner's own words");
+    const prompt = buildSpeakingConversationFeedbackPrompt(
+      scenario,
+      transcript,
+    );
+    expect(prompt).toContain(
+      "quote brief evidence from the learner's own words",
+    );
     expect(prompt).toContain("fail to answer the character's question");
-    expect(prompt).toContain("Never add a tones mistake without audio evidence");
+    expect(prompt).toContain(
+      "only when the high-confidence audio-derived evidence explicitly supports it",
+    );
+  });
+
+  it("includes separate audio-derived evidence without replacing the transcript", () => {
+    const prompt = buildSpeakingConversationFeedbackPrompt(
+      scenario,
+      transcript,
+      [
+        {
+          turnIndex: 1,
+          rawTranscript: "我卖苹果",
+          interpretedTranscript: "我买苹果",
+          transcriptionConfidence: 0.72,
+          understanding: "context_resolved",
+          issue: {
+            category: "tone",
+            evidence: "买 sounded close to 卖.",
+            feedback: "Keep the third tone low before rising.",
+            confidence: 0.84,
+          },
+        },
+      ],
+    );
+    expect(prompt).toContain("Customer: 你好");
+    expect(prompt).toContain("Turn 1: intended 我买苹果; tone");
   });
 });
 
 describe("hasEnoughSpeakingEvidence", () => {
   it("rejects a greeting followed by an immediate exit", () => {
-    expect(hasEnoughSpeakingEvidence([
-      { role: "assistant", content: "欢迎光临！请问几位？" },
-      { role: "user", content: "nihao" },
-    ])).toBe(false);
+    expect(
+      hasEnoughSpeakingEvidence([
+        { role: "assistant", content: "欢迎光临！请问几位？" },
+        { role: "user", content: "nihao" },
+      ]),
+    ).toBe(false);
   });
 
   it("accepts a multi-turn learner attempt with substantive responses", () => {
-    expect(hasEnoughSpeakingEvidence([
-      { role: "assistant", content: "请问几位？" },
-      { role: "user", content: "你好" },
-      { role: "assistant", content: "请问几位？" },
-      { role: "user", content: "两位" },
-      { role: "assistant", content: "想吃什么？" },
-      { role: "user", content: "我要宫保鸡丁" },
-    ])).toBe(true);
+    expect(
+      hasEnoughSpeakingEvidence([
+        { role: "assistant", content: "请问几位？" },
+        { role: "user", content: "你好" },
+        { role: "assistant", content: "请问几位？" },
+        { role: "user", content: "两位" },
+        { role: "assistant", content: "想吃什么？" },
+        { role: "user", content: "我要宫保鸡丁" },
+      ]),
+    ).toBe(true);
   });
 
   it("accepts one substantial transcript chunk produced by semantic VAD", () => {
-    expect(hasEnoughSpeakingEvidence([
-      { role: "assistant", content: "请问您想吃什么？" },
-      { role: "user", content: "我要一个宫保鸡丁和一杯茶" },
-    ])).toBe(true);
+    expect(
+      hasEnoughSpeakingEvidence([
+        { role: "assistant", content: "请问您想吃什么？" },
+        { role: "user", content: "我要一个宫保鸡丁和一杯茶" },
+      ]),
+    ).toBe(true);
   });
 
   it("rejects one minimal answer that cannot demonstrate the mission", () => {
-    expect(hasEnoughSpeakingEvidence([
-      { role: "assistant", content: "请问几位？" },
-      { role: "user", content: "两位" },
-    ])).toBe(false);
+    expect(
+      hasEnoughSpeakingEvidence([
+        { role: "assistant", content: "请问几位？" },
+        { role: "user", content: "两位" },
+      ]),
+    ).toBe(false);
   });
 });
 
@@ -104,7 +143,13 @@ describe("parseSpeakingConversationFeedback (extends speaking-feedback.ts's rubr
       objectiveCompletionRatio: 0.9,
       notes: "Good effort.",
       recommendedNextStep: "Try shadowing.",
-      mistakes: [{ category: "response", evidence: "你好", feedback: "Answer the waiter's question next." }],
+      mistakes: [
+        {
+          category: "response",
+          evidence: "你好",
+          feedback: "Answer the waiter's question next.",
+        },
+      ],
     });
     const feedback = parseSpeakingConversationFeedback(raw);
     expect(feedback.fluency).toBe(60);
@@ -112,7 +157,11 @@ describe("parseSpeakingConversationFeedback (extends speaking-feedback.ts's rubr
     expect(feedback.objectiveCompletionRatio).toBe(0.9);
     expect(feedback.notes).toBe("Good effort.");
     expect(feedback.mistakes).toEqual([
-      { category: "response", evidence: "你好", feedback: "Answer the waiter's question next." },
+      {
+        category: "response",
+        evidence: "你好",
+        feedback: "Answer the waiter's question next.",
+      },
     ]);
   });
 

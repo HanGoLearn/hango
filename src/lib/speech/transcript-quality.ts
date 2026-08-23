@@ -169,6 +169,31 @@ export function assessHanTranscript(
   return { ok: true, transcript: normalized };
 }
 
+/**
+ * Role-play Speaking is Mandarin immersion. Its recognizer is already pinned
+ * to `zh`, but an acoustically ambiguous result can still occasionally arrive
+ * as Spanish/English text. Reject that result instead of showing it as if the
+ * learner had spoken another language. Han's general side-panel chat keeps
+ * using the multilingual assessment above.
+ */
+export function assessMandarinRolePlayTranscript(
+  transcript: string,
+  confidence: number | null = null,
+  hints: readonly MandarinTranscriptHint[] = [],
+): HanTranscriptAssessment {
+  const assessment = assessHanTranscript(transcript, confidence, hints);
+  if (!assessment.ok) return assessment;
+
+  if (
+    !/\p{Script=Han}/u.test(assessment.transcript) ||
+    /\p{Script=Latin}/u.test(assessment.transcript)
+  ) {
+    return { ok: false, reason: "unsupported_language" };
+  }
+
+  return assessment;
+}
+
 function replaceExpectedPinyin(
   transcript: string,
   hint: MandarinTranscriptHint,

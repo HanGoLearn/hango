@@ -9,12 +9,18 @@ import {
   type AiTeacherContext,
   type AiTeacherMode,
 } from "@/lib/ai-context";
-import { realtimeSpeechSpeed } from "@/lib/han-realtime";
+import {
+  realtimeSpeechSpeed,
+  resolveRealtimePracticeLevel,
+} from "@/lib/han-realtime";
 import {
   buildRealtimeSttConfig,
   transcriptHintsFromContext,
 } from "@/lib/speech/transcript-quality";
-import { HAN_REALTIME_VAD_CONFIG } from "@/lib/speech/realtime-vad";
+import {
+  realtimeNoiseReductionConfig,
+  realtimeVadConfig,
+} from "@/lib/speech/realtime-vad";
 
 const REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
 const VOICES = new Set([
@@ -106,6 +112,20 @@ export async function POST(request: Request) {
     })),
     recentEvidence.map((item) => item.result),
   );
+  const resolvedRolePlayLevel = resolveRealtimePracticeLevel(
+    context.rolePlay,
+    profile?.generalLevelPoints,
+  );
+  if (
+    context.rolePlay?.isFreeTopic &&
+    resolvedRolePlayLevel &&
+    !context.rolePlay.level
+  ) {
+    context = {
+      ...context,
+      rolePlay: { ...context.rolePlay, level: resolvedRolePlayLevel },
+    };
+  }
   const contextualSttVocabulary = transcriptHintsFromContext(context).map(
     (hint) => `${hint.hanzi} (${hint.pinyin})`,
   );
@@ -120,6 +140,9 @@ export async function POST(request: Request) {
     mode,
   );
   const speechSpeed = realtimeSpeechSpeed(context.rolePlay);
+  const noiseReduction = realtimeNoiseReductionConfig(
+    context.rolePlay?.isFreeTopic === true,
+  );
 
   const formData = new FormData();
   formData.set("sdp", await request.text());
@@ -129,9 +152,11 @@ export async function POST(request: Request) {
       type: "realtime",
       model: "gpt-realtime-mini",
       output_modalities: ["audio"],
+      include: ["item.input_audio_transcription.logprobs"],
       instructions: realtimeInstructions,
       audio: {
         input: {
+          ...(noiseReduction ? { noise_reduction: noiseReduction } : {}),
           transcription: {
             ...buildRealtimeSttConfig(
               context.rolePlay ? "mandarin" : "han-multilingual",
@@ -141,7 +166,9 @@ export async function POST(request: Request) {
               ],
             ),
           },
-          turn_detection: HAN_REALTIME_VAD_CONFIG,
+          turn_detection: realtimeVadConfig(
+            context.rolePlay?.isFreeTopic === true,
+          ),
         },
         output: { voice, speed: speechSpeed },
       },
@@ -164,6 +191,7 @@ export async function POST(request: Request) {
       sdp: body,
       instructions: realtimeInstructions,
       speechSpeed,
+      rolePlayLevel: resolvedRolePlayLevel ?? null,
     });
   }
   return new Response(body, {

@@ -218,8 +218,8 @@ export function VocabularyStep({
     <div className="flex flex-col gap-4">
       <SectionTitle>Vocabulary</SectionTitle>
 
-      <div className="relative overflow-hidden rounded-panel bg-linear-to-br from-secondary-900 via-secondary-700 to-accent-700 px-5 pt-5 pb-16">
-        <Body className="max-w-[70%] font-display text-[1.15rem] text-on-color-light italic">
+      <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
+        <Body className="max-w-[70%] font-display text-[1.15rem] italic">
           &ldquo;Here are the words you&rsquo;ll need for this lesson.&rdquo;
         </Body>
         <div className="mt-2">
@@ -232,7 +232,7 @@ export function VocabularyStep({
         <HanMascot
           pose="curious"
           size={132}
-          className="pointer-events-none absolute -right-3 -bottom-3 drop-shadow-[0_12px_18px_rgba(0,0,0,0.35)]"
+          className="pointer-events-none absolute -right-3 -bottom-3 drop-shadow-[0_12px_18px_rgba(0,0,0,0.25)]"
         />
       </div>
 
@@ -258,7 +258,7 @@ export function VocabularyStep({
       </div>
 
       <div key={currentItem.id} style={cardStyle} className="flex flex-col gap-3">
-        <div className="relative overflow-hidden rounded-panel bg-linear-to-br from-secondary-700 to-accent-700 px-6 py-7 text-center">
+        <div className="relative overflow-hidden rounded-panel bg-elevated px-6 py-7 text-center">
           <div className="absolute top-3 right-3">
             <AudioPlayButton
               label={`pronunciation of ${currentItem.chineseForm}`}
@@ -267,7 +267,7 @@ export function VocabularyStep({
             />
           </div>
 
-          <ChineseText className="text-5xl text-on-color-light">
+          <ChineseText className="text-5xl">
             {currentItem.chineseForm}
           </ChineseText>
           {showPinyin && (
@@ -275,11 +275,9 @@ export function VocabularyStep({
               {currentItem.pinyin}
             </Pinyin>
           )}
-          <Body className="mt-1 font-semibold text-on-color-light">
-            {currentItem.meaning}
-          </Body>
+          <Body className="mt-1 font-semibold">{currentItem.meaning}</Body>
           {currentItem.partOfSpeech && (
-            <span className="mt-2 inline-block rounded-full bg-on-color-light/20 px-3 py-0.5 font-interface text-caption text-on-color-light">
+            <span className="mt-2 inline-block rounded-full bg-page px-3 py-0.5 font-interface text-caption text-text-secondary">
               {currentItem.partOfSpeech}
             </span>
           )}

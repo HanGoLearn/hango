@@ -9,6 +9,10 @@ import {
   parseSpeakingFeedback,
   DEFAULT_SPEAKING_FEEDBACK,
 } from "@/lib/speaking-feedback";
+import {
+  speakingEvidenceForPrompt,
+  type SpeakingTurnEvidence,
+} from "@/lib/speech/speaking-pronunciation-evidence";
 
 /**
  * Extends Speaking Lab's SpeakingFeedback with the two gates the Points &
@@ -74,6 +78,7 @@ export interface SpeakingTranscriptMessage {
 export function buildSpeakingConversationFeedbackPrompt(
   scenario: SpeakingConversationScenario,
   transcript: SpeakingTranscriptMessage[],
+  speakingEvidence: readonly SpeakingTurnEvidence[] = [],
 ): string {
   const transcriptText = transcript
     .map(
@@ -91,11 +96,13 @@ export function buildSpeakingConversationFeedbackPrompt(
     `Mission success conditions: ${scenario.successConditions?.join("; ") || "none supplied"}.`,
     "Conversation transcript:",
     transcriptText || "(no messages)",
+    "High-confidence audio-derived evidence (collected inside the same live voice session):",
+    speakingEvidenceForPrompt(speakingEvidence),
     "",
     "First judge only the learner's turns; never give the learner credit for language used only by the AI character.",
     "Before flagging a missing greeting, question, or piece of information as a mistake, check what the AI character already said earlier in the transcript. If the AI character already greeted the learner, already volunteered its own name/role/nationality/etc. unprompted, or already answered a question the learner would otherwise need to ask, do not require the learner to redundantly repeat or re-request that same thing - a natural reply does not restate information the other side just gave. Only flag a missing greeting, question, or reciprocal detail when the learner genuinely had an open opportunity to give or ask for it and did not.",
     "Rate these dimensions 0-100 using demonstrated evidence only:",
-    "- pronunciation: your best estimate from the transcript alone (this is speech-to-text, not a phonetic analysis - do not claim certainty).",
+    "- pronunciation: judge comprehensibility from the transcript and use the audio-derived evidence above for any specific pronunciation or tone finding. Do not invent acoustic detail that is absent from that evidence.",
     "- fluency: continuity, responsiveness, and natural turn-taking across the learner's turns; a greeting alone is not fluency evidence.",
     "- accuracy: correctness and comprehensibility of the learner's Mandarin.",
     "- complexity: useful range of the lesson's taught vocabulary and grammar structures, appropriate to the learner's level. Do not reward advanced language for its own sake.",
@@ -107,10 +114,10 @@ export function buildSpeakingConversationFeedbackPrompt(
     "Write 1-2 sentences of specific, actionable feedback, and one short recommended next step.",
     "Also return up to 6 specific learner mistakes. Allowed categories: tones, pronunciation, grammar, vocabulary, context, response, fluency. Each mistake must quote brief evidence from the learner's own words and explain how to improve it.",
     "Use context when the learner goes off-scenario, response when they fail to answer the character's question, grammar/vocabulary for incorrect or missing lesson language, and fluency for unnatural turn progression.",
-    "Never add a tones mistake without audio evidence - this evaluator currently receives transcript-only evidence, so omit that category (pronunciation mistakes are fine, per the estimate above).",
+    "Add a tones or pronunciation mistake only when the high-confidence audio-derived evidence explicitly supports it. Low STT confidence, an odd transcript, room noise, or a foreign accent alone is not proof of an error. If the app resolved an understandable imperfect attempt from context, grade the intended Mandarin for communication while still reporting the separate supported pronunciation/tone issue.",
     "",
     "Respond with ONLY a JSON object shaped exactly like this, no other text:",
-    '{"pronunciation": number, "fluency": number, "accuracy": number, "complexity": number, "communicationEffectiveness": number, "vocabularyUsageRatio": number, "objectiveCompletionRatio": number, "notes": string, "recommendedNextStep": string, "mistakes": [{"category": "grammar|vocabulary|context|response|fluency", "evidence": string, "feedback": string}]}',
+    '{"pronunciation": number, "fluency": number, "accuracy": number, "complexity": number, "communicationEffectiveness": number, "vocabularyUsageRatio": number, "objectiveCompletionRatio": number, "notes": string, "recommendedNextStep": string, "mistakes": [{"category": "tones|pronunciation|grammar|vocabulary|context|response|fluency", "evidence": string, "feedback": string}]}',
   ].join("\n");
 }
 
@@ -122,24 +129,31 @@ export function hasEnoughSpeakingEvidence(
     .map((message) => message.content.trim())
     .filter(Boolean);
   const substantiveTurns = learnerTurns.filter(
-    (content) => !/^(?:ni\s*hao|nǐ\s*hǎo|你好|hi|hello|hola)[!,.。！?？\s]*$/iu.test(content),
+    (content) =>
+      !/^(?:ni\s*hao|nǐ\s*hǎo|你好|hi|hello|hola)[!,.。！?？\s]*$/iu.test(
+        content,
+      ),
   );
   const substantiveText = substantiveTurns.join(" ");
-  const chineseCharacters = substantiveText.match(/[\p{Script=Han}]/gu)?.length ?? 0;
+  const chineseCharacters =
+    substantiveText.match(/[\p{Script=Han}]/gu)?.length ?? 0;
   const spokenWords = substantiveText.split(/\s+/u).filter(Boolean).length;
 
   // Semantic VAD may keep a long answer in one transcript chunk. Evidence
   // sufficiency therefore depends on demonstrated language, not an
   // arbitrary number of database rows.
   return (
-    substantiveTurns.length >= 2 ||
-    chineseCharacters >= 6 ||
-    spokenWords >= 6
+    substantiveTurns.length >= 2 || chineseCharacters >= 6 || spokenWords >= 6
   );
 }
 
 function isRatio(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  );
 }
 
 /**

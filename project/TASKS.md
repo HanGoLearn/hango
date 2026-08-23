@@ -2491,6 +2491,69 @@ per-turn instructions ever told the model to avoid repeating itself.
   pass. Running Next server compilation responds successfully; fresh signed-in
   microphone testing remains the final perceptual check.
 
+## Speaking Lab Practice with Han - noise/naturalness audit (2026-08-23)
+
+- [x] Free-topic Realtime input now uses OpenAI `far_field` noise reduction
+  before transcription/VAD, plus the existing stricter server-VAD profile and
+  foreground-signal/logprob checks.
+- [x] Continuous room audio can no longer leave an input turn open forever: a
+  level-aware watchdog preserves/commits probable learner speech, but clears
+  music/barks, creates a brief silence boundary, ignores any late transcript
+  from that discarded item, and resumes listening without an invented reply.
+- [x] Free-topic prompts now explicitly require spontaneous everyday Mandarin
+  and real-person reactions rather than vocabulary-drill/questionnaire filler;
+  when "Use my profile level" resolves to Pre-HSK it remains hard-limited to
+  one useful phrase and 8 Chinese characters.
+- [x] Speaking role-play transcript validation is now Mandarin-only after STT:
+  Spanish/English or mixed Latin output is rejected and the learner is asked to
+  repeat, while Han's general side-panel chat remains multilingual.
+- [x] TypeScript, scoped ESLint/Prettier, 148 focused Realtime/context/STT tests,
+  and local Realtime-route compilation pass. Perceptual testing with the user's
+  actual microphone/music environment remains the final threshold check.
+
+## Speaking, round 14 - contextual understanding + separate audio evidence (2026-08-23)
+
+- [x] Lesson Speaking and Speaking Lab's Practice with Han now preserve each
+  learner turn's raw STT, conversation interpretation, confidence, and a
+  separate pronunciation/tone/ambiguity finding. Understandable imperfect
+  Mandarin keeps the scene moving; real ambiguity gets one short in-character
+  clarification instead of a silent meaning change or correction drill.
+- [x] At session end, the same active Realtime conversation performs one silent,
+  text-only audio-evidence review. It accepts only findings tied to a real turn
+  at confidence >= 0.60; low STT confidence, room noise, accent, or odd spelling
+  alone never becomes a pronunciation error. No audio is uploaded or transcribed
+  a second time, and there is no paid review call per turn.
+- [x] Learning Journey stores the compact evidence record for Reflection without
+  exposing it as dialogue; Practice with Han passes it into its existing single
+  final-feedback call. Tone/pronunciation feedback now requires this explicit
+  audio-derived evidence. Han's general side-panel/bubble path remains unchanged
+  and multilingual.
+- [x] TypeScript, focused Realtime/context/STT/Reflection regression (177/177,
+  including 6 database-backed Reflection cases), scoped ESLint/Prettier, and
+  local Next route compilation pass. A signed-in microphone session remains
+  the final perceptual check.
+
+## Timed Speaking - immutable character and learner-fact memory (2026-08-23)
+
+- [x] Fixed the live contradiction where a character who had introduced
+  themself as a teacher later mirrored `我是学生` with `我也是新生`, plus the
+  repeated-name question after the learner had already answered it.
+- [x] Auto persona now resolves one character from the learner-authored
+  scenario and keeps it; Teacher is also an explicit role choice. Occupation,
+  status, relationship, name, nationality, and other established character
+  facts are immutable for the full session.
+- [x] Every timed lesson Speaking and Practice with Han turn receives a compact
+  two-speaker memory (last 8 messages, capped at 480 characters). Learner facts
+  never overwrite character facts, and `也` is allowed only for a genuinely
+  shared fact. A deterministic `LEARNER NAME STATUS` marks either an explicit
+  `我叫…`/`我的名字是…` answer or a direct short answer after
+  `你叫什么名字？` as known and forbids asking for it again. Han's general
+  side-panel/bubble and objective-driven Placement exam remain outside this
+  memory branch.
+- [x] TypeScript and scoped ESLint pass; focused identity/context regression
+  passes 124/124. Local Next route compilation passes; real microphone
+  confirmation remains pending.
+
 ## Dialogue audio: wrong-gender voice + TTS cost question (2026-08-16)
 
 User noticed a Learning Journey dialogue with a male and female character

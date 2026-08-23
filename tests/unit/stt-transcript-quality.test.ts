@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assessHanTranscript,
+  assessMandarinRolePlayTranscript,
   buildHanSttPrompt,
   buildRealtimeSttConfig,
   confidenceFromLogprobs,
@@ -54,6 +55,27 @@ describe("Han STT language constraints", () => {
     expect(assessHanTranscript("我想学习中文")).toEqual({
       ok: true,
       transcript: "我想学习中文",
+    });
+  });
+
+  it("accepts only sinogram transcriptions inside Speaking role-play", () => {
+    expect(assessMandarinRolePlayTranscript("我想学习中文")).toEqual({
+      ok: true,
+      transcript: "我想学习中文",
+    });
+    expect(assessMandarinRolePlayTranscript("ni hao")).toEqual({
+      ok: true,
+      transcript: "你好",
+    });
+    expect(
+      assessMandarinRolePlayTranscript("Quiero practicar mandarín"),
+    ).toEqual({
+      ok: false,
+      reason: "unsupported_language",
+    });
+    expect(assessMandarinRolePlayTranscript("你好 hola")).toEqual({
+      ok: false,
+      reason: "unsupported_language",
     });
   });
 

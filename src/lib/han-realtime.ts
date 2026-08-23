@@ -5,6 +5,7 @@ import {
   describeSpeakingDifficulty,
   type AiTeacherMode,
 } from "@/lib/ai-context";
+import { hskLevelForPoints } from "@/lib/points-system";
 
 export type HanExplanationLanguage = "English" | "Spanish" | "Chinese";
 
@@ -81,11 +82,92 @@ type RealtimeTranscriptMessage = {
   content: string;
 };
 
+function compactRecentDialogue(
+  transcript: readonly RealtimeTranscriptMessage[],
+): string {
+  const lines = transcript
+    .slice(-8)
+    .map(
+      (message) =>
+        `${message.role === "assistant" ? "character" : "learner"}: ${message.content.trim()}`,
+    )
+    .filter((line) => !line.endsWith(": "));
+  while (lines.join(" | ").length > 480 && lines.length > 1) lines.shift();
+  return lines.join(" | ").slice(0, 480);
+}
+
+function findLearnerNameEvidence(
+  transcript: readonly RealtimeTranscriptMessage[],
+): string | null {
+  let nameQuestionPending = false;
+  for (const message of transcript) {
+    const content = message.content.trim();
+    if (message.role === "assistant") {
+      if (/叫什么名字|你的名字|您的名字|你姓什么|您贵姓/u.test(content))
+        nameQuestionPending = true;
+      continue;
+    }
+    if (
+      /(?:我叫|我的名字(?:是|叫)|请叫我|叫我)[\p{Letter}\p{Number}·•\s]{1,30}/u.test(
+        content,
+      )
+    )
+      return content.slice(0, 80);
+    if (
+      nameQuestionPending &&
+      content.length <= 80 &&
+      !/^(?:你好|您好)[。.!！]?$/u.test(content) &&
+      !/不知道|不懂|没听懂|听不清|再说|请重复|什么/u.test(content)
+    )
+      return content;
+  }
+  return null;
+}
+
 export const REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT = {
   opening: 200,
   turn: 260,
   closing: 240,
 } as const;
+
+const REALTIME_PRE_HSK_OUTPUT_TOKEN_LIMIT = {
+  opening: 90,
+  turn: 100,
+  closing: 80,
+} as const;
+
+/**
+ * "Use my profile level" has no browser-side level value. Resolve it on the
+ * authenticated server and return the concrete label to the live client so
+ * every later response.create keeps the same difficulty as the session prompt.
+ */
+export function resolveRealtimePracticeLevel(
+  rolePlay: Pick<RealtimeRolePlay, "isFreeTopic" | "level"> | null | undefined,
+  generalLevelPoints: number | null | undefined,
+): string | undefined {
+  if (!rolePlay?.isFreeTopic || rolePlay.level) return rolePlay?.level;
+  return hskLevelForPoints(generalLevelPoints ?? 0);
+}
+
+export function realtimeRolePlayOutputTokenLimit(
+  rolePlay: Pick<RealtimeRolePlay, "isFreeTopic" | "level"> | undefined,
+  phase: keyof typeof REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT,
+): number {
+  if (rolePlay?.isFreeTopic && rolePlay.level === "Pre-HSK")
+    return REALTIME_PRE_HSK_OUTPUT_TOKEN_LIMIT[phase];
+  return REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT[phase];
+}
+
+function realtimeRolePlayCharacterLimit(rolePlay: RealtimeRolePlay): number {
+  if (rolePlay.level === "Pre-HSK") return 8;
+  const explicitLevel = rolePlay.level?.match(/HSK\s*([1-9])/iu)?.[1];
+  const hskLevel = explicitLevel
+    ? Number(explicitLevel)
+    : rolePlay.lessonHskLevel;
+  if (hskLevel === 1) return 12;
+  if (hskLevel === 2) return 18;
+  return 32;
+}
 
 /** A deterministic audio pace baseline; prompt wording alone is not enough. */
 export function realtimeSpeechSpeed(
@@ -103,6 +185,13 @@ export function realtimeSpeechSpeed(
   if (hskLevel === 2) return 0.9;
   if (hskLevel === 3) return 0.96;
   return 1;
+}
+
+/** Free-topic Speaking Lab deliberately behaves like Han's fluid live chat. */
+export function allowsRealtimeBargeIn(
+  rolePlay?: Pick<RealtimeRolePlay, "isFreeTopic">,
+): boolean {
+  return rolePlay?.isFreeTopic === true;
 }
 
 /**
@@ -964,6 +1053,7 @@ export function buildRealtimeTurnInstructions(
   sessionLevelOverride?: string | null,
   mode: AiTeacherMode = "TUTOR",
   rolePlayTurnStrategy: "assessed" | "direct" = "assessed",
+  conversationTranscript: readonly RealtimeTranscriptMessage[] = [],
 ): string {
   const pronunciationProgress = progress
     ? progress.status === "accepted"
@@ -978,6 +1068,9 @@ export function buildRealtimeTurnInstructions(
       ? { ...rolePlay, level: sessionLevelOverride }
       : rolePlay;
     const tutorMode = effectiveRolePlay.correctionMode === "tutor";
+    const usesTimedConversationMemory = rolePlayTurnStrategy === "direct";
+    const recentDialogueMemory = compactRecentDialogue(conversationTranscript);
+    const learnerNameEvidence = findLearnerNameEvidence(conversationTranscript);
     return [
       `You are currently playing ${effectiveRolePlay.aiRole}; the learner is ${effectiveRolePlay.learnerRole}.`,
       `The active scenario is: ${effectiveRolePlay.scenarioContext}.`,
@@ -986,8 +1079,22 @@ export function buildRealtimeTurnInstructions(
       ...lessonLanguageConstraints(effectiveRolePlay),
       "Respond only as that character inside this scenario.",
       `Respect role ownership every turn, not only the opening: you are ${effectiveRolePlay.aiRole}, not ${effectiveRolePlay.learnerRole}. If the goal assigns an action to the learner - ask, order, request, explain, compare, or negotiate - never perform, ask, or supply it yourself; wait for the learner, or create a natural opening for them to do it.`,
+      usesTimedConversationMemory
+        ? "Your character identity is immutable. Keep the occupation, status, relationship, name, nationality, and other personal facts established by the scenario or by your own earlier lines. A learner statement changes only the learner's facts, never yours."
+        : null,
+      usesTimedConversationMemory && recentDialogueMemory
+        ? `COMPACT DIALOGUE MEMORY — ${recentDialogueMemory}. Treat every fact already supplied by either speaker as known. Before asking any question, verify its answer is not already present here; if it is, react to it and move to a new topic instead.`
+        : null,
+      usesTimedConversationMemory && learnerNameEvidence
+        ? `LEARNER NAME STATUS: already answered in ${JSON.stringify(learnerNameEvidence)}. The learner's name is known for the rest of this session. Never ask their name again, never request a repetition just to reconfirm it, and continue with a different relevant question.`
+        : null,
+      usesTimedConversationMemory
+        ? "Never mirror the learner's identity merely to sound reciprocal. Use 也 only when both people truly share the fact. If you are a teacher and the learner says 我是学生, acknowledge the learner; never say 我也是学生 or 我也是新生."
+        : null,
       "Never ask a question or restate information you already said earlier in this conversation; always add something new instead of repeating yourself.",
       "React to the learner's actual meaning before advancing the objective. Sound like a present conversation partner, not an evaluator following a checklist: use a brief natural acknowledgement only when it adds warmth, then answer or continue the same thread.",
+      "Prioritize conversational meaning over perfect pronunciation. If the learner is understandable from the audio plus this scene despite a minor tone or pronunciation error, respond naturally to the intended meaning and keep going; preserve the issue for end-of-session feedback instead of correcting it inside the scene.",
+      "If pronunciation is genuinely ambiguous between meanings, ask one short in-character clarification. Never silently reinterpret a clearly different word, and never turn an understandable attempt into a drill.",
       "Vary the shape of turns naturally. Do not force a question after every answer. A turn may be one short reaction, one answer, or one answer followed by one easy reciprocal cue.",
       "In a mutual introduction, after you contribute your own corresponding fact, a short reciprocal cue such as 你呢？ is allowed and encouraged when the learner has not given that fact yet. This invites the learner to act; it does not perform their objective for them. Never use it after they already supplied the information.",
       learnerTranscript && isLikelyRealtimeLearnerQuestion(learnerTranscript)
@@ -997,8 +1104,16 @@ export function buildRealtimeTurnInstructions(
         ? `Reply in-character in Mandarin first. Then, only if the learner's last turn had a clear pronunciation, tone, grammar, or word-choice mistake, briefly switch to ${requiredLanguage} and give one short, specific correction: what they said, what's correct, and how to say it. Keep the correction to one or two sentences, then let the conversation continue naturally. Skip the correction entirely when there was no clear mistake - never invent one.`
         : "Output Mandarin Chinese only. Do not use English, Spanish, pinyin, translations, explanations, corrections, pronunciation feedback, or tutoring comments.",
       "Speak standard Mainland Mandarin (Putonghua) with natural Chinese tones and rhythm. Never speak or imitate Korean and never use Korean pronunciation or intonation.",
+      effectiveRolePlay.isFreeTopic
+        ? "Match the requested persona and emotional energy in your voice on every turn. An argument or disagreement should sound naturally firm, terse, and annoyed when appropriate, not friendly and neutral; never become abusive or unsafe."
+        : null,
+      effectiveRolePlay.isFreeTopic
+        ? "Sound like spontaneous everyday Mandarin between real people, not a vocabulary drill, scripted questionnaire, or lesson narration. Respond to this exact moment, leave space for the learner, and never add tutoring filler merely to sound helpful."
+        : null,
       pronunciationProgress,
-      `Use at most two very short sentences${effectiveRolePlay.level ? ` at the ${effectiveRolePlay.level} level` : ", beginner-level"}, no more than 32 Chinese characters total. Make one coherent conversational move: a direct reaction or answer, optionally followed by one short reciprocal cue. Never produce a list of questions or several teaching points.`,
+      effectiveRolePlay.level === "Pre-HSK"
+        ? "This learner is Pre-HSK. Say exactly one tiny, immediately usable Mandarin phrase per turn, no more than 8 Chinese characters. Use only the most basic words; never give multiple facts, alternatives, examples, explanations, or more than one question."
+        : `Use at most two very short sentences${effectiveRolePlay.level ? ` at the ${effectiveRolePlay.level} level` : ", beginner-level"}, no more than ${realtimeRolePlayCharacterLimit(effectiveRolePlay)} Chinese characters total. Make one coherent conversational move: a direct reaction or answer, optionally followed by one short reciprocal cue. Never produce a list of questions or several teaching points.`,
       "If the learner only says nihao or 你好, accept it naturally and continue the scene. Do not greet as Han or ask what they want to practice.",
       "Never reproduce the lesson's reference dialogue verbatim. Keep the exchange natural and guide it toward the active goal.",
       rolePlayTurnStrategy === "direct"
@@ -1253,8 +1368,13 @@ export function buildRealtimeOpeningInstructions(
     ...lessonLanguageConstraints(rolePlay),
     "You speak first. Output Mandarin Chinese only, with no English, Spanish, pinyin, translation, correction, or explanation.",
     "Speak standard Mainland Mandarin (Putonghua), never Korean or Korean-accented Chinese.",
+    ...(rolePlay.isFreeTopic
+      ? [
+          "Match the persona, relationship, and emotional energy requested by the scenario in your audible delivery. If it calls for an argument, disagreement, annoyance, urgency, or excitement, make that attitude clearly audible and natural instead of sounding cheerful and neutral; remain non-abusive and safe.",
+        ]
+      : []),
     `Respect role ownership: you are ${rolePlay.aiRole}, not ${rolePlay.learnerRole}. Never perform or ask the learner for an action, item, or service that only your own character should provide in this scenario.`,
-    `Choose exactly ONE category for your entire opening turn: one short fact OR one short functional cue/question${rolePlay.level ? ` at the ${rolePlay.level} level` : " at beginner level"}. ${rolePlay.lessonHskLevel === 1 ? "Use no more than 12 Chinese characters." : "Use no more than 20 Chinese characters."} Do not output only 你好 or 您好; make the single short line fit this character and scenario, while leaving the learner's objective action for the learner. A comma does not turn multiple details into one thing. Save every additional detail for a later turn, one new thing at a time, after the learner responds.`,
+    `Choose exactly ONE category for your entire opening turn: one short fact OR one short functional cue/question${rolePlay.level ? ` at the ${rolePlay.level} level` : " at beginner level"}. Use no more than ${realtimeRolePlayCharacterLimit(rolePlay)} Chinese characters. ${rolePlay.level === "Pre-HSK" ? "For Pre-HSK, use one tiny phrase with only the most basic words and stop immediately." : ""} Do not output only 你好 or 您好; make the single short line fit this character and scenario, while leaving the learner's objective action for the learner. A comma does not turn multiple details into one thing. Save every additional detail for a later turn, one new thing at a time, after the learner responds.`,
     "The goal describes what the learner must accomplish. Never say the learner's target phrase or perform their required action for them during the opening. If you are a waiter, clerk, receptionist, or other service provider, a simple greeting or welcome is safer than asking yourself whether the service or item is available.",
     "Never end the scene during the opening turn.",
     "Do not copy the lesson's reference dialogue verbatim.",
@@ -1264,13 +1384,20 @@ export function buildRealtimeOpeningInstructions(
 export function buildRealtimeOpeningTurnGuard(
   rolePlay: Pick<RealtimeRolePlay, "objective"> &
     Partial<
-      Pick<RealtimeRolePlay, "aiRole" | "scenarioContext" | "openingLine">
+      Pick<
+        RealtimeRolePlay,
+        "aiRole" | "scenarioContext" | "openingLine" | "isFreeTopic"
+      >
     >,
 ): string | null {
   if (rolePlay.openingLine?.trim()) {
     const openingLine = rolePlay.openingLine.trim();
     return `This authored assessment opening is deterministic. Output exactly ${JSON.stringify(openingLine)} and nothing else. Do not add, remove, explain, translate, or paraphrase any part.`;
   }
+  // A generic deterministic line discarded the learner's chosen persona and
+  // emotional tone in Practice with Han. Let the persistent session prompt
+  // create one short contextual opening for free-topic practice instead.
+  if (rolePlay.isFreeTopic) return null;
   const roleContext = `${rolePlay.aiRole ?? ""} ${rolePlay.scenarioContext ?? ""} ${rolePlay.objective}`;
   const opening =
     /\b(?:waiter|server|clerk|cashier|shop assistant|salesperson|restaurant|store|shop)\b/iu.test(

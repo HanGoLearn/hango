@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import { dirname, join, normalize, relative } from "node:path";
 import type { StorageProvider } from "@/lib/storage/provider";
 
@@ -37,6 +37,15 @@ export class LocalStorageProvider implements StorageProvider {
   async delete(key: string): Promise<void> {
     const filePath = resolveSafePath(key);
     await unlink(filePath).catch(() => undefined);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    try {
+      await access(resolveSafePath(key));
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

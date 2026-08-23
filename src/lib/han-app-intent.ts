@@ -194,7 +194,7 @@ export function buildStaticHanAppContext(
       return [
         "On-demand HanGo context for this response only:",
         "Writing Lab is optional extra writing practice, separate from lesson exercises.",
-        "Its choices are: Write a Paragraph about a lesson topic; Translation Challenge to translate a provided text into Chinese; and Custom Writing, where the learner chooses topic, level, format, and tone. Han gives feedback and recent attempts are saved.",
+        "Its choices are: Write a Paragraph, where the learner chooses Basic, Intermediate, or Advanced plus Family, Daily routine, or Shopping, writes Chinese by hand, and uploads 1-3 photos; Translation Challenge to translate a provided text into Chinese; and Custom Writing, where the learner chooses topic, level, format, and tone. Han gives feedback and recent attempts are saved.",
         "Explain only the option relevant to the learner's question.",
       ].join("\n");
     case "PROGRESS_GUIDE":

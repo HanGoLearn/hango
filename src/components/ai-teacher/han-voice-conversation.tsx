@@ -17,6 +17,7 @@ import {
   getHanOnDemandAppContextAction,
   saveRealtimeConversationMessageAction,
   saveRealtimeConversationTurnAction,
+  saveRealtimeSpeakingEvidenceAction,
 } from "@/lib/actions/ai-teacher";
 import type { AiChatMessage } from "@/components/ai-teacher/ai-teacher-provider";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/lib/ai-context";
 import {
   advancePronunciationPractice,
+  allowsRealtimeBargeIn,
   buildRealtimeAssessmentFallbackGuard,
   buildRealtimeAssessmentTurnGuard,
   buildRealtimeClosingInstructions,
@@ -37,7 +39,7 @@ import {
   buildRealtimeTurnInstructions,
   isNonSpeechNoiseTranscript,
   nextHanExplanationLanguage,
-  REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT,
+  realtimeRolePlayOutputTokenLimit,
   shouldHoldRealtimeLearnerAction,
   shouldBlockForRolePlayAssessment,
   type HanExplanationLanguage,
@@ -47,6 +49,7 @@ import {
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import {
   assessHanTranscript,
+  assessMandarinRolePlayTranscript,
   confidenceFromLogprobs,
   HAN_STT_REPEAT_MESSAGE,
   transcriptHintsFromContext,
@@ -54,8 +57,13 @@ import {
 } from "@/lib/speech/transcript-quality";
 import {
   INITIAL_AMBIENT_NOISE_FLOOR_RMS,
+  freeTopicUnclosedTurnTimeoutMs,
+  isConfidentLearnerBargeIn,
+  isLikelyFreeTopicLearnerUtterance,
   isLikelyLearnerUtterance,
+  REALTIME_BARGE_IN_CONFIRMATION_MS,
   rmsFromTimeDomainSamples,
+  stuckFreeTopicTurnAction,
   updateAmbientNoiseFloor,
   type RealtimeVoiceTurnSignal,
 } from "@/lib/speech/realtime-turn-guard";
@@ -64,15 +72,25 @@ import {
   shouldFinishClosingPlayback,
 } from "@/lib/speech/realtime-playback";
 import { detectHanAppContextIntent } from "@/lib/han-app-intent";
+import {
+  buildSpeakingEvidenceReviewInstructions,
+  createSpeakingTurnEvidence,
+  parseSpeakingEvidenceReview,
+  type SpeakingTurnEvidence,
+} from "@/lib/speech/speaking-pronunciation-evidence";
 
 export type RealtimeConversationState =
   "idle" | "connecting" | "listening" | "thinking" | "speaking";
 export interface RealtimeConversationDiagnostics {
   learnerTurnConfidences: number[];
+  speakingEvidence: SpeakingTurnEvidence[];
 }
 type RealtimeEvent = {
   type?: string;
+  item_id?: string;
   transcript?: string;
+  text?: string;
+  delta?: string;
   logprobs?: TranscriptLogprob[];
   session?: { instructions?: string };
   response?: { output?: unknown[] };
@@ -151,6 +169,7 @@ export function HanVoiceConversation({
   const [state, setState] = useState<RealtimeConversationState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
   const [latestCaption, setLatestCaption] = useState(
     "Start when you're ready.",
   );
@@ -180,10 +199,13 @@ export function HanVoiceConversation({
     rmsSum: number;
     rmsSquareSum: number;
   } | null>(null);
+  const activeVoiceTurnItemIdRef = useRef<string | null>(null);
+  const discardedVoiceTurnItemIdsRef = useRef<Set<string>>(new Set());
   const completedVoiceTurnSignalsRef = useRef<RealtimeVoiceTurnSignal[]>([]);
   const pendingUserTextRef = useRef("");
   const transcriptRef = useRef<SpeakingTranscriptMessage[]>([]);
   const learnerTurnConfidencesRef = useRef<number[]>([]);
+  const speakingEvidenceRef = useRef<SpeakingTurnEvidence[]>([]);
   const pendingSavesRef = useRef<Promise<void>[]>([]);
   const sessionTimerRef = useRef<number | null>(null);
   const sessionConfigurationTimerRef = useRef<number | null>(null);
@@ -199,7 +221,16 @@ export function HanVoiceConversation({
   const closeRequestedRef = useRef(false);
   const closeAfterReplyRef = useRef(false);
   const activeResponseRef = useRef(false);
+  const bargeInConfirmationTimerRef = useRef<number | null>(null);
+  const unclosedTurnTimerRef = useRef<number | null>(null);
+  const audioInputResetTimerRef = useRef<number | null>(null);
+  const forcedTranscriptFallbackTimerRef = useRef<number | null>(null);
+  const ignoreNextSpeechStoppedRef = useRef(false);
+  const confirmedBargeInRef = useRef(false);
   const finishStartedRef = useRef(false);
+  const evidenceReviewPendingRef = useRef(false);
+  const evidenceReviewTextRef = useRef("");
+  const evidenceReviewTimerRef = useRef<number | null>(null);
   const closingResponseDoneAtRef = useRef<number | null>(null);
   const closingAudioObservedRef = useRef(false);
   const closingLastAudibleAtRef = useRef<number | null>(null);
@@ -231,6 +262,8 @@ export function HanVoiceConversation({
     if (audioContextRef.current) void audioContextRef.current.close();
     audioContextRef.current = null;
     activeVoiceTurnRef.current = null;
+    activeVoiceTurnItemIdRef.current = null;
+    discardedVoiceTurnItemIdsRef.current.clear();
     completedVoiceTurnSignalsRef.current = [];
     ambientNoiseFloorRef.current = INITIAL_AMBIENT_NOISE_FLOOR_RMS;
   }, []);
@@ -383,10 +416,9 @@ export function HanVoiceConversation({
     [context.rolePlay, stopRemoteAudioAnalysis],
   );
 
-  function completeActiveVoiceTurn(): RealtimeVoiceTurnSignal | null {
+  function snapshotActiveVoiceTurn(): RealtimeVoiceTurnSignal | null {
     const activeTurn = activeVoiceTurnRef.current;
     if (!activeTurn) return null;
-    activeVoiceTurnRef.current = null;
     const meanRms =
       activeTurn.sampleCount > 0
         ? activeTurn.rmsSum / activeTurn.sampleCount
@@ -398,7 +430,7 @@ export function HanVoiceConversation({
             activeTurn.rmsSquareSum / activeTurn.sampleCount - meanRms ** 2,
           )
         : 0;
-    const signal = {
+    return {
       durationMs: Math.max(0, performance.now() - activeTurn.startedAt),
       voicedMs: activeTurn.voicedMs,
       peakRms: activeTurn.peakRms,
@@ -406,10 +438,103 @@ export function HanVoiceConversation({
       meanRms,
       rmsStandardDeviation: Math.sqrt(variance),
     };
+  }
+
+  function completeActiveVoiceTurn(): RealtimeVoiceTurnSignal | null {
+    const signal = snapshotActiveVoiceTurn();
+    if (!signal) return null;
+    activeVoiceTurnRef.current = null;
+    activeVoiceTurnItemIdRef.current = null;
     completedVoiceTurnSignalsRef.current.push(signal);
     if (completedVoiceTurnSignalsRef.current.length > 4)
       completedVoiceTurnSignalsRef.current.shift();
     return signal;
+  }
+
+  function interruptActiveRealtimeResponse() {
+    const channel = dataChannelRef.current;
+    if (channel?.readyState !== "open" || !activeResponseRef.current) return;
+    confirmedBargeInRef.current = true;
+    turnPlaybackStoppedRef.current = true;
+    channel.send(JSON.stringify({ type: "response.cancel" }));
+    channel.send(JSON.stringify({ type: "output_audio_buffer.clear" }));
+  }
+
+  function clearUnclosedTurnTimer() {
+    if (unclosedTurnTimerRef.current != null)
+      window.clearTimeout(unclosedTurnTimerRef.current);
+    unclosedTurnTimerRef.current = null;
+  }
+
+  function createBriefInputSilenceBoundary() {
+    if (audioInputResetTimerRef.current != null)
+      window.clearTimeout(audioInputResetTimerRef.current);
+    streamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
+    audioInputResetTimerRef.current = window.setTimeout(() => {
+      audioInputResetTimerRef.current = null;
+      if (
+        finishStartedRef.current ||
+        closingTurnRef.current ||
+        closeRequestedRef.current ||
+        mutedRef.current
+      )
+        return;
+      streamRef.current?.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
+    }, 220);
+  }
+
+  function recoverUnclosedFreeTopicTurn() {
+    clearUnclosedTurnTimer();
+    const rolePlay = contextRef.current.rolePlay;
+    const channel = dataChannelRef.current;
+    if (
+      !rolePlay?.isFreeTopic ||
+      channel?.readyState !== "open" ||
+      !activeVoiceTurnRef.current
+    )
+      return;
+
+    const signal = snapshotActiveVoiceTurn();
+    const action = stuckFreeTopicTurnAction(signal);
+    if (action === "commit") {
+      completeActiveVoiceTurn();
+      channel.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+      setState("thinking");
+      forcedTranscriptFallbackTimerRef.current = window.setTimeout(() => {
+        forcedTranscriptFallbackTimerRef.current = null;
+        completedVoiceTurnSignalsRef.current = [];
+        pendingUserTextRef.current = "";
+        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setState("listening");
+      }, 5_000);
+    } else {
+      const discardedItemId = activeVoiceTurnItemIdRef.current;
+      if (discardedItemId) {
+        discardedVoiceTurnItemIdsRef.current.add(discardedItemId);
+        if (discardedVoiceTurnItemIdsRef.current.size > 8) {
+          const oldestItemId = discardedVoiceTurnItemIdsRef.current
+            .values()
+            .next().value;
+          if (oldestItemId)
+            discardedVoiceTurnItemIdsRef.current.delete(oldestItemId);
+        }
+      }
+      activeVoiceTurnRef.current = null;
+      activeVoiceTurnItemIdRef.current = null;
+      completedVoiceTurnSignalsRef.current = [];
+      ignoreNextSpeechStoppedRef.current = true;
+      channel.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+      setLatestCaption("I'm listening — begin whenever you're ready.");
+      setState("listening");
+    }
+    // Continuous music can keep server VAD open even after its buffered bytes
+    // are cleared. A tiny real silence boundary lets VAD reset without making
+    // the learner press Stop or restart the conversation.
+    createBriefInputSilenceBoundary();
   }
 
   const stopMedia = useCallback(() => {
@@ -430,6 +555,19 @@ export function HanVoiceConversation({
     if (turnPlaybackTimerRef.current != null)
       window.clearTimeout(turnPlaybackTimerRef.current);
     turnPlaybackTimerRef.current = null;
+    if (bargeInConfirmationTimerRef.current != null)
+      window.clearTimeout(bargeInConfirmationTimerRef.current);
+    bargeInConfirmationTimerRef.current = null;
+    clearUnclosedTurnTimer();
+    if (audioInputResetTimerRef.current != null)
+      window.clearTimeout(audioInputResetTimerRef.current);
+    audioInputResetTimerRef.current = null;
+    if (forcedTranscriptFallbackTimerRef.current != null)
+      window.clearTimeout(forcedTranscriptFallbackTimerRef.current);
+    forcedTranscriptFallbackTimerRef.current = null;
+    if (evidenceReviewTimerRef.current != null)
+      window.clearTimeout(evidenceReviewTimerRef.current);
+    evidenceReviewTimerRef.current = null;
     const channel = dataChannelRef.current;
     if (channel?.readyState === "open") {
       channel.send(JSON.stringify({ type: "response.cancel" }));
@@ -465,6 +603,10 @@ export function HanVoiceConversation({
     closeRequestedRef.current = false;
     closeAfterReplyRef.current = false;
     activeResponseRef.current = false;
+    confirmedBargeInRef.current = false;
+    ignoreNextSpeechStoppedRef.current = false;
+    activeVoiceTurnItemIdRef.current = null;
+    discardedVoiceTurnItemIdsRef.current.clear();
     closingResponseDoneAtRef.current = null;
     closingAudioObservedRef.current = false;
     closingLastAudibleAtRef.current = null;
@@ -475,23 +617,88 @@ export function HanVoiceConversation({
     turnPlaybackStoppedRef.current = false;
     pronunciationPracticeRef.current = null;
     sessionLevelRef.current = null;
+    speakingEvidenceRef.current = [];
+    evidenceReviewPendingRef.current = false;
+    evidenceReviewTextRef.current = "";
+    mutedRef.current = false;
     onActiveChange(false);
     setMuted(false);
     setState("idle");
   }, [onActiveChange, stopRemoteAudioAnalysis, stopVoiceSignalAnalysis]);
 
-  const finishConversation = useCallback(async () => {
-    if (finishStartedRef.current) return;
-    finishStartedRef.current = true;
+  const completeConversationAfterEvidence = useCallback(async () => {
     const transcript = [...transcriptRef.current];
+    const speakingEvidence = [...speakingEvidenceRef.current];
     const diagnostics = {
       learnerTurnConfidences: [...learnerTurnConfidencesRef.current],
+      speakingEvidence,
     };
+    const finalContext = contextRef.current;
+    if (
+      finalContext.rolePlay &&
+      !finalContext.rolePlay.isFreeTopic &&
+      finalContext.lessonTitle &&
+      speakingEvidence.length > 0
+    ) {
+      const save = saveRealtimeSpeakingEvidenceAction(
+        speakingEvidence,
+        finalContext,
+      );
+      pendingSavesRef.current.push(save);
+      void save.catch(() => undefined);
+    }
     stopMedia();
     await Promise.allSettled(pendingSavesRef.current);
     pendingSavesRef.current = [];
     await onComplete?.(transcript, diagnostics);
   }, [onComplete, stopMedia]);
+
+  const finishConversation = useCallback(async () => {
+    if (finishStartedRef.current) return;
+    finishStartedRef.current = true;
+    const rolePlay = contextRef.current.rolePlay;
+    const channel = dataChannelRef.current;
+    if (
+      rolePlay &&
+      completionPolicy === "timer" &&
+      speakingEvidenceRef.current.length > 0 &&
+      channel?.readyState === "open" &&
+      !activeResponseRef.current
+    ) {
+      evidenceReviewPendingRef.current = true;
+      evidenceReviewTextRef.current = "";
+      closingTurnRef.current = false;
+      streamRef.current?.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      setState("thinking");
+      setLatestCaption("Preparing your speaking feedback…");
+      channel.send(
+        JSON.stringify({
+          type: "response.create",
+          response: {
+            output_modalities: ["text"],
+            instructions: buildSpeakingEvidenceReviewInstructions(
+              rolePlay,
+              speakingEvidenceRef.current,
+            ),
+            tools: [],
+            tool_choice: "none",
+            metadata: { hango_phase: "speaking_evidence" },
+            max_output_tokens: 600,
+          },
+        }),
+      );
+      evidenceReviewTimerRef.current = window.setTimeout(() => {
+        if (!evidenceReviewPendingRef.current) return;
+        evidenceReviewPendingRef.current = false;
+        evidenceReviewTimerRef.current = null;
+        void completeConversationAfterEvidence();
+      }, 8_000);
+      return;
+    }
+    await completeConversationAfterEvidence();
+  }, [completeConversationAfterEvidence, completionPolicy]);
 
   const finishAfterClosingPlayback = useCallback(() => {
     if (closingPlaybackTimerRef.current != null)
@@ -518,7 +725,7 @@ export function HanVoiceConversation({
   }, [finishConversation]);
 
   const requestNaturalClose = useCallback(() => {
-    const rolePlay = context.rolePlay;
+    const rolePlay = contextRef.current.rolePlay ?? context.rolePlay;
     const channel = dataChannelRef.current;
     if (!rolePlay || channel?.readyState !== "open") {
       void finishConversation();
@@ -543,7 +750,10 @@ export function HanVoiceConversation({
           tools: [],
           tool_choice: "none",
           metadata: { hango_phase: "closing" },
-          max_output_tokens: REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT.closing,
+          max_output_tokens: realtimeRolePlayOutputTokenLimit(
+            rolePlay,
+            "closing",
+          ),
         },
       }),
     );
@@ -664,7 +874,7 @@ export function HanVoiceConversation({
           instructions: pendingTurnInstructionsRef.current,
           tools: [],
           tool_choice: "none",
-          max_output_tokens: REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT.turn,
+          max_output_tokens: realtimeRolePlayOutputTokenLimit(rolePlay, "turn"),
         },
       }),
     );
@@ -716,6 +926,7 @@ export function HanVoiceConversation({
       return;
     }
     const activeContext = contextRef.current;
+    const allowsBargeIn = allowsRealtimeBargeIn(activeContext.rolePlay);
     if (event.type === "session.updated") {
       const expectedInstructions = pendingSessionInstructionsRef.current;
       if (!expectedInstructions) return;
@@ -736,6 +947,12 @@ export function HanVoiceConversation({
       return;
     }
     if (event.type === "input_audio_buffer.speech_started") {
+      clearUnclosedTurnTimer();
+      ignoreNextSpeechStoppedRef.current = false;
+      if (bargeInConfirmationTimerRef.current != null)
+        window.clearTimeout(bargeInConfirmationTimerRef.current);
+      bargeInConfirmationTimerRef.current = null;
+      confirmedBargeInRef.current = false;
       const now = performance.now();
       activeVoiceTurnRef.current = {
         startedAt: now,
@@ -747,19 +964,67 @@ export function HanVoiceConversation({
         rmsSum: 0,
         rmsSquareSum: 0,
       };
+      activeVoiceTurnItemIdRef.current = event.item_id ?? null;
+      if (activeContext.rolePlay?.isFreeTopic) {
+        unclosedTurnTimerRef.current = window.setTimeout(
+          recoverUnclosedFreeTopicTurn,
+          freeTopicUnclosedTurnTimeoutMs(activeContext.rolePlay.level),
+        );
+      }
+      if (allowsBargeIn && activeResponseRef.current) {
+        // OpenAI VAD may label music as speech. Keep Han talking until the
+        // browser sees sustained, foreground, speech-like energy; only then
+        // cancel the active answer to allow a genuine learner interruption.
+        bargeInConfirmationTimerRef.current = window.setTimeout(() => {
+          bargeInConfirmationTimerRef.current = null;
+          if (
+            activeResponseRef.current &&
+            isConfidentLearnerBargeIn(snapshotActiveVoiceTurn())
+          ) {
+            interruptActiveRealtimeResponse();
+            setState("listening");
+          }
+        }, REALTIME_BARGE_IN_CONFIRMATION_MS);
+        return;
+      }
       setState("listening");
     }
     if (
       event.type === "input_audio_buffer.speech_stopped" ||
       event.type === "response.created"
     ) {
-      if (event.type === "input_audio_buffer.speech_stopped")
-        completeActiveVoiceTurn();
+      if (event.type === "input_audio_buffer.speech_stopped") {
+        clearUnclosedTurnTimer();
+        if (bargeInConfirmationTimerRef.current != null)
+          window.clearTimeout(bargeInConfirmationTimerRef.current);
+        bargeInConfirmationTimerRef.current = null;
+        if (ignoreNextSpeechStoppedRef.current) {
+          ignoreNextSpeechStoppedRef.current = false;
+          activeVoiceTurnRef.current = null;
+          activeVoiceTurnItemIdRef.current = null;
+          setState("listening");
+          return;
+        }
+        const signal = completeActiveVoiceTurn();
+        if (
+          allowsBargeIn &&
+          activeResponseRef.current &&
+          !confirmedBargeInRef.current
+        ) {
+          if (isConfidentLearnerBargeIn(signal)) {
+            interruptActiveRealtimeResponse();
+          } else {
+            // Unconfirmed music/noise must not change a speaking answer into
+            // an indefinite "Thinking" state.
+            return;
+          }
+        }
+      }
       setState("thinking");
     }
     if (event.type === "response.created") {
       activeResponseRef.current = true;
-      if (activeContext.rolePlay) {
+      if (activeContext.rolePlay && !allowsBargeIn) {
         if (!closingTurnRef.current) {
           if (turnPlaybackTimerRef.current != null)
             window.clearTimeout(turnPlaybackTimerRef.current);
@@ -776,7 +1041,7 @@ export function HanVoiceConversation({
     }
     if (event.type === "response.output_audio.delta") {
       activeResponseRef.current = true;
-      if (activeContext.rolePlay)
+      if (activeContext.rolePlay && !allowsBargeIn)
         streamRef.current?.getAudioTracks().forEach((track) => {
           track.enabled = false;
         });
@@ -798,6 +1063,18 @@ export function HanVoiceConversation({
       event.type === "conversation.item.input_audio_transcription.completed"
     ) {
       if (
+        event.item_id &&
+        discardedVoiceTurnItemIdsRef.current.delete(event.item_id)
+      ) {
+        pendingUserTextRef.current = "";
+        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setState("listening");
+        return;
+      }
+      if (forcedTranscriptFallbackTimerRef.current != null)
+        window.clearTimeout(forcedTranscriptFallbackTimerRef.current);
+      forcedTranscriptFallbackTimerRef.current = null;
+      if (
         completedVoiceTurnSignalsRef.current.length === 0 &&
         activeVoiceTurnRef.current
       )
@@ -805,34 +1082,73 @@ export function HanVoiceConversation({
       const voiceSignal = completedVoiceTurnSignalsRef.current.shift() ?? null;
       const rawTranscript = event.transcript?.trim();
       if (!rawTranscript || isNonSpeechNoiseTranscript(rawTranscript)) {
-        setState("listening");
+        setState(
+          allowsBargeIn && activeResponseRef.current ? "speaking" : "listening",
+        );
         return;
       }
 
       const transcriptConfidence = confidenceFromLogprobs(event.logprobs);
-      const assessment = assessHanTranscript(
-        rawTranscript,
-        transcriptConfidence,
-        transcriptHintsFromContext(activeContext),
-      );
+      const assessment = activeContext.rolePlay
+        ? assessMandarinRolePlayTranscript(
+            rawTranscript,
+            transcriptConfidence,
+            transcriptHintsFromContext(activeContext),
+          )
+        : assessHanTranscript(
+            rawTranscript,
+            transcriptConfidence,
+            transcriptHintsFromContext(activeContext),
+          );
       if (!assessment.ok) {
         pendingUserTextRef.current = "";
-        setLatestCaption(HAN_STT_REPEAT_MESSAGE);
-        setError(HAN_STT_REPEAT_MESSAGE);
+        if (allowsBargeIn && activeResponseRef.current) {
+          // A low-confidence fragment while Han is speaking is usually room
+          // audio, not a learner turn that deserves an alarming retry banner.
+          setState("speaking");
+          return;
+        }
+        const repeatMessage = activeContext.rolePlay
+          ? "I couldn't recognize clear Mandarin. Please say it again."
+          : HAN_STT_REPEAT_MESSAGE;
+        setLatestCaption(repeatMessage);
+        setError(repeatMessage);
         setState("listening");
         return;
       }
 
       const transcript = assessment.transcript;
-      if (!isLikelyLearnerUtterance(voiceSignal, transcript)) {
+      const isLikelyLearnerTurn = activeContext.rolePlay?.isFreeTopic
+        ? isLikelyFreeTopicLearnerUtterance(
+            voiceSignal,
+            transcript,
+            transcriptConfidence,
+          )
+        : isLikelyLearnerUtterance(voiceSignal, transcript);
+      if (!isLikelyLearnerTurn) {
         pendingUserTextRef.current = "";
         setError(null);
+        if (allowsBargeIn && activeResponseRef.current) {
+          setState("speaking");
+          return;
+        }
         setLatestCaption("I'm listening — begin whenever you're ready.");
         setState("listening");
         return;
       }
       setError(null);
       {
+        if (activeContext.rolePlay && completionPolicy === "timer") {
+          const learnerTurnIndex = speakingEvidenceRef.current.length + 1;
+          speakingEvidenceRef.current.push(
+            createSpeakingTurnEvidence(
+              learnerTurnIndex,
+              rawTranscript,
+              transcript,
+              transcriptConfidence,
+            ),
+          );
+        }
         if (transcriptConfidence != null)
           learnerTurnConfidencesRef.current.push(transcriptConfidence);
         const requestedSessionLevel = detectExplicitHskSessionLevel(transcript);
@@ -865,6 +1181,7 @@ export function HanVoiceConversation({
             sessionLevelRef.current,
             mode,
             blocksForAssessment ? "assessed" : "direct",
+            transcriptRef.current,
           );
           if (activeContext.rolePlay && blocksForAssessment) {
             pendingTurnInstructionsRef.current = turnInstructions;
@@ -903,10 +1220,22 @@ export function HanVoiceConversation({
             // in Reflection. Let Realtime answer immediately so the learner
             // gets the same fluid turn-taking as Han; only Placement keeps the
             // blocking private planner above.
-            sendSessionPreservingRealtimeReply(
-              turnInstructions,
-              REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT.turn,
-            );
+            if (allowsBargeIn && activeResponseRef.current) {
+              // The completed transcript proves this was a learner turn even
+              // if the stricter early signal test could not. Stop the current
+              // answer and send the reply after its response.done event.
+              pendingTurnInstructionsRef.current = turnInstructions;
+              interruptActiveRealtimeResponse();
+              setState("thinking");
+            } else {
+              sendSessionPreservingRealtimeReply(
+                turnInstructions,
+                realtimeRolePlayOutputTokenLimit(
+                  activeContext.rolePlay,
+                  "turn",
+                ),
+              );
+            }
           } else {
             // Keep ordinary Han turns cheap: only a question about HanGo
             // itself reaches the server resolver. Its result is attached to
@@ -976,8 +1305,34 @@ export function HanVoiceConversation({
         }
       }
     }
+    if (
+      evidenceReviewPendingRef.current &&
+      event.type === "response.output_text.delta" &&
+      typeof event.delta === "string"
+    ) {
+      evidenceReviewTextRef.current += event.delta;
+    }
+    if (
+      evidenceReviewPendingRef.current &&
+      event.type === "response.output_text.done" &&
+      typeof event.text === "string"
+    ) {
+      evidenceReviewTextRef.current = event.text;
+    }
     if (event.type === "response.done") {
       activeResponseRef.current = false;
+      if (evidenceReviewPendingRef.current) {
+        evidenceReviewPendingRef.current = false;
+        if (evidenceReviewTimerRef.current != null)
+          window.clearTimeout(evidenceReviewTimerRef.current);
+        evidenceReviewTimerRef.current = null;
+        speakingEvidenceRef.current = parseSpeakingEvidenceReview(
+          evidenceReviewTextRef.current,
+          speakingEvidenceRef.current,
+        );
+        void completeConversationAfterEvidence();
+        return;
+      }
       if (ephemeralTurnGuardItemIdRef.current) {
         const guardItemId = ephemeralTurnGuardItemIdRef.current;
         ephemeralTurnGuardItemIdRef.current = null;
@@ -997,6 +1352,24 @@ export function HanVoiceConversation({
         finishAfterClosingPlayback();
         return;
       }
+      if (
+        allowsBargeIn &&
+        activeContext.rolePlay &&
+        pendingTurnInstructionsRef.current
+      ) {
+        const pendingInstructions = pendingTurnInstructionsRef.current;
+        pendingTurnInstructionsRef.current = "";
+        turnResponseDoneAtRef.current = null;
+        turnAudioObservedRef.current = false;
+        turnLastAudibleAtRef.current = null;
+        turnPlaybackStoppedRef.current = false;
+        confirmedBargeInRef.current = false;
+        sendSessionPreservingRealtimeReply(
+          pendingInstructions,
+          realtimeRolePlayOutputTokenLimit(activeContext.rolePlay, "turn"),
+        );
+        return;
+      }
       if (activeContext.rolePlay) {
         // `response.done` means generation/transport has completed. WebRTC
         // may still have queued audio to play, so keep the microphone muted
@@ -1014,6 +1387,14 @@ export function HanVoiceConversation({
       });
       setState("listening");
     }
+    if (event.type === "error" && evidenceReviewPendingRef.current) {
+      evidenceReviewPendingRef.current = false;
+      if (evidenceReviewTimerRef.current != null)
+        window.clearTimeout(evidenceReviewTimerRef.current);
+      evidenceReviewTimerRef.current = null;
+      void completeConversationAfterEvidence();
+      return;
+    }
     if (event.type === "error")
       setError(event.error?.message ?? "The live voice session had a problem.");
   }
@@ -1023,8 +1404,14 @@ export function HanVoiceConversation({
     sessionLevelRef.current = context.rolePlay?.level ?? null;
     transcriptRef.current = [];
     learnerTurnConfidencesRef.current = [];
+    speakingEvidenceRef.current = [];
     pendingSavesRef.current = [];
     finishStartedRef.current = false;
+    evidenceReviewPendingRef.current = false;
+    evidenceReviewTextRef.current = "";
+    if (evidenceReviewTimerRef.current != null)
+      window.clearTimeout(evidenceReviewTimerRef.current);
+    evidenceReviewTimerRef.current = null;
     openingTurnRef.current = false;
     replyNeedsAssessmentRef.current = false;
     remainingPracticeTargetsRef.current = null;
@@ -1038,6 +1425,18 @@ export function HanVoiceConversation({
     closeRequestedRef.current = false;
     closeAfterReplyRef.current = false;
     activeResponseRef.current = false;
+    if (bargeInConfirmationTimerRef.current != null)
+      window.clearTimeout(bargeInConfirmationTimerRef.current);
+    bargeInConfirmationTimerRef.current = null;
+    clearUnclosedTurnTimer();
+    if (audioInputResetTimerRef.current != null)
+      window.clearTimeout(audioInputResetTimerRef.current);
+    audioInputResetTimerRef.current = null;
+    if (forcedTranscriptFallbackTimerRef.current != null)
+      window.clearTimeout(forcedTranscriptFallbackTimerRef.current);
+    forcedTranscriptFallbackTimerRef.current = null;
+    ignoreNextSpeechStoppedRef.current = false;
+    confirmedBargeInRef.current = false;
     setLatestCaption("Connecting to the scene…");
     if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
       setError("Live voice conversation isn't supported in this browser.");
@@ -1089,12 +1488,13 @@ export function HanVoiceConversation({
       let realtimeSessionInstructions = "";
       let realtimeSessionSpeechSpeed = 1;
       const activateRealtimeSession = () => {
+        const activeRolePlay = contextRef.current.rolePlay;
         onActiveChange(true);
         sessionTimerRef.current = window.setTimeout(
           () => void finishConversation(),
           maxSessionMs,
         );
-        if (context.rolePlay && naturalCloseAfterMs) {
+        if (activeRolePlay && naturalCloseAfterMs) {
           naturalCloseTimerRef.current = window.setTimeout(() => {
             closeRequestedRef.current = true;
             stream.getAudioTracks().forEach((track) => {
@@ -1103,13 +1503,15 @@ export function HanVoiceConversation({
             if (!activeResponseRef.current) requestNaturalClose();
           }, naturalCloseAfterMs);
         }
-        if (context.rolePlay) {
+        if (activeRolePlay) {
           openingTurnRef.current = true;
           stream.getAudioTracks().forEach((track) => {
-            track.enabled = false;
+            track.enabled = allowsRealtimeBargeIn(activeRolePlay)
+              ? !muted
+              : false;
           });
           setState("thinking");
-          const openingGuard = buildRealtimeOpeningTurnGuard(context.rolePlay);
+          const openingGuard = buildRealtimeOpeningTurnGuard(activeRolePlay);
           if (openingGuard) {
             const guardItemId = `item_guard_${crypto.randomUUID().replaceAll("-", "").slice(0, 21)}`;
             ephemeralTurnGuardItemIdRef.current = guardItemId;
@@ -1137,9 +1539,11 @@ export function HanVoiceConversation({
               response: {
                 instructions:
                   openingGuard ??
-                  buildRealtimeOpeningInstructions(context.rolePlay),
-                max_output_tokens:
-                  REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT.opening,
+                  buildRealtimeOpeningInstructions(activeRolePlay),
+                max_output_tokens: realtimeRolePlayOutputTokenLimit(
+                  activeRolePlay,
+                  "opening",
+                ),
               },
             }),
           );
@@ -1195,6 +1599,7 @@ export function HanVoiceConversation({
         sdp?: unknown;
         instructions?: unknown;
         speechSpeed?: unknown;
+        rolePlayLevel?: unknown;
       };
       if (
         typeof payload.sdp !== "string" ||
@@ -1206,6 +1611,18 @@ export function HanVoiceConversation({
         throw new Error("Han's live voice configuration was incomplete.");
       realtimeSessionInstructions = payload.instructions;
       realtimeSessionSpeechSpeed = payload.speechSpeed;
+      if (
+        context.rolePlay?.isFreeTopic &&
+        !context.rolePlay.level &&
+        typeof payload.rolePlayLevel === "string" &&
+        payload.rolePlayLevel
+      ) {
+        contextRef.current = {
+          ...context,
+          rolePlay: { ...context.rolePlay, level: payload.rolePlayLevel },
+        };
+        sessionLevelRef.current = payload.rolePlayLevel;
+      }
       await peer.setRemoteDescription({
         type: "answer",
         sdp: payload.sdp,
@@ -1226,6 +1643,7 @@ export function HanVoiceConversation({
     streamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !nextMuted;
     });
+    mutedRef.current = nextMuted;
     setMuted(nextMuted);
   }
 

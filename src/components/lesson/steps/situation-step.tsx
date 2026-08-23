@@ -7,14 +7,7 @@ import {
 import { HanMascot } from "@/components/ui/han-mascot";
 import { DialogueLines } from "@/components/lesson/dialogue-lines";
 import { StepContinueButton } from "@/components/lesson/step-continue-button";
-import { cn } from "@/lib/cn";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
-
-const GOAL_PANEL_STYLES = [
-  "bg-primary-900",
-  "bg-secondary-800",
-  "bg-accent-700",
-];
 
 /**
  * Situation and Dialogue merged into one screen (user request, 2026-08-06):
@@ -45,33 +38,28 @@ export function SituationStep({
     <div className="flex flex-col gap-4">
       <SectionTitle>Situation</SectionTitle>
 
-      <div className="relative overflow-hidden rounded-panel bg-linear-to-br from-primary-900 via-primary-700 to-accent-700 px-5 pt-5 pb-16">
-        <Display className="max-w-[80%] text-[1.375rem] text-on-color-light italic">
+      <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
+        <Display className="max-w-[80%] text-[1.375rem] italic">
           &ldquo;{lesson.communicationObjective}&rdquo;
         </Display>
         <HanMascot
           pose="wave"
           size={140}
-          className="pointer-events-none absolute -right-3 -bottom-3 drop-shadow-[0_12px_18px_rgba(0,0,0,0.35)]"
+          className="pointer-events-none absolute -right-3 -bottom-3 drop-shadow-[0_12px_18px_rgba(0,0,0,0.25)]"
         />
       </div>
 
       {objectives.length > 0 && (
-        <div className="-mt-12 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {objectives.map((objective, index) => (
             <div
               key={objective.id}
-              className={cn(
-                "flex flex-col gap-1.5 rounded-card px-3 py-3",
-                GOAL_PANEL_STYLES[index % GOAL_PANEL_STYLES.length],
-              )}
+              className="flex flex-col gap-1.5 rounded-card bg-elevated px-3 py-3"
             >
               <span className="font-display text-card-title text-accent-300">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <Caption className="text-on-color-light/85">
-                {objective.description}
-              </Caption>
+              <Caption>{objective.description}</Caption>
             </div>
           ))}
         </div>

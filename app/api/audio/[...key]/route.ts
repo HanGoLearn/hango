@@ -52,7 +52,7 @@ async function isSharedContentKey(key: string): Promise<boolean> {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ key: string[] }> },
 ) {
   const session = await auth();
@@ -91,9 +91,40 @@ export async function GET(
   try {
     const filePath = resolveSafePath(key);
     const data = await readFile(filePath);
+    const total = data.byteLength;
+
+    // `<audio>` seeking relies on the browser being able to fetch just the
+    // bytes it needs via a Range request - without honoring it (RFC 7233),
+    // a seek forces a full re-download and playback restarts from 0 instead
+    // of jumping to the requested time (user report, 2026-08-22).
+    const range = request.headers.get("range");
+    if (range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      const start = match?.[1] ? Number(match[1]) : 0;
+      const end = match?.[2] ? Number(match[2]) : total - 1;
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || end >= total) {
+        return new NextResponse(null, {
+          status: 416,
+          headers: { "content-range": `bytes */${total}` },
+        });
+      }
+      const chunk = data.subarray(start, end + 1);
+      return new NextResponse(new Uint8Array(chunk), {
+        status: 206,
+        headers: {
+          "content-type": contentType,
+          "content-range": `bytes ${start}-${end}/${total}`,
+          "accept-ranges": "bytes",
+          "content-length": String(chunk.byteLength),
+          "cache-control": "private, max-age=0, no-store",
+        },
+      });
+    }
+
     return new NextResponse(new Uint8Array(data), {
       headers: {
         "content-type": contentType,
+        "accept-ranges": "bytes",
         "cache-control": "private, max-age=0, no-store",
       },
     });

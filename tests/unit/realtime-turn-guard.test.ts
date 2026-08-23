@@ -1,13 +1,132 @@
 import { describe, expect, it } from "vitest";
 import {
   INITIAL_AMBIENT_NOISE_FLOOR_RMS,
+  freeTopicUnclosedTurnTimeoutMs,
+  isConfidentLearnerBargeIn,
+  isLikelyFreeTopicLearnerUtterance,
   isLikelyLearnerSpeech,
   isLikelyLearnerUtterance,
   rmsFromTimeDomainSamples,
+  stuckFreeTopicTurnAction,
   updateAmbientNoiseFloor,
 } from "@/lib/speech/realtime-turn-guard";
+import {
+  HAN_FREE_TOPIC_VAD_CONFIG,
+  HAN_FREE_TOPIC_NOISE_REDUCTION_CONFIG,
+  HAN_REALTIME_VAD_CONFIG,
+  realtimeNoiseReductionConfig,
+  realtimeVadConfig,
+} from "@/lib/speech/realtime-vad";
 
 describe("Realtime voice turn guard", () => {
+  it("uses noise-resistant turn endings without automatic interruption for Practice with Han", () => {
+    expect(realtimeVadConfig(true)).toEqual(HAN_FREE_TOPIC_VAD_CONFIG);
+    expect(HAN_FREE_TOPIC_VAD_CONFIG).toMatchObject({
+      type: "server_vad",
+      threshold: 0.76,
+      silence_duration_ms: 1_300,
+      create_response: false,
+      interrupt_response: false,
+    });
+    expect(realtimeVadConfig(false)).toEqual(HAN_REALTIME_VAD_CONFIG);
+    expect(HAN_REALTIME_VAD_CONFIG.interrupt_response).toBe(false);
+    expect(realtimeNoiseReductionConfig(true)).toEqual(
+      HAN_FREE_TOPIC_NOISE_REDUCTION_CONFIG,
+    );
+    expect(HAN_FREE_TOPIC_NOISE_REDUCTION_CONFIG).toEqual({
+      type: "far_field",
+    });
+    expect(realtimeNoiseReductionConfig(false)).toBeUndefined();
+  });
+
+  it("recovers a free-topic turn that background noise never closes", () => {
+    expect(freeTopicUnclosedTurnTimeoutMs("Pre-HSK")).toBe(4_500);
+    expect(freeTopicUnclosedTurnTimeoutMs("HSK 1")).toBe(6_000);
+    expect(freeTopicUnclosedTurnTimeoutMs("HSK 2")).toBe(8_000);
+    expect(freeTopicUnclosedTurnTimeoutMs("HSK 5")).toBe(12_000);
+
+    expect(
+      stuckFreeTopicTurnAction({
+        durationMs: 5_000,
+        voicedMs: 4_200,
+        peakRms: 0.03,
+        noiseFloorRms: 0.009,
+        meanRms: 0.026,
+        rmsStandardDeviation: 0.001,
+      }),
+    ).toBe("clear");
+    expect(
+      stuckFreeTopicTurnAction({
+        durationMs: 5_000,
+        voicedMs: 2_500,
+        peakRms: 0.065,
+        noiseFloorRms: 0.006,
+        meanRms: 0.02,
+        rmsStandardDeviation: 0.01,
+      }),
+    ).toBe("commit");
+  });
+
+  it("does not interrupt Han for steady music-like energy", () => {
+    expect(
+      isConfidentLearnerBargeIn({
+        durationMs: 900,
+        voicedMs: 760,
+        peakRms: 0.03,
+        noiseFloorRms: 0.009,
+        meanRms: 0.026,
+        rmsStandardDeviation: 0.001,
+      }),
+    ).toBe(false);
+  });
+
+  it("confirms a sustained foreground learner interruption", () => {
+    expect(
+      isConfidentLearnerBargeIn({
+        durationMs: 520,
+        voicedMs: 300,
+        peakRms: 0.06,
+        noiseFloorRms: 0.006,
+        meanRms: 0.019,
+        rmsStandardDeviation: 0.009,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a low-confidence free-topic sentence hallucinated from room noise", () => {
+    expect(
+      isLikelyFreeTopicLearnerUtterance(
+        {
+          durationMs: 800,
+          voicedMs: 310,
+          peakRms: 0.035,
+          noiseFloorRms: 0.008,
+          meanRms: 0.014,
+          rmsStandardDeviation: 0.004,
+        },
+        "你好，我们继续吧",
+        0.18,
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps a confident real free-topic learner turn", () => {
+    expect(
+      isLikelyFreeTopicLearnerUtterance(
+        {
+          durationMs: 900,
+          voicedMs: 420,
+          peakRms: 0.05,
+          noiseFloorRms: 0.005,
+          meanRms: 0.016,
+          rmsStandardDeviation: 0.008,
+        },
+        "我想买苹果",
+        0.72,
+      ),
+    ).toBe(true);
+  });
+
   it("does not absorb the beginning of a soft voice into the room baseline", () => {
     let floor = INITIAL_AMBIENT_NOISE_FLOOR_RMS;
     for (let frame = 0; frame < 8; frame++) {

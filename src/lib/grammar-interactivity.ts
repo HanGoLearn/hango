@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
+import { contentAudioKey } from "@/lib/audio-content-key";
 import { getExercisesForGrammarPoint } from "@/lib/content/exercise";
 
 // Shared across every generation path here (audio, explanation, examples,
@@ -51,8 +52,18 @@ export async function getOrGenerateGrammarExampleAudioUrl(
   const storage = getStorageProvider();
   if (example.audioFilePath) return storage.getUrl(example.audioFilePath);
 
+  // Content-addressed (see audio-content-key.ts) - reuses an already-paid-for
+  // file across reseeds instead of re-generating identical audio.
+  const key = contentAudioKey("grammar-audio/example", example.chineseText);
+  if (await storage.exists(key)) {
+    await db.grammarExample.update({
+      where: { id: example.id },
+      data: { audioFilePath: key },
+    });
+    return storage.getUrl(key);
+  }
+
   checkRateLimit(userId);
-  const key = `grammar-audio/example-${example.id}.wav`;
   await synthesizeAndStore(key, example.chineseText);
   await db.grammarExample.update({
     where: { id: example.id },

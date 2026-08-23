@@ -220,6 +220,30 @@ describe("Lesson reflection report (integration, real database, mocked AI provid
             rolePlay: { aiRole: "Waiter", learnerRole: "Customer" },
           },
         },
+        {
+          conversationId: conversation.id,
+          role: "ASSISTANT",
+          content: JSON.stringify([
+            {
+              turnIndex: 3,
+              rawTranscript: "我要米饭",
+              interpretedTranscript: "我要米饭",
+              transcriptionConfidence: 0.77,
+              understanding: "clear",
+              issue: {
+                category: "tone",
+                evidence: "要 was produced with a level contour.",
+                feedback: "Use a clear falling fourth tone.",
+                confidence: 0.86,
+              },
+            },
+          ]),
+          contextSnapshot: {
+            lessonTitle: lesson.title,
+            rolePlay: { aiRole: "Waiter", learnerRole: "Customer" },
+            speakingEvidenceRecord: true,
+          },
+        },
       ],
     });
 
@@ -255,6 +279,9 @@ describe("Lesson reflection report (integration, real database, mocked AI provid
     expect(report.hanNarrative).toContain("grammar was spot on");
     expect(report.strengths).toEqual(["Nailed the grammar exercises"]);
     expect(completeMock).toHaveBeenCalledTimes(2);
+    const speakingPrompt = completeMock.mock.calls[0]?.[0]?.systemPrompt;
+    expect(speakingPrompt).toContain("Turn 3: intended 我要米饭; tone");
+    expect(speakingPrompt).not.toContain('Waiter: [{"turnIndex"');
 
     // Second call is served from cache - no further AI calls.
     const second = await getOrGenerateLessonReflectionReport(
@@ -456,7 +483,12 @@ describe("recordVocabularyInteraction (2026-08-20, replaced upsert with create +
       `vocab-interaction-${Date.now()}@hango.dev`,
     );
     const word = await db.vocabularyItem.create({
-      data: { chineseForm: "喝", pinyin: "hē", meaning: "drink", status: "PUBLISHED" },
+      data: {
+        chineseForm: "喝",
+        pinyin: "hē",
+        meaning: "drink",
+        status: "PUBLISHED",
+      },
     });
     testVocabularyIds.push(word.id);
 
@@ -473,7 +505,12 @@ describe("recordVocabularyInteraction (2026-08-20, replaced upsert with create +
       `vocab-interaction-repeat-${Date.now()}@hango.dev`,
     );
     const word = await db.vocabularyItem.create({
-      data: { chineseForm: "喝", pinyin: "hē", meaning: "drink", status: "PUBLISHED" },
+      data: {
+        chineseForm: "喝",
+        pinyin: "hē",
+        meaning: "drink",
+        status: "PUBLISHED",
+      },
     });
     testVocabularyIds.push(word.id);
 

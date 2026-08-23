@@ -52,6 +52,16 @@ afterEach(async () => {
   }
 });
 
+/**
+ * Unique per call (not fixed real-looking words) since audio is now cached
+ * by content hash, not row id (audio-content-key.ts) - a fixed string could
+ * collide with audio a real dev-server run already generated for that same
+ * word/sentence, making the "was TTS called" assertions below unreliable.
+ */
+function uniqueTestText(): string {
+  return `你好${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 async function createTestUser(email: string) {
   testEmails.push(email);
   const user = await db.user.create({ data: { email } });
@@ -62,7 +72,7 @@ async function createTestUser(email: string) {
 async function createTestVocabularyItem() {
   const item = await db.vocabularyItem.create({
     data: {
-      chineseForm: "点菜",
+      chineseForm: uniqueTestText(),
       pinyin: "diǎn cài",
       meaning: "to order food",
       partOfSpeech: "verb",
@@ -104,7 +114,10 @@ describe("Vocabulary word audio (integration, real database, mocked TTS provider
     );
     expect(firstUrl).toBeTruthy();
     expect(synthesizeMock).toHaveBeenCalledTimes(1);
-    expect(synthesizeMock).toHaveBeenCalledWith("点菜", expect.any(String));
+    expect(synthesizeMock).toHaveBeenCalledWith(
+      item.chineseForm,
+      expect.any(String),
+    );
 
     const stored = await db.vocabularyItem.findUniqueOrThrow({
       where: { id: item.id },
@@ -153,7 +166,13 @@ describe("Vocabulary examples (integration, real database, mocked TTS provider)"
   it("generates example audio once and reuses it on replay", async () => {
     const item = await createTestVocabularyItem();
     const example = await db.vocabularyExample.create({
-      data: { ...FIXTURE_EXAMPLES[0]!, vocabularyItemId: item.id, order: 0 },
+      data: {
+        chineseText: uniqueTestText(),
+        pinyin: "nǐ hǎo",
+        translation: "Hello",
+        vocabularyItemId: item.id,
+        order: 0,
+      },
     });
     await createTestUser(`vocab-example-audio-${Date.now()}@hango.dev`);
 

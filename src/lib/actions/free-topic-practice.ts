@@ -9,6 +9,10 @@ import {
   type SpeakingTranscriptMessage,
   type SpeakingFeedback,
 } from "@/lib/reflection-prompt";
+import {
+  sanitizeSpeakingTurnEvidence,
+  type SpeakingTurnEvidence,
+} from "@/lib/speech/speaking-pronunciation-evidence";
 
 // One AI call per finished conversation (not per turn) - same cost shape as
 // the lesson Speaking step's Reflection scoring. Rate-limited the same way
@@ -42,6 +46,7 @@ export type FreeTopicFeedbackResult =
 export async function getFreeTopicPracticeFeedbackAction(
   topic: string,
   transcript: SpeakingTranscriptMessage[],
+  speakingEvidence: SpeakingTurnEvidence[] = [],
 ): Promise<FreeTopicFeedbackResult> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Not authenticated" };
@@ -65,6 +70,7 @@ export async function getFreeTopicPracticeFeedbackAction(
           objective: `Have a natural spoken conversation about: ${topic}`,
         },
         transcript,
+        sanitizeSpeakingTurnEvidence(speakingEvidence),
       ),
       messages: [{ role: "user", content: "Evaluate the conversation above." }],
       // Same prompt shape (and same generous budget) as reflection.ts's
@@ -78,7 +84,10 @@ export async function getFreeTopicPracticeFeedbackAction(
       maxOutputTokens: 1_600,
       timeoutMs: 45_000,
     });
-    return { ok: true, feedback: parseSpeakingConversationFeedback(result.content) };
+    return {
+      ok: true,
+      feedback: parseSpeakingConversationFeedback(result.content),
+    };
   } catch (error) {
     // Report the real failure instead of silently substituting fabricated
     // scores (DEFAULT_SPEAKING_FEEDBACK) - those looked identical to a real

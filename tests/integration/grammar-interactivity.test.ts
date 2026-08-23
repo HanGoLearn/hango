@@ -59,8 +59,21 @@ async function createTestUser(email: string) {
   return user;
 }
 
+/**
+ * Unique per call (not a fixed real-looking sentence) since audio is now
+ * cached by content hash, not row id (audio-content-key.ts) - a fixed
+ * string could collide with audio a real dev-server run already generated
+ * for that same sentence, making the "was TTS called" assertion below
+ * unreliable.
+ */
+function uniqueTestText(): string {
+  return `你好${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /** One grammar point, linked to a real lesson, with exactly 1 seeded example - mirrors real seed data. */
-async function createTestGrammarPoint() {
+async function createTestGrammarPoint(
+  exampleChineseText = "我要一杯咖啡。",
+) {
   const lesson = await db.lesson.findFirstOrThrow();
   const point = await db.grammarPoint.create({
     data: {
@@ -72,7 +85,7 @@ async function createTestGrammarPoint() {
       examples: {
         create: [
           {
-            chineseText: "我要一杯咖啡。",
+            chineseText: exampleChineseText,
             pinyin: "Wǒ yào yì bēi kāfēi.",
             translation: "I want a coffee.",
             order: 0,
@@ -89,7 +102,7 @@ async function createTestGrammarPoint() {
 describe("Grammar example audio (integration, real database, mocked TTS provider)", () => {
   it("generates audio once and reuses it on replay", async () => {
     const user = await createTestUser(`grammar-audio-${Date.now()}@hango.dev`);
-    const point = await createTestGrammarPoint();
+    const point = await createTestGrammarPoint(uniqueTestText());
     const [example] = await db.grammarExample.findMany({
       where: { grammarPointId: point.id },
     });

@@ -399,6 +399,10 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain('always answer "Han"');
     expect(prompt).toContain("never say you have no name");
     expect(prompt).toContain("unrelated to Hangeul");
+    expect(prompt).not.toContain(
+      "Prioritize conversational meaning over perfect pronunciation",
+    );
+    expect(prompt).not.toContain("character identity is immutable");
   });
 
   it("gives Han app knowledge and mentions the current page when set", () => {
@@ -497,6 +501,9 @@ describe("buildRealtimeSystemPrompt", () => {
     expect(prompt).not.toContain("MUST_NOT_REACH_SPEAKING");
     expect(prompt).toContain(
       "takes precedence over the general Han tutor persona",
+    );
+    expect(prompt).toContain(
+      "Prioritize conversational meaning over perfect pronunciation",
     );
   });
 
@@ -639,6 +646,17 @@ describe("buildRealtimeSystemPrompt", () => {
     );
     expect(prompt).toContain("timed open practice");
     expect(prompt).toContain("application asks for the closing line");
+    expect(prompt).toContain("emotional energy requested");
+    expect(prompt).toContain("firm, terse, impatient, or annoyed");
+    expect(prompt).toContain("real person sharing this moment");
+    expect(prompt).toContain("not a vocabulary drill");
+    expect(prompt).toContain("Natural does not mean longer");
+    expect(prompt).toContain("character identity is immutable");
+    expect(prompt).toContain("never answer 我也是学生 or 我也是新生");
+    expect(prompt).toContain(
+      "Once the learner supplies their name or any other requested personal fact",
+    );
+    expect(prompt).toContain("Never ask for it again");
   });
 
   it("defaults to the strict in-character rule when correctionMode is unset (existing lesson behavior)", () => {

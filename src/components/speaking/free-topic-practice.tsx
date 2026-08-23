@@ -20,7 +20,10 @@ import {
   PageTitle,
 } from "@/components/ui/typography";
 import { InformationBanner } from "@/components/ui/banner";
-import { HanVoiceConversation } from "@/components/ai-teacher/han-voice-conversation";
+import {
+  HanVoiceConversation,
+  type RealtimeConversationDiagnostics,
+} from "@/components/ai-teacher/han-voice-conversation";
 import { AiTeacherChat } from "@/components/ai-teacher/ai-teacher-chat";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
 import { SpeakingFeedbackDisplay } from "@/components/speaking/speaking-feedback-display";
@@ -28,6 +31,7 @@ import { getFreeTopicPracticeFeedbackAction } from "@/lib/actions/free-topic-pra
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import type { SpeakingFeedback } from "@/lib/speaking-feedback";
 import { SPEAKING_CLOSING_RESERVE_MS } from "@/lib/speaking-session-timing";
+import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
 
 // Radix Select rejects an empty-string item value, so "use my profile
 // level" (level: undefined in rolePlay) is represented by this sentinel.
@@ -67,6 +71,12 @@ const ROLE_OPTIONS: {
     label: "A friend",
     aiRole: "a friend",
     displayLabel: "Han, as a friend",
+  },
+  {
+    value: "TEACHER",
+    label: "A teacher",
+    aiRole: "a teacher speaking with a student",
+    displayLabel: "Han, as a teacher",
   },
   {
     value: "COLLEAGUE",
@@ -144,13 +154,19 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
   const [lastTranscript, setLastTranscript] = useState<
     SpeakingTranscriptMessage[] | null
   >(null);
+  const [lastSpeakingEvidence, setLastSpeakingEvidence] = useState<
+    SpeakingTurnEvidence[]
+  >([]);
 
   const selectedRole =
     ROLE_OPTIONS.find((option) => option.value === role) ?? ROLE_OPTIONS[0]!;
 
   const rolePlay = useMemo(
     () => ({
-      aiRole: selectedRole.aiRole,
+      aiRole:
+        selectedRole.value === "AUTO"
+          ? "the single character explicitly assigned to you by the learner's scenario; if the scenario gives no character, a conversation partner whose persona naturally fits the topic"
+          : selectedRole.aiRole,
       learnerRole: "yourself",
       scenarioContext: extra.trim()
         ? `${topic.trim()} Additional instructions from the learner: ${extra.trim()}`
@@ -175,12 +191,16 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
   const handleActiveChange = useCallback(() => undefined, []);
 
   const requestFeedback = useCallback(
-    async (transcript: SpeakingTranscriptMessage[]) => {
+    async (
+      transcript: SpeakingTranscriptMessage[],
+      speakingEvidence: SpeakingTurnEvidence[],
+    ) => {
       setFeedback("loading");
       setFeedbackError(null);
       const result = await getFreeTopicPracticeFeedbackAction(
         topic,
         transcript,
+        speakingEvidence,
       );
       if (!result.ok) {
         // A real error (not authenticated, rate-limited, or an unexpected
@@ -196,10 +216,14 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
   );
 
   const handleComplete = useCallback(
-    async (transcript: SpeakingTranscriptMessage[]) => {
+    async (
+      transcript: SpeakingTranscriptMessage[],
+      diagnostics: RealtimeConversationDiagnostics,
+    ) => {
       setStage("results");
       setLastTranscript(transcript);
-      await requestFeedback(transcript);
+      setLastSpeakingEvidence(diagnostics.speakingEvidence);
+      await requestFeedback(transcript, diagnostics.speakingEvidence);
     },
     [requestFeedback],
   );
@@ -429,7 +453,9 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
             <Button
               type="button"
               variant="secondary"
-              onClick={() => void requestFeedback(lastTranscript)}
+              onClick={() =>
+                void requestFeedback(lastTranscript, lastSpeakingEvidence)
+              }
             >
               Try getting feedback again
             </Button>

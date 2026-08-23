@@ -21,6 +21,10 @@ import {
   computeReflectionTotal,
   computeSpeakingConversationScore,
 } from "@/lib/points-system";
+import {
+  sanitizeSpeakingTurnEvidence,
+  type SpeakingTurnEvidence,
+} from "@/lib/speech/speaking-pronunciation-evidence";
 
 export class ReflectionNotFoundError extends Error {}
 
@@ -76,7 +80,10 @@ export async function recordVocabularyInteraction(
       data: { userId, vocabularyItemId },
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
       return;
     }
     throw error;
@@ -137,7 +144,8 @@ async function computeVocabularyCounts(
   difficulty: string,
 ): Promise<ScoreCounts> {
   if (wordCount === 0) return { correct: 0, total: 0 };
-  const expectedQuestionCount = wordCount * vocabularyQuestionsPerWord(difficulty);
+  const expectedQuestionCount =
+    wordCount * vocabularyQuestionsPerWord(difficulty);
 
   const attempts = await db.vocabularyQuizAttempt.findMany({
     where: { userId, lessonId },
@@ -175,6 +183,12 @@ async function computeVocabularyScore(
 interface ContextSnapshotShape {
   lessonTitle?: string;
   rolePlay?: unknown;
+  speakingEvidenceRecord?: boolean;
+}
+
+interface LessonSpeakingRecord {
+  transcript: SpeakingTranscriptMessage[];
+  speakingEvidence: SpeakingTurnEvidence[];
 }
 
 /**
@@ -193,7 +207,7 @@ const SPEAKING_TRANSCRIPT_LOOKBACK = 200;
 async function getSpeakingTranscriptForLesson(
   userId: string,
   lessonTitle: string,
-): Promise<SpeakingTranscriptMessage[]> {
+): Promise<LessonSpeakingRecord> {
   const conversation = await db.aiConversation.findUnique({
     where: { userId },
     include: {
@@ -203,21 +217,32 @@ async function getSpeakingTranscriptForLesson(
       },
     },
   });
-  if (!conversation) return [];
+  if (!conversation) return { transcript: [], speakingEvidence: [] };
 
-  return [...conversation.messages]
-    .reverse()
+  const messages = [...conversation.messages].reverse().filter((message) => {
+    const snapshot = message.contextSnapshot as ContextSnapshotShape | null;
+    return snapshot?.lessonTitle === lessonTitle && Boolean(snapshot?.rolePlay);
+  });
+  const speakingEvidence = messages.flatMap((message) => {
+    const snapshot = message.contextSnapshot as ContextSnapshotShape | null;
+    if (!snapshot?.speakingEvidenceRecord) return [];
+    try {
+      return sanitizeSpeakingTurnEvidence(JSON.parse(message.content));
+    } catch {
+      return [];
+    }
+  });
+  const transcript = messages
     .filter((message) => {
       const snapshot = message.contextSnapshot as ContextSnapshotShape | null;
-      return (
-        snapshot?.lessonTitle === lessonTitle && Boolean(snapshot?.rolePlay)
-      );
+      return !snapshot?.speakingEvidenceRecord;
     })
     .map((message) => ({
       role:
         message.role === "USER" ? ("user" as const) : ("assistant" as const),
       content: message.content,
     }));
+  return { transcript, speakingEvidence };
 }
 
 async function computeSpeakingScore(
@@ -233,12 +258,19 @@ async function computeSpeakingScore(
     grammarPoints: { grammarPoint: { name: string; structure: string } }[];
   },
   userId: string,
-): Promise<{ score: number | null; feedback: SpeakingConversationFeedback | null }> {
+): Promise<{
+  score: number | null;
+  feedback: SpeakingConversationFeedback | null;
+}> {
   if (!lesson.mission) return { score: null, feedback: null };
 
-  const transcript = await getSpeakingTranscriptForLesson(userId, lesson.title);
+  const { transcript, speakingEvidence } = await getSpeakingTranscriptForLesson(
+    userId,
+    lesson.title,
+  );
   // A greeting and an immediate exit do not demonstrate Speaking ability.
-  if (!hasEnoughSpeakingEvidence(transcript)) return { score: null, feedback: null };
+  if (!hasEnoughSpeakingEvidence(transcript))
+    return { score: null, feedback: null };
 
   try {
     const result = await getAiProvider().complete({
@@ -247,11 +279,19 @@ async function computeSpeakingScore(
           learnerRole: lesson.mission.learnerRole ?? "the learner",
           aiRole: lesson.mission.aiRole ?? "the AI",
           objective: lesson.mission.objective,
-          taughtVocabulary: lesson.vocabulary.map((item) => item.vocabularyItem.chineseForm),
-          taughtGrammar: lesson.grammarPoints.map((item) => `${item.grammarPoint.name}: ${item.grammarPoint.structure}`),
-          successConditions: lesson.mission.successConditions.map((condition) => condition.description),
+          taughtVocabulary: lesson.vocabulary.map(
+            (item) => item.vocabularyItem.chineseForm,
+          ),
+          taughtGrammar: lesson.grammarPoints.map(
+            (item) =>
+              `${item.grammarPoint.name}: ${item.grammarPoint.structure}`,
+          ),
+          successConditions: lesson.mission.successConditions.map(
+            (condition) => condition.description,
+          ),
         },
         transcript,
+        speakingEvidence,
       ),
       messages: [{ role: "user", content: "Evaluate this conversation." }],
       // GPT-5 reasoning tokens count against this budget. The full rubric and
@@ -323,9 +363,7 @@ export async function getOrGenerateLessonReflectionReport(
     where: { userId_lessonId: { userId, lessonId } },
   });
   const existingSpeaking = existing?.speakingDimensions as
-    | SpeakingConversationFeedback
-    | null
-    | undefined;
+    SpeakingConversationFeedback | null | undefined;
 
   // Needed either way: to check whether a cached report's scores are still
   // accurate (below, only when `existing`) or to actually compute them if
@@ -359,18 +397,19 @@ export async function getOrGenerateLessonReflectionReport(
 
   if (existing) {
     lesson = await fetchLessonForReflection(lessonId);
-    [freshComprehensionScore, freshGrammarScore, freshVocabularyScore] = await Promise.all([
-      computeExerciseScore(userId, comprehensionExerciseIds),
-      computeExerciseScore(userId, grammarExerciseIds),
-      lesson
-        ? computeVocabularyScore(
-            userId,
-            lessonId,
-            lesson.vocabulary.length,
-            lesson.scenarioLevel.difficulty,
-          )
-        : null,
-    ]);
+    [freshComprehensionScore, freshGrammarScore, freshVocabularyScore] =
+      await Promise.all([
+        computeExerciseScore(userId, comprehensionExerciseIds),
+        computeExerciseScore(userId, grammarExerciseIds),
+        lesson
+          ? computeVocabularyScore(
+              userId,
+              lessonId,
+              lesson.vocabulary.length,
+              lesson.scenarioLevel.difficulty,
+            )
+          : null,
+      ]);
     exerciseScoreMismatch =
       existing.comprehensionScore !== freshComprehensionScore ||
       existing.grammarScore !== freshGrammarScore;
@@ -386,16 +425,17 @@ export async function getOrGenerateLessonReflectionReport(
   );
   const hasFailedSpeakingFallback = Boolean(
     existing?.speakingScore === null &&
-    (existingSpeaking?.recommendedNextStep === "Feel free to try this activity again." ||
+    (existingSpeaking?.recommendedNextStep ===
+      "Feel free to try this activity again." ||
       existingSpeaking?.recommendedNextStep === "Speaking evaluation pending."),
   );
   const hasNonEnglishCachedNarrative = Boolean(
     existing &&
-      containsNonEnglishCachedNarrative(
-        existing.hanNarrative,
-        existing.strengths,
-        existing.improvements,
-      ),
+    containsNonEnglishCachedNarrative(
+      existing.hanNarrative,
+      existing.strengths,
+      existing.improvements,
+    ),
   );
   if (
     existing &&
@@ -449,26 +489,32 @@ export async function getOrGenerateLessonReflectionReport(
   // cached value to a freshly computed one) - reuse them instead of a
   // third computation. Only a first-ever report (no `existing`) computes
   // them here for the first time.
-  const [comprehensionScore, grammarScore, vocabularyScore, speaking] = await Promise.all([
-    existing
-      ? freshComprehensionScore
-      : computeExerciseScore(userId, comprehensionExerciseIds),
-    existing ? freshGrammarScore : computeExerciseScore(userId, grammarExerciseIds),
-    existing
-      ? freshVocabularyScore
-      : computeVocabularyScore(
-          userId,
-          lessonId,
-          vocabularyItemIds.length,
-          lesson.scenarioLevel.difficulty,
-        ),
-    computeSpeakingScore({
-      title: lesson.title,
-      mission,
-      vocabulary: lesson.vocabulary,
-      grammarPoints: lesson.grammarPoints,
-    }, userId),
-  ]);
+  const [comprehensionScore, grammarScore, vocabularyScore, speaking] =
+    await Promise.all([
+      existing
+        ? freshComprehensionScore
+        : computeExerciseScore(userId, comprehensionExerciseIds),
+      existing
+        ? freshGrammarScore
+        : computeExerciseScore(userId, grammarExerciseIds),
+      existing
+        ? freshVocabularyScore
+        : computeVocabularyScore(
+            userId,
+            lessonId,
+            vocabularyItemIds.length,
+            lesson.scenarioLevel.difficulty,
+          ),
+      computeSpeakingScore(
+        {
+          title: lesson.title,
+          mission,
+          vocabulary: lesson.vocabulary,
+          grammarPoints: lesson.grammarPoints,
+        },
+        userId,
+      ),
+    ]);
   const totalScore = computeReflectionTotal({
     vocabularyScore,
     grammarScore,
@@ -592,9 +638,8 @@ export async function getLessonScoreBreakdown(
     ),
   ]);
 
-  const speakingDimensions = report?.speakingDimensions as
-    | SpeakingConversationFeedback
-    | null;
+  const speakingDimensions =
+    report?.speakingDimensions as SpeakingConversationFeedback | null;
 
   return {
     comprehension: comprehensionExerciseIds.length > 0 ? comprehension : null,

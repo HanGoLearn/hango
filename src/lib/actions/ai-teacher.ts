@@ -6,6 +6,7 @@ import {
   resetConversation,
   saveRealtimeConversationTurn,
   saveRealtimeConversationMessage,
+  saveRealtimeSpeakingEvidence,
   AiTeacherInputError,
   AiTeacherRateLimitError,
   AiProviderError,
@@ -17,6 +18,10 @@ import {
   HAN_STT_REPEAT_MESSAGE,
 } from "@/lib/speech/transcript-quality";
 import { getHanOnDemandAppContext } from "@/lib/han-app-context-data";
+import {
+  sanitizeSpeakingTurnEvidence,
+  type SpeakingTurnEvidence,
+} from "@/lib/speech/speaking-pronunciation-evidence";
 
 const MAX_HAN_AUDIO_BYTES = 10 * 1024 * 1024;
 
@@ -124,6 +129,17 @@ export async function saveRealtimeConversationMessageAction(
     trimmed,
     context,
   );
+}
+
+export async function saveRealtimeSpeakingEvidenceAction(
+  evidence: SpeakingTurnEvidence[],
+  context: AiTeacherContext,
+): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+  const sanitized = sanitizeSpeakingTurnEvidence(evidence);
+  if (sanitized.length === 0) return;
+  await saveRealtimeSpeakingEvidence(session.user.id, sanitized, context);
 }
 
 export type TranscribeHanMessageResult =

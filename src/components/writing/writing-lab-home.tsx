@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { PenLine, NotebookPen, Languages, Sparkles, ArrowLeft } from "lucide-react";
+import {
+  PenLine,
+  NotebookPen,
+  Languages,
+  Sparkles,
+  ArrowLeft,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +23,7 @@ import {
   type WritingTaskSummary,
 } from "@/components/writing/writing-task-session";
 import { CustomWriting } from "@/components/writing/custom-writing";
-import type { WritingLessonOption } from "@/lib/writing-data";
+import { HandwrittenParagraph } from "@/components/writing/handwritten-paragraph";
 
 export interface RecentAttemptSummary {
   id: string;
@@ -36,25 +41,18 @@ type View =
 /**
  * Writing Lab redesign (user ask, 2026-08-08 round 2): three distinct
  * options instead of one flat catalog grouped by type - Write a Paragraph
- * (lesson-scoped, mirrors Speaking Lab's structure), Translation Challenge
+ * (an independent, level-based handwritten catalog), Translation Challenge
  * (a standalone pool of ~15 topic-diverse texts, graded against a hidden
  * reference translation), and Custom Writing (learner-defined
  * characteristics, ephemeral - see custom-writing.tsx).
  */
 export function WritingLabHome({
-  paragraphTasks,
-  lessonOptions,
-  activeLessonId,
   translationChallenges,
   recentAttempts,
 }: {
-  paragraphTasks: WritingTaskSummary[];
-  lessonOptions: WritingLessonOption[];
-  activeLessonId: string | null;
   translationChallenges: WritingTaskSummary[];
   recentAttempts: RecentAttemptSummary[];
 }) {
-  const router = useRouter();
   const [view, setView] = useState<View>({ name: "home" });
 
   if (view.name === "session") {
@@ -71,66 +69,7 @@ export function WritingLabHome({
   }
 
   if (view.name === "paragraph") {
-    const task = paragraphTasks[0] ?? null;
-    return (
-      <div className="flex flex-col gap-6">
-        <Button
-          type="button"
-          variant="tertiary"
-          className="w-fit gap-1.5 px-0"
-          onClick={() => setView({ name: "home" })}
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Back
-        </Button>
-        <PageTitle>Write a Paragraph</PageTitle>
-
-        {lessonOptions.length > 0 && (
-          <label className="flex flex-col gap-1.5">
-            <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Practice content from
-            </Caption>
-            <select
-              value={activeLessonId ?? ""}
-              onChange={(event) =>
-                router.push(`/writing-lab?lessonId=${event.target.value}`)
-              }
-              className="w-full max-w-sm rounded-control border border-border bg-surface px-3 py-2 font-interface text-body text-text-primary"
-            >
-              {lessonOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.scenarioTitle} — {option.title}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {task ? (
-          <Card
-            interactive
-            className="cursor-pointer"
-            role="button"
-            tabIndex={0}
-            onClick={() => setView({ name: "session", task })}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                setView({ name: "session", task });
-              }
-            }}
-          >
-            <CardTitle>{task.title}</CardTitle>
-            <Body className="text-text-secondary">{task.prompt}</Body>
-          </Card>
-        ) : (
-          <EmptyState
-            title="Nothing to practice yet"
-            description="This lesson doesn't have a writing task yet."
-          />
-        )}
-      </div>
-    );
+    return <HandwrittenParagraph onExit={() => setView({ name: "home" })} />;
   }
 
   if (view.name === "translation") {
@@ -148,7 +87,8 @@ export function WritingLabHome({
         <div className="flex flex-col gap-1">
           <PageTitle>Translation Challenge</PageTitle>
           <Body className="text-text-secondary">
-            Pick a text, translate it into Chinese, and Han will tell you how accurate it was and what to improve.
+            Pick a text, translate it into Chinese, and Han will tell you how
+            accurate it was and what to improve.
           </Body>
         </div>
 
@@ -202,10 +142,14 @@ export function WritingLabHome({
             }
           }}
         >
-          <NotebookPen className="mb-2 size-5 text-primary-500" aria-hidden="true" />
+          <NotebookPen
+            className="mb-2 size-5 text-primary-500"
+            aria-hidden="true"
+          />
           <CardTitle>Write a Paragraph</CardTitle>
           <Body className="text-text-secondary">
-            Write about this lesson&apos;s topic and get graded feedback.
+            Write Chinese by hand, upload 1–3 photos, and get level-appropriate
+            feedback.
           </Body>
         </Card>
 
@@ -222,10 +166,14 @@ export function WritingLabHome({
             }
           }}
         >
-          <Languages className="mb-2 size-5 text-primary-500" aria-hidden="true" />
+          <Languages
+            className="mb-2 size-5 text-primary-500"
+            aria-hidden="true"
+          />
           <CardTitle>Translation Challenge</CardTitle>
           <Body className="text-text-secondary">
-            Translate one of {translationChallenges.length || "several"} short texts into Chinese.
+            Translate one of {translationChallenges.length || "several"} short
+            texts into Chinese.
           </Body>
         </Card>
 

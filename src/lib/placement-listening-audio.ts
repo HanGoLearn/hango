@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
 import { mergeWavAudio } from "@/lib/han-speech";
+import { contentAudioKey } from "@/lib/audio-content-key";
 
 // Mirrors dialogue-audio.ts's rate limit exactly - same abuse/cost
 // protection rationale, generation is cached so this only throttles the
@@ -59,18 +60,32 @@ async function ensureLineAudioKey(
 ): Promise<string> {
   if (line.audioFilePath?.endsWith(".wav")) return line.audioFilePath;
 
+  const storage = getStorageProvider();
+  const voice = pickVoice(line);
+  // Content-addressed (see audio-content-key.ts) - reuses an already-paid-for
+  // file across reseeds instead of re-generating identical audio.
+  const key = contentAudioKey(
+    `placement-audio/${voice}/hsk${hskLevel}`,
+    line.chineseText,
+  );
+  if (await storage.exists(key)) {
+    await db.placementListeningLine.update({
+      where: { id: line.id },
+      data: { audioFilePath: key },
+    });
+    return key;
+  }
+
   checkRateLimit(userId);
 
   const tts = getTtsProvider();
-  const voice = pickVoice(line);
   const result = await tts.synthesize(
     line.chineseText,
     voice,
     pacingInstructionsForLevel(hskLevel),
   );
 
-  const key = `placement-audio/${line.id}.wav`;
-  await getStorageProvider().upload(key, result.audio, result.contentType);
+  await storage.upload(key, result.audio, result.contentType);
   await db.placementListeningLine.update({
     where: { id: line.id },
     data: { audioFilePath: key },

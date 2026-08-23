@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
+import { contentAudioKey } from "@/lib/audio-content-key";
 import { recordVocabularyInteraction } from "@/lib/reflection";
 
 // Shared by both audio generation (TTS) and example generation (AI text) -
@@ -59,8 +60,18 @@ export async function getOrGenerateVocabularyItemAudioUrl(
   const storage = getStorageProvider();
   if (item.audioFilePath) return storage.getUrl(item.audioFilePath);
 
+  // Content-addressed (see audio-content-key.ts) - reuses an already-paid-for
+  // file across reseeds instead of re-generating identical audio.
+  const key = contentAudioKey("vocabulary-audio/word", item.chineseForm);
+  if (await storage.exists(key)) {
+    await db.vocabularyItem.update({
+      where: { id: item.id },
+      data: { audioFilePath: key },
+    });
+    return storage.getUrl(key);
+  }
+
   checkRateLimit(userId);
-  const key = `vocabulary-audio/${item.id}.wav`;
   await synthesizeAndStore(key, item.chineseForm);
   await db.vocabularyItem.update({
     where: { id: item.id },
@@ -87,8 +98,16 @@ export async function getOrGenerateVocabularyExampleAudioUrl(
   const storage = getStorageProvider();
   if (example.audioFilePath) return storage.getUrl(example.audioFilePath);
 
+  const key = contentAudioKey("vocabulary-audio/example", example.chineseText);
+  if (await storage.exists(key)) {
+    await db.vocabularyExample.update({
+      where: { id: example.id },
+      data: { audioFilePath: key },
+    });
+    return storage.getUrl(key);
+  }
+
   checkRateLimit(userId);
-  const key = `vocabulary-audio/example-${example.id}.wav`;
   await synthesizeAndStore(key, example.chineseText);
   await db.vocabularyExample.update({
     where: { id: example.id },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   advancePronunciationPractice,
+  allowsRealtimeBargeIn,
   applyPlacementSpeakingTurnWindow,
   buildConversationCompletionTool,
   buildRealtimeAssessmentTurnGuard,
@@ -22,6 +23,8 @@ import {
   keepSingleRealtimeRolePlayMove,
   keepTimedSpeakingAssessmentOpen,
   nextHanExplanationLanguage,
+  realtimeRolePlayOutputTokenLimit,
+  resolveRealtimePracticeLevel,
   parseTextConversationAssessment,
   realtimeSpeechSpeed,
   shouldHoldRealtimeLearnerAction,
@@ -126,6 +129,172 @@ describe("placement role-play controls", () => {
 });
 
 describe("buildRealtimeTurnInstructions", () => {
+  it("resolves profile-level free practice to Pre-HSK and clamps its audio length", () => {
+    expect(
+      resolveRealtimePracticeLevel({ isFreeTopic: true, level: undefined }, 0),
+    ).toBe("Pre-HSK");
+    expect(
+      realtimeRolePlayOutputTokenLimit(
+        { isFreeTopic: true, level: "Pre-HSK" },
+        "turn",
+      ),
+    ).toBe(100);
+    expect(
+      realtimeRolePlayOutputTokenLimit(
+        { isFreeTopic: false, level: "Pre-HSK" },
+        "turn",
+      ),
+    ).toBe(260);
+  });
+
+  it("gives Pre-HSK free practice one tiny phrase per turn", () => {
+    const rolePlay = {
+      aiRole: "a friend",
+      learnerRole: "the learner",
+      scenarioContext: "Say hello",
+      objective: "Have a tiny greeting exchange",
+      level: "Pre-HSK",
+      isFreeTopic: true,
+    };
+    expect(
+      buildRealtimeTurnInstructions(
+        "English",
+        rolePlay,
+        null,
+        undefined,
+        null,
+        "PRACTICE",
+        "direct",
+      ),
+    ).toContain("no more than 8 Chinese characters");
+    expect(
+      buildRealtimeTurnInstructions(
+        "English",
+        rolePlay,
+        null,
+        undefined,
+        null,
+        "PRACTICE",
+        "direct",
+      ),
+    ).toContain("spontaneous everyday Mandarin between real people");
+    expect(buildRealtimeOpeningInstructions(rolePlay)).toContain(
+      "no more than 8 Chinese characters",
+    );
+  });
+
+  it("keeps a free-topic character's established identity instead of mirroring the learner", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "English",
+      {
+        aiRole: "a teacher speaking with a student",
+        learnerRole: "yourself",
+        scenarioContext: "A teacher meets a new student.",
+        objective: "Have a natural classroom introduction.",
+        level: "HSK 1",
+        isFreeTopic: true,
+      },
+      null,
+      "我是学生。",
+      null,
+      "PRACTICE",
+      "direct",
+      [
+        { role: "assistant", content: "你好，我是老师。" },
+        { role: "user", content: "我是学生。" },
+      ],
+    );
+
+    expect(instructions).toContain("character identity is immutable");
+    expect(instructions).toContain("你好，我是老师。");
+    expect(instructions).toContain("learner's facts, never yours");
+    expect(instructions).toContain("never say 我也是学生 or 我也是新生");
+  });
+
+  it("marks the learner's name as known and forbids asking for it again", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole: "a teacher speaking with a student",
+        learnerRole: "yourself",
+        scenarioContext: "A teacher welcomes a new student.",
+        objective: "Have a natural classroom introduction.",
+        level: "HSK 1",
+        isFreeTopic: true,
+      },
+      null,
+      "我喜欢中文。",
+      null,
+      "PRACTICE",
+      "direct",
+      [
+        { role: "assistant", content: "你叫什么名字？" },
+        { role: "user", content: "马丁。" },
+        { role: "assistant", content: "马丁，你好。" },
+        { role: "user", content: "我喜欢中文。" },
+      ],
+    );
+
+    expect(instructions).toContain("COMPACT DIALOGUE MEMORY");
+    expect(instructions).toContain("learner: 马丁。");
+    expect(instructions).toContain("LEARNER NAME STATUS: already answered");
+    expect(instructions).toContain("Never ask their name again");
+    expect(instructions).toContain(
+      "continue with a different relevant question",
+    );
+  });
+
+  it("applies the same known-name memory to timed Learning Journey Speaking", () => {
+    const transcript = [
+      { role: "assistant" as const, content: "你叫什么名字？" },
+      { role: "user" as const, content: "我叫安娜。" },
+      { role: "assistant" as const, content: "安娜，你好。" },
+      { role: "user" as const, content: "我是秘鲁人。" },
+    ];
+    const lessonRolePlay = {
+      aiRole: "new classmate",
+      learnerRole: "new student",
+      scenarioContext: "Two classmates meet at school.",
+      objective: "Exchange names and nationalities.",
+      lessonHskLevel: 1,
+    };
+
+    const timedInstructions = buildRealtimeTurnInstructions(
+      "English",
+      lessonRolePlay,
+      null,
+      "我是秘鲁人。",
+      null,
+      "PRACTICE",
+      "direct",
+      transcript,
+    );
+    expect(timedInstructions).toContain(
+      "LEARNER NAME STATUS: already answered",
+    );
+    expect(timedInstructions).toContain("我叫安娜。");
+    expect(timedInstructions).toContain("Never ask their name again");
+
+    const placementInstructions = buildRealtimeTurnInstructions(
+      "English",
+      lessonRolePlay,
+      null,
+      "我是秘鲁人。",
+      null,
+      "PRACTICE",
+      "assessed",
+      transcript,
+    );
+    expect(placementInstructions).not.toContain("LEARNER NAME STATUS");
+    expect(placementInstructions).not.toContain("COMPACT DIALOGUE MEMORY");
+  });
+
+  it("allows barge-in only for free-topic Practice with Han", () => {
+    expect(allowsRealtimeBargeIn({ isFreeTopic: true })).toBe(true);
+    expect(allowsRealtimeBargeIn({ isFreeTopic: false })).toBe(false);
+    expect(allowsRealtimeBargeIn()).toBe(false);
+  });
+
   it("reasserts Han's complete prompt after the live WebRTC channel opens", () => {
     expect(buildRealtimeSessionUpdateEvent("You are Han.")).toEqual({
       type: "session.update",
@@ -177,6 +346,9 @@ describe("buildRealtimeTurnInstructions", () => {
     expect(instructions).toContain("every practice example must be a Mandarin");
     expect(instructions).toContain(
       "complete vocabulary-or-grammar teaching structure",
+    );
+    expect(instructions).not.toContain(
+      "Prioritize conversational meaning over perfect pronunciation",
     );
   });
 
@@ -350,6 +522,21 @@ describe("buildRealtimeTurnInstructions", () => {
     });
     expect(instructions).toContain("Do not output only 你好 or 您好");
     expect(instructions).toContain("no more than 12 Chinese characters");
+  });
+
+  it("lets free-topic practice create a contextual emotional opening instead of a generic fixed line", () => {
+    const rolePlay = {
+      aiRole: "an annoyed supermarket customer",
+      learnerRole: "yourself",
+      scenarioContext: "An argument in a supermarket.",
+      objective: "Have a natural disagreement.",
+      isFreeTopic: true as const,
+    };
+
+    expect(buildRealtimeOpeningTurnGuard(rolePlay)).toBeNull();
+    const instructions = buildRealtimeOpeningInstructions(rolePlay);
+    expect(instructions).toContain("emotional energy");
+    expect(instructions).toContain("annoyance");
   });
 
   it("restricts the role-play to language taught in the lesson", () => {

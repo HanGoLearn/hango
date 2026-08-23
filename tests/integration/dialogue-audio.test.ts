@@ -70,6 +70,16 @@ async function createTestUser(email: string) {
   return user;
 }
 
+/**
+ * Unique per call (not a fixed "你好") since audio is now cached by content
+ * hash, not row id (audio-content-key.ts) - a fixed string across fixtures/
+ * test runs would let one test's mocked (and possibly invalid) audio bytes
+ * get reused by another test's cache lookup instead of a fresh mocked call.
+ */
+function uniqueTestText(): string {
+  return `你好${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 async function createTestDialogueLine() {
   const lesson = await db.lesson.findFirstOrThrow();
   const dialogue = await db.dialogue.create({
@@ -87,12 +97,13 @@ async function createTestDialogueLine() {
   const speaker = dialogue.speakers[0];
   if (!speaker) throw new Error("Speaker fixture was not created");
 
+  const chineseText = uniqueTestText();
   const line = await db.dialogueLine.create({
     data: {
       dialogueId: dialogue.id,
       speakerId: speaker.id,
       order: 0,
-      chineseText: "你好",
+      chineseText,
       pinyin: "nǐ hǎo",
       translation: "Hello",
     },
@@ -128,7 +139,7 @@ async function createTestDialogueWithTwoLines() {
       dialogueId: dialogue.id,
       speakerId: waiter.id,
       order: 0,
-      chineseText: "你好",
+      chineseText: uniqueTestText(),
       pinyin: "nǐ hǎo",
       translation: "Hello",
     },
@@ -138,7 +149,7 @@ async function createTestDialogueWithTwoLines() {
       dialogueId: dialogue.id,
       speakerId: customer.id,
       order: 1,
-      chineseText: "你好吗",
+      chineseText: uniqueTestText(),
       pinyin: "nǐ hǎo ma",
       translation: "How are you",
     },
@@ -162,7 +173,11 @@ describe("Dialogue line audio (integration, real database, mocked TTS provider)"
     const firstUrl = await getOrGenerateDialogueLineAudioUrl(user.id, line.id);
     expect(firstUrl).toBeTruthy();
     expect(synthesizeMock).toHaveBeenCalledTimes(1);
-    expect(synthesizeMock).toHaveBeenCalledWith("你好", expect.any(String));
+    expect(synthesizeMock).toHaveBeenCalledWith(
+      line.chineseText,
+      expect.any(String),
+      expect.any(String),
+    );
 
     const stored = await db.dialogueLine.findUniqueOrThrow({
       where: { id: line.id },

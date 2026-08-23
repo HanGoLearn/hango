@@ -24,10 +24,11 @@ import {
 const ROLLING_WINDOW_RAW_LIMIT = 90;
 
 interface WritingFeedbackShape {
-  grammar: number;
-  vocabulary: number;
-  naturalness: number;
-  communicationClarity: number;
+  overallScore?: number;
+  grammar?: number;
+  vocabulary?: number;
+  naturalness?: number;
+  communicationClarity?: number;
 }
 
 /**
@@ -52,12 +53,20 @@ async function getWritingEvidence(userId: string): Promise<LabEvidencePoint[]> {
     if (!attempt.submittedAt) continue;
     const feedback = attempt.feedback as unknown as WritingFeedbackShape | null;
     if (!feedback) continue;
+    const legacyScores = [
+      feedback.grammar,
+      feedback.vocabulary,
+      feedback.naturalness,
+      feedback.communicationClarity,
+    ];
     const score =
-      (feedback.grammar +
-        feedback.vocabulary +
-        feedback.naturalness +
-        feedback.communicationClarity) /
-      4;
+      typeof feedback.overallScore === "number"
+        ? feedback.overallScore
+        : legacyScores.every((value) => typeof value === "number")
+          ? (legacyScores as number[]).reduce((sum, value) => sum + value, 0) /
+            4
+          : null;
+    if (score === null || !Number.isFinite(score)) continue;
     points.push({
       distinctKey: attempt.taskId ?? attempt.id,
       score,
@@ -83,7 +92,9 @@ interface SpeakingFeedbackShape {
  * persists through SpeakingSession/SpeakingAttempt, unlike Writing's Custom
  * Writing gap - no exclusions needed here.
  */
-async function getSpeakingEvidence(userId: string): Promise<LabEvidencePoint[]> {
+async function getSpeakingEvidence(
+  userId: string,
+): Promise<LabEvidencePoint[]> {
   const sessions = await db.speakingSession.findMany({
     where: { userId, completionState: "COMPLETED", completedAt: { not: null } },
     orderBy: { completedAt: "desc" },
@@ -103,9 +114,7 @@ async function getSpeakingEvidence(userId: string): Promise<LabEvidencePoint[]> 
   for (const session of sessions) {
     if (!session.completedAt) continue;
     const feedback = session.attempts[0]?.feedback as unknown as
-      | SpeakingFeedbackShape
-      | null
-      | undefined;
+      SpeakingFeedbackShape | null | undefined;
     if (!feedback) continue;
     const score =
       (feedback.pronunciation +
@@ -131,12 +140,20 @@ export interface LabPointsSummary {
   total: number;
 }
 
-export async function computeLabPoints(userId: string): Promise<LabPointsSummary> {
+export async function computeLabPoints(
+  userId: string,
+): Promise<LabPointsSummary> {
   const [writingEvidence, speakingEvidence] = await Promise.all([
     getWritingEvidence(userId),
     getSpeakingEvidence(userId),
   ]);
-  const writing = computeLabSkillPoints(LAB_SKILL_BUDGET.WRITING, writingEvidence);
-  const speaking = computeLabSkillPoints(LAB_SKILL_BUDGET.SPEAKING, speakingEvidence);
+  const writing = computeLabSkillPoints(
+    LAB_SKILL_BUDGET.WRITING,
+    writingEvidence,
+  );
+  const speaking = computeLabSkillPoints(
+    LAB_SKILL_BUDGET.SPEAKING,
+    speakingEvidence,
+  );
   return { writing, speaking, total: writing + speaking };
 }

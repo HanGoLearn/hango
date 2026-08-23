@@ -19,6 +19,7 @@ import { buildAdaptiveLearnerSummary } from "@/lib/ai-learner-adaptation";
 import { createTtlCache } from "@/lib/ttl-cache";
 import { detectHanAppContextIntent } from "@/lib/han-app-intent";
 import { getHanOnDemandAppContext } from "@/lib/han-app-context-data";
+import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
 
 const MAX_INPUT_LENGTH = 1000;
 /**
@@ -211,6 +212,34 @@ export async function saveRealtimeConversationMessage(
       role,
       content,
       contextSnapshot: context as unknown as Prisma.InputJsonValue,
+    },
+  });
+  await invalidateLessonReflection(userId, context);
+}
+
+export async function saveRealtimeSpeakingEvidence(
+  userId: string,
+  evidence: readonly SpeakingTurnEvidence[],
+  context: AiTeacherContext,
+): Promise<void> {
+  if (
+    !context.rolePlay ||
+    context.rolePlay.isFreeTopic ||
+    !context.lessonTitle ||
+    evidence.length === 0 ||
+    !(await getCachedConversationStorageEnabled(userId))
+  )
+    return;
+  const conversation = await getOrCreateConversation(userId);
+  await db.aiMessage.create({
+    data: {
+      conversationId: conversation.id,
+      role: "ASSISTANT",
+      content: JSON.stringify(evidence),
+      contextSnapshot: {
+        ...context,
+        speakingEvidenceRecord: true,
+      } as unknown as Prisma.InputJsonValue,
     },
   });
   await invalidateLessonReflection(userId, context);
