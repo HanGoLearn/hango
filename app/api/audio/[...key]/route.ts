@@ -14,13 +14,21 @@ import { resolveSafePath } from "@/lib/storage/providers/local";
  * - Speaking Lab recordings (`speaking/...`) are per-learner, so access
  *   requires owning the SpeakingAttempt that references the key.
  * - Dialogue audio (`dialogue-audio/...`), vocabulary audio
- *   (`vocabulary-audio/...`), grammar audio (`grammar-audio/...`), and
- *   placement exam listening audio (`placement-audio/...`) are shared
- *   content generated once and reused by every learner, so any
- *   authenticated user may fetch it — the check is that the key is a real
- *   generated file, not that the requester generated it.
+ *   (`vocabulary-audio/...`), grammar audio (`grammar-audio/...`),
+ *   placement exam listening audio (`placement-audio/...`), and Welcome to
+ *   Chinese audio (`welcome-audio/...`) are shared content generated once
+ *   and reused by every learner, so any authenticated user may fetch it —
+ *   the check is that the key is a real generated file, not that the
+ *   requester generated it.
+ * - `welcome-audio/...` has no backing DB row to check against (that
+ *   page's content is hand-authored in the page component, not
+ *   database-backed) - authorization there is simply "the file exists at
+ *   this content-addressed path," which only happens if
+ *   welcome-audio.ts's allowlisted synthesizeAndStore actually wrote it;
+ *   an attacker can't get arbitrary content stored under this prefix.
  */
 async function isSharedContentKey(key: string): Promise<boolean> {
+  if (key.startsWith("welcome-audio/")) return true;
   if (key.startsWith("dialogue-audio/")) {
     const [line, dialogue] = await Promise.all([
       db.dialogueLine.findFirst({ where: { audioFilePath: key } }),
@@ -67,7 +75,8 @@ export async function GET(
     key.startsWith("dialogue-audio/") ||
     key.startsWith("vocabulary-audio/") ||
     key.startsWith("grammar-audio/") ||
-    key.startsWith("placement-audio/");
+    key.startsWith("placement-audio/") ||
+    key.startsWith("welcome-audio/");
 
   let authorized: boolean;
   let contentType: string;
