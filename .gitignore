@@ -1,3 +1,6 @@
+# Gestión interna — evaluación de founders y datos operativos, nunca al repo
+/project/HanGo_Gestion.xlsx
+
 # Dependencies
 node_modules/
 
@@ -42,3 +45,8 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Scratch/build directories left by other tools running against this repo (not ours)
+.codex-tmp/
+.codex-work/
+outputs/
