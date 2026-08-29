@@ -2539,7 +2539,7 @@ per-turn instructions ever told the model to avoid repeating itself.
   themself as a teacher later mirrored `我是学生` with `我也是新生`, plus the
   repeated-name question after the learner had already answered it.
 - [x] Auto persona now resolves one character from the learner-authored
-  scenario and keeps it; Teacher is also an explicit role choice. Occupation,
+  scenario and keeps it. Occupation,
   status, relationship, name, nationality, and other established character
   facts are immutable for the full session.
 - [x] Every timed lesson Speaking and Practice with Han turn receives a compact
@@ -2553,6 +2553,52 @@ per-turn instructions ever told the model to avoid repeating itself.
 - [x] TypeScript and scoped ESLint pass; focused identity/context regression
   passes 124/124. Local Next route compilation passes; real microphone
   confirmation remains pending.
+
+## Practice with Han - learner-authored scene contract (2026-08-23)
+
+- [x] Corrected the prior superficial role fix: no special Teacher option is
+  required. Any Topic/details supplied by the learner now form a binding scene
+  contract that resolves the assistant's role, the learner's role, setting,
+  relationship, and current activity; this is not treated as a loose theme.
+- [x] Every free-topic turn uses the compact dialogue memory as scene state and
+  must continue one causal sequence: react to the latest turn, add one logical
+  next beat, never restart introductions/classes, and never invent an unrelated
+  activity or location such as walking.
+- [x] The contract is built locally with no extra model call or API cost. Scope
+  is Speaking Lab's Practice with Han only; Han's side-panel/bubble is unchanged.
+- [x] TypeScript, scoped ESLint/Prettier, and 127 focused context/Realtime tests
+  pass, including the exact professor/new-student classroom regression. The
+  running local server responds; fresh microphone confirmation remains pending.
+
+## Learning Journey Speaking - reciprocal turn handoff (2026-08-23)
+
+- [x] Removed the rule that answered a learner question but explicitly forbade
+  the character from asking anything back. During timed lesson Speaking, the
+  character now answers first and then returns one short, relevant question.
+- [x] Non-question learner turns also receive a clear reciprocal handoff: one
+  contextual, previously unasked question using familiar lesson language. It
+  cannot perform or reveal an objective action owned by the learner, and the
+  separate natural closing remains exempt.
+- [x] Scope is Learning Journey lesson Speaking only. Speaking Lab's Practice
+  with Han and Han's side-panel/bubble retain their existing behavior.
+- [x] TypeScript, scoped ESLint/Prettier, and 126 focused Realtime/context tests
+  pass, including direct-answer-plus-reciprocal-question and scope regressions.
+
+## Foundations Numbers, Time and Dates - wrong introduction opening (2026-08-23)
+
+- [x] Root cause: the deterministic lesson-opening classifier treated the bare
+  English word `meet` as “meet someone new.” The real scenario says “meet a
+  friend for coffee,” so it incorrectly forced `你好，你叫什么名字？` even though
+  the objective is to arrange a day and time.
+- [x] Time/date/scheduling lessons now open with a topic-grounded familiar cue
+  (`你明天忙吗？`). Generic `meet` no longer triggers an introduction; name and
+  origin questions are forbidden unless the scenario/objective explicitly
+  requires an introduction. `Friend` remains correct for this coffee plan.
+- [x] Raw Realtime audio errors containing internal millisecond/buffer details
+  are replaced with a short learner-facing retry message; processing and
+  thresholds are unchanged.
+- [x] TypeScript, scoped ESLint/Prettier, and 127 focused Realtime/context tests
+  pass, including the exact Friend/coffee/time regression and error redaction.
 
 ## Dialogue audio: wrong-gender voice + TTS cost question (2026-08-16)
 
@@ -4407,3 +4453,14 @@ the reason this is OpenAI's task):
   and a stable sequence number for precise issue reports.
 - [ ] Remove the QA route, its Speaking Lab entry card, and the `testMode`
   presentation branch after the user finishes testing all lesson sessions.
+
+**Speaking Lab: Shadowing + Scenario Role Play locked for Pre-MVP (2026-08-23)**:
+- User request: hide these two modes behind a lock icon while the Pre-MVP
+  is being assembled — both are fully built and working, this is a
+  deliberate temporary release gate, not a bug or missing content.
+- `speaking-lab-home.tsx`'s `MODES` config now has `locked: true` on both
+  the `SHADOWING` and `SCENARIO_ROLE_PLAY` entries. Locked cards show a
+  lock icon, aren't clickable, and read "Coming soon."
+- [ ] **Pending**: unlock by flipping `locked: true` → `false` (or removing
+  the field) on both `MODES` entries in `speaking-lab-home.tsx` once
+  Pre-MVP scope opens up to include them. No other code change needed.
