@@ -58,8 +58,6 @@ async function ensureLineAudioKey(
   line: { id: string; chineseText: string; audioFilePath: string | null; order: number; voice: string | null },
   hskLevel: number,
 ): Promise<string> {
-  if (line.audioFilePath?.endsWith(".wav")) return line.audioFilePath;
-
   const storage = getStorageProvider();
   const voice = pickVoice(line);
   // Content-addressed (see audio-content-key.ts) - reuses an already-paid-for
@@ -68,6 +66,18 @@ async function ensureLineAudioKey(
     `placement-audio/${voice}/hsk${hskLevel}`,
     line.chineseText,
   );
+
+  // Only trust a cached path if it's exactly THIS content-addressed key -
+  // never a stale `placement-audio/${line.id}.wav` path from before the
+  // 2026-08-23 content-addressing refactor. That old scheme trusted
+  // whatever was cached under the line's own id blindly, which included
+  // MockTtsProvider's silent placeholder (src/lib/tts/providers/mock.ts,
+  // used whenever OPENAI_API_KEY is unset) from a run where the key wasn't
+  // configured - once cached, it was served as real audio forever
+  // (2026-08-27 bug: several Listening questions produced no sound at all).
+  // A mismatched/legacy path now falls through and regenerates for real.
+  if (line.audioFilePath === key) return key;
+
   if (await storage.exists(key)) {
     await db.placementListeningLine.update({
       where: { id: line.id },

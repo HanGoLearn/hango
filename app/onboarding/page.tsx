@@ -20,7 +20,6 @@ export default async function OnboardingPage() {
         explanationLanguage: profile.explanationLanguage,
         skillPriorities: profile.skillPriorities,
         dailyStudyTargetMinutes: profile.dailyStudyTargetMinutes,
-        correctionStyle: profile.correctionStyle,
       }}
     />
   );

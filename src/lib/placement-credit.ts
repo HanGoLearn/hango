@@ -1,0 +1,253 @@
+import "server-only";
+import { db } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
+import {
+  computeCategoryProgress,
+  type PlacementSkillName,
+  type PlacementQuestionMeta,
+} from "@/lib/placement-exam";
+import { computeReflectionTotal } from "@/lib/points-system";
+import { getOrGenerateScenarioCompletion } from "@/lib/scenario-completion";
+
+/**
+ * Levels 7-9 are diagnostic only, never real placement/points
+ * (points_system.md's Lab-evidence-only rule) - same boundary
+ * placement-exam-home.tsx's DIAGNOSTIC_ONLY_LEVEL enforces for display.
+ * Auto-credit is capped one level below it.
+ */
+const MAX_CREDITABLE_LEVEL = 6;
+
+export interface PlacementSpeakingAttemptForCredit {
+  level: number;
+  score: number;
+}
+
+export interface PlacementCreditResult {
+  /** The lowest of every placed skill (written + Speaking, when attempted) - what actually gated eligibility. */
+  creditedLevel: number;
+  creditedLessonCount: number;
+}
+
+/**
+ * "How placement results become real Learning Journey credit"
+ * (project/TASKS.md, 2026-08-16, scoped to General Level points only per
+ * the 2026-08-24 "avanzalo" request - no lesson-skip UX, just the points +
+ * a badge inviting the learner to do it for real).
+ *
+ * Creates a real LearnerLessonCompletion + LessonReflectionReport per
+ * lesson at or below the learner's placed level (the lowest of every
+ * skill - "never place above what's weakest", same principle Speaking
+ * already uses against the other 4 skills), tagged source: "PLACEMENT" so
+ * the Learning Journey UI can show a distinct badge instead of treating it
+ * as a real completion. Feeds the completely unchanged
+ * computeReflectionTotal -> getOrGenerateScenarioCompletion ->
+ * recomputeGeneralLevelPoints pipeline - no new scoring formula.
+ *
+ * Safe to call more than once for the same session (e.g. a retry after a
+ * network error): already-completed lessons (real or placement-derived)
+ * are skipped, never overwritten.
+ */
+export async function applyPlacementCredit(
+  userId: string,
+  sessionId: string,
+  speakingCreditedLevel: number | null,
+  speakingAttempts: PlacementSpeakingAttemptForCredit[],
+): Promise<PlacementCreditResult | null> {
+  const session = await db.placementSession.findUnique({
+    where: { id: sessionId },
+  });
+  if (!session || session.userId !== userId || session.status !== "COMPLETED") {
+    return null;
+  }
+  const {
+    vocabularyHskLevel,
+    grammarHskLevel,
+    readingHskLevel,
+    listeningHskLevel,
+  } = session;
+  if (
+    vocabularyHskLevel == null ||
+    grammarHskLevel == null ||
+    readingHskLevel == null ||
+    listeningHskLevel == null
+  ) {
+    return null;
+  }
+
+  const writtenLevels = [
+    vocabularyHskLevel,
+    grammarHskLevel,
+    readingHskLevel,
+    listeningHskLevel,
+  ];
+  const creditedLevel =
+    speakingCreditedLevel != null
+      ? Math.min(...writtenLevels, speakingCreditedLevel)
+      : Math.min(...writtenLevels);
+  const eligibleLevel = Math.min(creditedLevel, MAX_CREDITABLE_LEVEL);
+  if (eligibleLevel < 1) {
+    return { creditedLevel, creditedLessonCount: 0 };
+  }
+
+  const lessons = await db.lesson.findMany({
+    where: { status: "PUBLISHED", hskReference: { lte: eligibleLevel } },
+    select: {
+      id: true,
+      hskReference: true,
+      scenarioLevel: { select: { scenarioId: true } },
+      vocabulary: { select: { vocabularyItemId: true } },
+    },
+  });
+  if (lessons.length === 0) {
+    return { creditedLevel, creditedLessonCount: 0 };
+  }
+
+  const existingCompletions = await db.learnerLessonCompletion.findMany({
+    where: { userId, lessonId: { in: lessons.map((l) => l.id) } },
+    select: { lessonId: true },
+  });
+  const alreadyDone = new Set(existingCompletions.map((c) => c.lessonId));
+  const toCredit = lessons.filter((lesson) => !alreadyDone.has(lesson.id));
+  if (toCredit.length === 0) {
+    return { creditedLevel, creditedLessonCount: 0 };
+  }
+
+  const attemptRows = await db.placementAttempt.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      questionId: true,
+      isCorrect: true,
+      question: { select: { skill: true, hskLevel: true, category: true } },
+    },
+  });
+  const questionMetas = new Map<string, PlacementQuestionMeta>(
+    attemptRows.map((row) => [
+      row.questionId,
+      {
+        id: row.questionId,
+        skill: row.question.skill,
+        hskLevel: row.question.hskLevel,
+        category: row.question.category,
+        type: "MULTIPLE_CHOICE",
+      },
+    ]),
+  );
+  const progress = computeCategoryProgress(
+    attemptRows.map((row, index) => ({
+      questionId: row.questionId,
+      isCorrect: row.isCorrect,
+      sequence: index + 1,
+    })),
+    questionMetas,
+  );
+
+  function ratioAt(skill: PlacementSkillName, level: number): number | null {
+    const byCategory = progress.get(skill)?.get(level);
+    if (!byCategory) return null;
+    let attempted = 0;
+    let correct = 0;
+    for (const stats of byCategory.values()) {
+      attempted += stats.attempted;
+      correct += stats.correct;
+    }
+    return attempted > 0 ? correct / attempted : null;
+  }
+
+  function speakingScoreAt(level: number): number | null {
+    if (speakingAttempts.length === 0) return null;
+    const exact = speakingAttempts.find((a) => a.level === level);
+    if (exact) return Math.round(exact.score);
+    // Nothing tested at exactly this level - fall back to the best evidence
+    // at or below it (speaking ability demonstrated at a higher tested
+    // level implies at least that much at an easier one). Leaves the score
+    // null (not evaluated) when this level is below every attempted one.
+    const below = speakingAttempts.filter((a) => a.level <= level);
+    return below.length > 0
+      ? Math.round(Math.max(...below.map((a) => a.score)))
+      : null;
+  }
+
+  // Batched into fixed-size transactions rather than one $transaction for
+  // every credited lesson - a full curriculum-below-level-6 credit can
+  // touch 100+ lessons, and Prisma's default interactive-transaction
+  // timeout (5s) can't reliably cover that many round trips to a remote
+  // database in a single transaction. Each chunk is independently
+  // idempotent (upsert), so a failure partway through just means a retry
+  // picks up wherever it left off.
+  const CREDIT_BATCH_SIZE = 8;
+  let ops: Prisma.PrismaPromise<unknown>[] = [];
+  const scenarioIds = new Set<string>();
+
+  async function flushOps(): Promise<void> {
+    if (ops.length === 0) return;
+    await db.$transaction(ops, { timeout: 20_000 });
+    ops = [];
+  }
+
+  for (const lesson of toCredit) {
+    const level = lesson.hskReference!;
+    const vocabRatio = ratioAt("VOCABULARY", level);
+    const grammarRatio = ratioAt("GRAMMAR", level);
+    const comprehensionRatios = [
+      ratioAt("READING", level),
+      ratioAt("LISTENING", level),
+    ].filter((ratio): ratio is number => ratio != null);
+
+    const vocabularyScore = vocabRatio != null ? Math.round(vocabRatio * 100) : null;
+    const grammarScore = grammarRatio != null ? Math.round(grammarRatio * 100) : null;
+    const comprehensionScore =
+      comprehensionRatios.length > 0
+        ? Math.round(
+            (comprehensionRatios.reduce((sum, r) => sum + r, 0) /
+              comprehensionRatios.length) *
+              100,
+          )
+        : null;
+    const speakingScore = speakingScoreAt(level);
+    const totalScore = computeReflectionTotal({
+      vocabularyScore,
+      grammarScore,
+      comprehensionScore,
+      speakingScore,
+    });
+
+    ops.push(
+      db.learnerLessonCompletion.upsert({
+        where: { userId_lessonId: { userId, lessonId: lesson.id } },
+        create: { userId, lessonId: lesson.id, source: "PLACEMENT" },
+        update: {},
+      }),
+      db.lessonReflectionReport.upsert({
+        where: { userId_lessonId: { userId, lessonId: lesson.id } },
+        create: {
+          userId,
+          lessonId: lesson.id,
+          vocabularyCovered: 0,
+          vocabularyTotal: lesson.vocabulary.length,
+          vocabularyScore,
+          grammarScore,
+          comprehensionScore,
+          speakingScore,
+          totalScore,
+          hanNarrative:
+            "This lesson was placed from your placement exam result, not a real attempt.",
+          strengths: [],
+          improvements: [
+            "Complete this lesson yourself to confirm or improve this score.",
+          ],
+        },
+        update: {},
+      }),
+    );
+    scenarioIds.add(lesson.scenarioLevel.scenarioId);
+    if (ops.length >= CREDIT_BATCH_SIZE * 2) await flushOps();
+  }
+  await flushOps();
+
+  for (const scenarioId of scenarioIds) {
+    await getOrGenerateScenarioCompletion(userId, scenarioId);
+  }
+
+  return { creditedLevel, creditedLessonCount: toCredit.length };
+}

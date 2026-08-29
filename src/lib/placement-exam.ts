@@ -1,31 +1,33 @@
 /**
  * Adaptive placement exam - pure, testable engine (project/TASKS.md,
  * "Adaptive placement exam", 2026-08-16 pilot; redesigned 2026-08-19,
- * "Placement exam — adaptive engine redesign"). Same split as
- * points-system.ts: this file only computes; the actual DB reads/writes
- * live in placement-exam-data.ts.
+ * "Placement exam — adaptive engine redesign"; unified 2026-08-27). Same
+ * split as points-system.ts: this file only computes; the actual DB reads/
+ * writes live in placement-exam-data.ts.
  *
- * TWO mechanisms coexist here, deliberately - see the 2026-08-19 design
- * note in TASKS.md for the full reasoning:
+ * All 4 written skills (Vocabulary/Grammar/Reading/Listening) share ONE
+ * mechanism - **level-gate**: each level asks a FIXED number of questions
+ * per category (questionsPerCategory below), once, then locks in pass/fail
+ * from that one pass - no retries, and it resolves EARLY (levelGateStatus)
+ * the moment the outcome is mathematically certain, so a struggling learner
+ * is never asked more questions than necessary to decide the level.
  *
- * - **Level-gate** (Vocabulary/Grammar): each level asks a FIXED number
- *   of questions per category (questionsPerCategory below), once, then
- *   locks in pass/fail from that one pass - no retries. Replaces the
- *   original "keep asking until MASTERY_THRESHOLD_PER_CATEGORY correct or
- *   the category's bank is exhausted" approach, which let a learner
- *   stuck on one category grind through it (real measured cost: 44
- *   Vocabulary + 72 Grammar questions for a learner who climbs cleanly to
- *   HSK7 in both - project/db-operations-optimization.md's placement-exam
- *   section).
- * - **Accumulate-to-mastery** (Reading/Listening, unchanged): each has
- *   only one category ("comprehension") per level, so the level-gate's
- *   original problem (multiple categories, one stuck one grinding the
- *   whole level) never applied - already efficient, kept as-is.
+ * Reading/Listening used a separate "accumulate-to-mastery" mechanism until
+ * 2026-08-27 (keep asking a category until MASTERY_THRESHOLD_PER_CATEGORY
+ * correct, however many attempts that took) - it never had Vocabulary/
+ * Grammar's original multi-category grinding problem (each has only one
+ * category, "comprehension", per level), but it also never stopped early
+ * on repeated failure, which real user testing surfaced as confusing
+ * ("why does it keep asking more Reading after I already failed"). Folding
+ * them into the level-gate mechanism fixes that directly, at the cost of a
+ * stricter pass bar where the real item bank per level is small (HSK5-9
+ * Reading/Listening: 2 questions/level, so LEVEL_PASS_RATIO's ceiling
+ * rounds the threshold up to both correct - consistent with the mechanism's
+ * existing "round up, never down" rule elsewhere).
  *
- * Both are still driven by the same "never a single number" principle:
- * each skill (Vocabulary/Grammar/Reading/Listening) gets its own detected
- * HSK level, because recognizing and producing/understanding are
- * different skills.
+ * Driven by the same "never a single number" principle throughout: each
+ * skill gets its own detected HSK level, because recognizing and producing/
+ * understanding are different skills.
  */
 
 export type PlacementSkillName =
@@ -94,89 +96,8 @@ export function computeCategoryProgress(
 }
 
 // ============================================================================
-// Accumulate-to-mastery mechanism - Reading/Listening only (unchanged design)
-// ============================================================================
-
-/** How many correct answers in one category before it counts as covered - Reading/Listening only. Vocabulary/Grammar use questionsPerCategory + LEVEL_PASS_RATIO instead (below). */
-export const MASTERY_THRESHOLD_PER_CATEGORY = 2;
-
-/**
- * Every category at this level must independently reach the threshold -
- * `levelCategories` is the full set of categories that exist for this
- * skill/level in the item bank, not just the ones attempted so far, so an
- * un-attempted category correctly blocks mastery instead of being ignored.
- * Reading/Listening only - see the file header.
- */
-export function isLevelMastered(
-  progress: CategoryProgress,
-  skill: PlacementSkillName,
-  hskLevel: number,
-  levelCategories: string[],
-): boolean {
-  if (levelCategories.length === 0) return false;
-  const byCategory = progress.get(skill)?.get(hskLevel);
-  if (!byCategory) return false;
-  return levelCategories.every(
-    (category) => (byCategory.get(category)?.correct ?? 0) >= MASTERY_THRESHOLD_PER_CATEGORY,
-  );
-}
-
-/**
- * Highest level mastered so far for a skill, walking up contiguously from 1
- * (a gap can't be skipped - mastering HSK2 without HSK1's evidence isn't
- * meaningful). 0 means "no level mastered yet" (Pre-HSK).
- * Reading/Listening only - see the file header.
- */
-export function currentSkillLevel(
-  progress: CategoryProgress,
-  skill: PlacementSkillName,
-  categoriesByLevel: Map<number, string[]>,
-  maxLevel: number = PILOT_MAX_HSK_LEVEL,
-): number {
-  let level = 0;
-  for (let candidate = 1; candidate <= maxLevel; candidate++) {
-    const categories = categoriesByLevel.get(candidate) ?? [];
-    if (isLevelMastered(progress, skill, candidate, categories)) {
-      level = candidate;
-    } else {
-      break;
-    }
-  }
-  return level;
-}
-
-/**
- * Which category to draw the next question from for a skill: the lowest
- * not-yet-mastered level, then within it, the category furthest from the
- * threshold (ties broken by category order) - keeps coverage balanced
- * instead of hammering one category to the threshold before touching
- * another. Reading/Listening only - see the file header.
- */
-export function selectNextCategory(
-  progress: CategoryProgress,
-  skill: PlacementSkillName,
-  categoriesByLevel: Map<number, string[]>,
-  maxLevel: number = PILOT_MAX_HSK_LEVEL,
-): { hskLevel: number; category: string } | null {
-  const level = currentSkillLevel(progress, skill, categoriesByLevel, maxLevel) + 1;
-  if (level > maxLevel) return null;
-
-  const categories = categoriesByLevel.get(level) ?? [];
-  if (categories.length === 0) return null;
-
-  const byCategory = progress.get(skill)?.get(level);
-  let best: { category: string; correct: number } | null = null;
-  for (const category of categories) {
-    const correct = byCategory?.get(category)?.correct ?? 0;
-    if (correct >= MASTERY_THRESHOLD_PER_CATEGORY) continue;
-    if (!best || correct < best.correct) best = { category, correct };
-  }
-  if (!best) return null;
-  return { hskLevel: level, category: best.category };
-}
-
-// ============================================================================
-// Level-gate mechanism - Vocabulary/Grammar only (2026-08-19 redesign)
+// Level-gate mechanism - all 4 written skills (2026-08-19 redesign;
+// unified across every skill 2026-08-27)
 // ============================================================================
 
 /** Fraction of a level's fixed question set that must be correct to advance - always rounded UP via levelPassThreshold, never down, so the bar never gets easier by rounding. */
@@ -188,13 +109,29 @@ export const LEVEL_PASS_RATIO = 0.8;
  * band only has 2 categories (noun/verb, project/placement-exam-questions.md),
  * and 2 would leave `levelPassThreshold` needing 100% (Math.ceil(4*0.8)=4)
  * - zero margin for one bad/ambiguous question, right where content is
- * hardest. Every other skill/level combination uses 2.
+ * hardest. Grammar uses 2 at every level - it never had that 2-category
+ * margin problem.
+ *
+ * Reading/Listening (folded into this mechanism 2026-08-27) each have a
+ * single category ("comprehension") per level, so this is just the real
+ * seeded bank size at that level - project/placement-exam-questions.md's
+ * content: Reading HSK1 has 4, HSK2-4 have 6 (2 passages), HSK5-9 have 2
+ * (1 shared passage); Listening HSK1-4 have 4, HSK5-9 have 2. At HSK5-9's
+ * small counts the 80% threshold rounds up to "both correct" - deliberately
+ * strict, consistent with levelPassThreshold's own "never easier by
+ * rounding" rule, not a bug.
  */
 export function questionsPerCategory(
   skill: PlacementSkillName,
   hskLevel: number,
 ): number {
   if (skill === "VOCABULARY" && hskLevel >= 5) return 3;
+  if (skill === "READING") {
+    if (hskLevel === 1) return 4;
+    if (hskLevel <= 4) return 6;
+    return 2;
+  }
+  if (skill === "LISTENING") return hskLevel <= 4 ? 4 : 2;
   return 2;
 }
 
@@ -254,9 +191,9 @@ export function levelGateStatus(
 }
 
 /**
- * Highest level passed so far for a skill, walking up contiguously from 1
- * - same "no skipping a gap" rule as the accumulate mechanism's
- * currentSkillLevel. 0 means "no level passed yet" (Pre-HSK).
+ * Highest level passed so far for a skill, walking up contiguously from 1 -
+ * a gap can't be skipped (passing level 2's gate without level 1's ever
+ * being attempted doesn't count). 0 means "no level passed yet" (Pre-HSK).
  */
 export function currentGatedLevel(
   progress: CategoryProgress,

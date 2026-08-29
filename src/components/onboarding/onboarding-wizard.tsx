@@ -13,7 +13,7 @@ import { LevelStep } from "@/components/onboarding/steps/level-step";
 import { ExplanationLanguageStep } from "@/components/onboarding/steps/explanation-language-step";
 import { SkillsStep } from "@/components/onboarding/steps/skills-step";
 import { DailyTargetStep } from "@/components/onboarding/steps/daily-target-step";
-import { AiPreferencesStep } from "@/components/onboarding/steps/ai-preferences-step";
+import { PlacementOfferStep } from "@/components/onboarding/steps/placement-offer-step";
 import { RecommendationStep } from "@/components/onboarding/steps/recommendation-step";
 
 export interface OnboardingWizardProps {
@@ -86,12 +86,8 @@ export function OnboardingWizard({
           onBack={goBack}
         />
       )}
-      {step === "ai-preferences" && (
-        <AiPreferencesStep
-          initialValue={values.correctionStyle}
-          onNext={(correctionStyle) => goNext({ correctionStyle })}
-          onBack={goBack}
-        />
+      {step === "placement-offer" && (
+        <PlacementOfferStep onNext={() => goNext()} onBack={goBack} />
       )}
       {step === "recommendation" && (
         <RecommendationStep values={values} onBack={goBack} />

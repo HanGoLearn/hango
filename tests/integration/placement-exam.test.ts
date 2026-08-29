@@ -154,7 +154,7 @@ describe("Placement exam adaptive flow (integration, real database, real seeded 
     );
   }, 30000);
 
-  it("each skill permanently stops the moment its HSK1 gate is mathematically decided, when every answer is wrong (2026-08-19 redesign + early-exit - replaces the old global 3-wrong-in-a-row cutoff)", async () => {
+  it("each skill permanently stops the moment its HSK1 gate is mathematically decided, when every answer is wrong (2026-08-19 redesign + early-exit, extended to Reading/Listening 2026-08-27 - replaces the old global 3-wrong-in-a-row cutoff)", async () => {
     const user = await createTestUser(`placement-wrong-${Date.now()}@hango.dev`);
     const sessionId = await startPlacementSession(user.id);
     testSessionIds.push(sessionId);
@@ -176,9 +176,12 @@ describe("Placement exam adaptive flow (integration, real database, real seeded 
     // the 80% threshold - Vocabulary HSK1-4 (4 categories x2 = 8
     // questions, needs 7) is decided after exactly 2 wrong answers
     // (0 correct + 6 remaining = 6 < 7); Grammar HSK1-4 (6 categories x2 =
-    // 12 questions, needs 10) after exactly 3 (0 + 9 = 9 < 10). Neither
-    // skill gets asked its full fixed gate size once the outcome can no
-    // longer change.
+    // 12 questions, needs 10) after exactly 3 (0 + 9 = 9 < 10). Reading and
+    // Listening HSK1 (single "comprehension" category, 4 real questions,
+    // threshold ceil(4*0.8)=4) are decided after exactly 1 wrong answer
+    // (0 + 3 remaining = 3 < 4) - the 2026-08-27 fix for "why does it keep
+    // asking more Reading/Listening after I already failed". No skill gets
+    // asked its full fixed gate size once the outcome can no longer change.
     const attempts = await db.placementAttempt.findMany({
       where: { sessionId },
       include: { question: { select: { skill: true } } },
@@ -187,6 +190,8 @@ describe("Placement exam adaptive flow (integration, real database, real seeded 
       attempts.filter((a) => a.question.skill === skill).length;
     expect(countBySkill("VOCABULARY")).toBe(2);
     expect(countBySkill("GRAMMAR")).toBe(3);
+    expect(countBySkill("READING")).toBe(1);
+    expect(countBySkill("LISTENING")).toBe(1);
   }, 60000);
 
   it("never asks the same question twice in one session", async () => {

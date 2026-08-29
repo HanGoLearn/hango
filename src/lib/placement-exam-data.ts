@@ -3,12 +3,11 @@ import { db } from "@/lib/db";
 import {
   computeCategoryProgress,
   currentGatedLevel,
-  currentSkillLevel,
   hasGatedSkillStopped,
+  nextGatedQuestionTarget,
   nextGatedQuestionTargets,
   PILOT_MAX_HSK_LEVEL,
   PLACEMENT_SKILLS,
-  selectNextCategory,
   type CategoryProgress,
   type PlacementAttemptRecord,
   type PlacementQuestionMeta,
@@ -20,38 +19,26 @@ export class PlacementExamNotFoundError extends Error {}
 
 const ADAPTIVE_BLOCK_SKILLS: PlacementSkillName[] = ["VOCABULARY", "GRAMMAR", "READING"];
 
-/** Vocabulary/Grammar use the 2026-08-19 level-gate redesign; Reading/Listening keep the original accumulate-to-mastery mechanism unchanged (see placement-exam.ts's file header for why both coexist). */
-const GATED_SKILLS: PlacementSkillName[] = ["VOCABULARY", "GRAMMAR"];
-
-function isGatedSkill(skill: PlacementSkillName): boolean {
-  return GATED_SKILLS.includes(skill);
-}
-
-/** Dispatches to the right mechanism's "highest level passed" for any of the 4 skills - used both when picking the next question and when finalizing the result. */
+/** Every skill uses the same level-gate mechanism (unified 2026-08-27 - see placement-exam.ts's file header) - kept as a named wrapper since callers read better naming the mechanism than calling currentGatedLevel directly. */
 function currentLevelForSkill(
   skill: PlacementSkillName,
   progress: CategoryProgress,
   categoriesByLevel: Map<number, string[]>,
 ): number {
-  return isGatedSkill(skill)
-    ? currentGatedLevel(progress, skill, categoriesByLevel)
-    : currentSkillLevel(progress, skill, categoriesByLevel);
+  return currentGatedLevel(progress, skill, categoriesByLevel);
 }
 
-/** Whether this skill has nothing left to offer this session - either it reached the ceiling, or (Vocabulary/Grammar only) it permanently stopped after failing a level's gate. */
+/** Whether this skill has nothing left to offer this session - either it reached the ceiling, or it permanently stopped after failing a level's gate. */
 function isBlockSkillDone(
   skill: PlacementSkillName,
   progress: CategoryProgress,
   categoriesBySkill: Map<PlacementSkillName, Map<number, string[]>>,
 ): boolean {
   const categoriesByLevel = categoriesBySkill.get(skill) ?? new Map();
-  if (isGatedSkill(skill)) {
-    return (
-      hasGatedSkillStopped(progress, skill, categoriesByLevel) ||
-      currentGatedLevel(progress, skill, categoriesByLevel) >= PILOT_MAX_HSK_LEVEL
-    );
-  }
-  return selectNextCategory(progress, skill, categoriesByLevel) === null;
+  return (
+    hasGatedSkillStopped(progress, skill, categoriesByLevel) ||
+    currentGatedLevel(progress, skill, categoriesByLevel) >= PILOT_MAX_HSK_LEVEL
+  );
 }
 
 /**
@@ -59,25 +46,23 @@ function isBlockSkillDone(
  * submission (2026-08-19 "agrupar preguntas por pantalla" - project/
  * TASKS.md) - deliberately small, not the whole level, so levelGateStatus
  * (placement-exam.ts) still gets checked *between* batches and the
- * 2026-08-19 early-exit can still stop a struggling learner before their
- * level's full fixed question set is asked. Reading/Listening are
- * unaffected - their own passage/script-based grouping (buildReadingBlockView/
- * buildListeningBlockView) is untouched.
+ * early-exit can still stop a struggling learner before their level's full
+ * fixed question set is asked.
  */
 const GATED_BATCH_SIZE = 2;
 
-/** Dispatches to the right mechanism's "what to ask next" for any of the 3 interleaved block skills - a gated skill (Vocabulary/Grammar) may return up to GATED_BATCH_SIZE targets, Reading always returns at most one (its own grouping is by shared passage, handled separately in buildReadingBlockView). */
+/** What to ask next for any of the 3 interleaved block skills - Vocabulary/Grammar may return up to GATED_BATCH_SIZE targets; Reading always returns at most one (its own grouping is by shared passage, handled separately in buildReadingBlockView), same as before the 2026-08-27 unification. */
 function nextBlockTargets(
   skill: PlacementSkillName,
   progress: CategoryProgress,
   categoriesBySkill: Map<PlacementSkillName, Map<number, string[]>>,
 ): { hskLevel: number; category: string }[] {
   const categoriesByLevel = categoriesBySkill.get(skill) ?? new Map();
-  if (isGatedSkill(skill)) {
-    return nextGatedQuestionTargets(progress, skill, categoriesByLevel, GATED_BATCH_SIZE);
+  if (skill === "READING") {
+    const single = nextGatedQuestionTarget(progress, skill, categoriesByLevel);
+    return single ? [single] : [];
   }
-  const single = selectNextCategory(progress, skill, categoriesByLevel);
-  return single ? [single] : [];
+  return nextGatedQuestionTargets(progress, skill, categoriesByLevel, GATED_BATCH_SIZE);
 }
 
 export type PlacementQuestionType = "MULTIPLE_CHOICE" | "SENTENCE_ORDERING";
@@ -484,17 +469,17 @@ export async function getNextQuestion(
   }
 
   // Adaptive block finished - move to Listening. Same contiguous-from-
-  // level-1 mastery rule as every other skill (selectNextCategory), not a
-  // shortcut to the level the other 3 skills reached: currentSkillLevel()
-  // requires level 1 to be mastered before level 2 counts, so starting
-  // Listening straight at level 2 would leave level 1 permanently
-  // "unmastered" (zero attempts there) and cap listeningHskLevel at 0
-  // forever regardless of how level 2 went - caught by the integration
-  // test against the real seeded content, not by the unit tests (which
-  // used synthetic data that never hit this interaction).
+  // level-1 gate rule as every other skill (currentGatedLevel), not a
+  // shortcut to the level the other 3 skills reached: passing level 2's
+  // gate without level 1's ever being attempted doesn't count (a gap
+  // blocks credit), so starting Listening straight at level 2 would leave
+  // level 1 permanently unresolved and cap listeningHskLevel at 0 forever
+  // regardless of how level 2 went - caught by the integration test
+  // against the real seeded content, not by the unit tests (which used
+  // synthetic data that never hit this interaction).
   const listeningCategoriesByLevel: Map<number, string[]> =
     categoriesBySkill.get("LISTENING") ?? new Map();
-  const listeningTarget = selectNextCategory(progress, "LISTENING", listeningCategoriesByLevel);
+  const listeningTarget = nextGatedQuestionTarget(progress, "LISTENING", listeningCategoriesByLevel);
   if (listeningTarget) {
     const candidate = [...questionMetas.values()].find(
       (q) =>

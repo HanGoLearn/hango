@@ -29,6 +29,10 @@ import {
   type PlacementSpeakingEvaluation,
   type PlacementSpeakingLevel,
 } from "@/lib/placement-speaking";
+import {
+  applyPlacementCredit,
+  type PlacementSpeakingAttemptForCredit,
+} from "@/lib/placement-credit";
 
 export type PlacementActionResult<T> =
   | { ok: true; value: T }
@@ -216,5 +220,34 @@ export async function gradePlacementSpeakingAction(
       ok: false,
       error: "Speaking evaluation is temporarily unavailable. Please try this level again.",
     };
+  }
+}
+
+/**
+ * Applies General Level point credit for a just-finished placement session
+ * (2026-08-24, "How placement results become real Learning Journey
+ * credit" - project/TASKS.md). Called once from PlacementExamHome right
+ * when the result screen appears - safe to call more than once for the
+ * same session (applyPlacementCredit skips lessons already completed).
+ */
+export async function applyPlacementCreditAction(
+  sessionId: string,
+  speakingCreditedLevel: number | null,
+  speakingAttempts: PlacementSpeakingAttemptForCredit[],
+): Promise<PlacementActionResult<{ creditedLessonCount: number }>> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "You need to be signed in for this." };
+  }
+  try {
+    const result = await applyPlacementCredit(
+      session.user.id,
+      sessionId,
+      speakingCreditedLevel,
+      speakingAttempts,
+    );
+    return { ok: true, value: { creditedLessonCount: result?.creditedLessonCount ?? 0 } };
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) };
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import {
 import { AudioPlayButton } from "@/components/lesson/audio-play-button";
 import { cn } from "@/lib/cn";
 import {
+  applyPlacementCreditAction,
   getPlacementListeningAudioAction,
   recordPlacementTimeoutAction,
   submitPlacementAnswerAction,
@@ -28,47 +29,78 @@ import {
   type PlacementSpeakingOutcome,
 } from "@/components/placement/placement-speaking-exam";
 import { placementSpeakingStartLevel } from "@/lib/placement-speaking";
+import { tierNameForLevel } from "@/lib/points-system";
 
-const HSK_LABEL: Record<number, string> = {
-  0: "Pre-HSK",
-  1: "HSK 1",
-  2: "HSK 2",
-  3: "HSK 3",
-  4: "HSK 4",
-  5: "HSK 5",
-  6: "HSK 6",
-  7: "HSK 7-9",
-};
-
-/** HSK7-9 is diagnostic only - never real placement/points (points_system.md's Lab-evidence-only rule). */
+/**
+ * Levels 7, 8, and 9 are all diagnostic only - never real placement/points
+ * (points_system.md's Lab-evidence-only rule for that range). Fixed
+ * 2026-08-24: this used to be checked with `=== 7`, so a written skill that
+ * climbed all the way to level 8 or 9 (PILOT_MAX_HSK_LEVEL allows it) never
+ * triggered the caption below explaining why - `>=` catches the whole band.
+ */
 const DIAGNOSTIC_ONLY_LEVEL = 7;
 
 /**
- * 10s-per-question limit for HSK1-2 Vocabulary/Grammar only (2026-08-16
- * user request: keep the exam from running long, since most test-takers
- * clear this tier fast - combined with the HSK1-2 content trim the same
- * day). Those two skills are quick single-pattern recall, so 10s is
- * plenty. Reading and Listening are deliberately excluded even at HSK1-2
- * (2026-08-16 live-testing fix): a Reading question shows a real
- * multi-sentence passage to actually read, and Listening needs the audio
- * clip to finish playing first - 10s isn't a "fast recall" limit for
- * either, it's just not enough time regardless of level. HSK3+ questions
- * are untimed - they're meant to take real thought.
+ * Every question is timed now (2026-08-27 request - a real exam doesn't
+ * leave HSK3+ open-ended). Difficulty tiers, not raw hskLevel, drive the
+ * budget - HSK1-2 keeps the original, live-tested 10s baseline for a solo
+ * Vocabulary/Grammar recall question; each tier above that gets more time
+ * as content gets genuinely harder to parse, not just "harder so more
+ * time" arbitrarily - roughly +5s/tier, doubling by HSK7-9.
  */
-const TIMED_MAX_HSK_LEVEL = 2;
-const TIMED_SKILLS = new Set(["VOCABULARY", "GRAMMAR"]);
-const QUESTION_TIME_LIMIT_SECONDS = 10;
+type TimeTier = 1 | 2 | 3 | 4;
+function timeTierForLevel(hskLevel: number): TimeTier {
+  if (hskLevel <= 2) return 1;
+  if (hskLevel <= 4) return 2;
+  if (hskLevel <= 6) return 3;
+  return 4;
+}
+
+/** Solo Vocabulary/Grammar multiple-choice recall - the original HSK1-2 10s baseline, scaled up per tier. */
+const MC_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 10, 2: 15, 3: 20, 4: 25 };
+
+/** SENTENCE_ORDERING (Grammar only) needs real time to think through word order, not just recall - +10s over that tier's MC baseline. */
+const ORDERING_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 20, 2: 25, 3: 30, 4: 35 };
 
 /**
- * A Reading/Listening block (PlacementQuestionView.questionGroup - all of
- * one passage/script's remaining questions answered together, added
- * 2026-08-16 live-testing fix so the same text/audio doesn't re-appear
- * later mid-way through) gets its own generous 2-minute budget for the
- * whole passage/script at HSK1-2, instead of either no timer or the
- * single-question 10s limit - "read/listen once, answer everything about
- * it, then move on" per the user's own description of the desired flow.
+ * A Reading block (PlacementQuestionView.questionGroup - all of one
+ * passage's remaining questions answered together, 2026-08-16 live-testing
+ * fix so the same text doesn't re-appear later mid-way through) gets a
+ * budget for the whole passage, not per question - "read once, answer
+ * everything about it, then move on".
  */
-const GROUP_TIME_LIMIT_SECONDS = 120;
+const READING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 120, 2: 150, 3: 180, 4: 210 };
+
+/**
+ * Same shape as Reading's group budget, slightly less generous at every
+ * tier - Listening audio can now only be heard once (AudioPlayButton's
+ * maxPlays, 2026-08-27), so there's no "go back and re-read" cost the way
+ * Reading has, just recalling what was already heard.
+ */
+const LISTENING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 100, 2: 130, 3: 160, 4: 190 };
+
+/**
+ * How many seconds a given question gets, shared by the initial-state
+ * calculation (the very first question, before any loadQuestion call) and
+ * loadQuestion (every question after that) so the two never drift apart.
+ * Checked by passage/listening presence, not by questionGroup - a lone
+ * remaining question in a passage/script (every sibling already attempted)
+ * still needs the full read/listen budget, not the short recall-question
+ * one.
+ */
+function secondsForQuestion(question: PlacementQuestionView): number {
+  const tier = timeTierForLevel(question.hskLevel);
+  if (question.listening) return LISTENING_GROUP_SECONDS_BY_TIER[tier];
+  if (question.passage) return READING_GROUP_SECONDS_BY_TIER[tier];
+  // Vocabulary/Grammar batch (2026-08-19 "agrupar preguntas por pantalla")
+  // - several quick recall questions on one screen, so the solo-question
+  // budget scales by how many are actually in it.
+  const groupSize = question.questionGroup?.length ?? 1;
+  if (groupSize > 1) return MC_SECONDS_BY_TIER[tier] * groupSize;
+  return question.type === "SENTENCE_ORDERING"
+    ? ORDERING_SECONDS_BY_TIER[tier]
+    : MC_SECONDS_BY_TIER[tier];
+}
 
 function QuestionCountdown({
   questionId,
@@ -132,9 +164,14 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
 export function PlacementExamHome({
   sessionId,
   initialQuestion,
+  footer,
 }: {
   sessionId: string;
   initialQuestion: PlacementQuestionView | null;
+  /** Rendered at the bottom of the result screen - lets a caller (e.g. the
+   * onboarding placement-offer step) add its own "Continue" action without
+   * this component needing to know anything about onboarding. */
+  footer?: ReactNode;
 }) {
   const [startedAt] = useState(() => Date.now());
   const [question, setQuestion] = useState<PlacementQuestionView | null>(initialQuestion);
@@ -150,7 +187,28 @@ export function PlacementExamHome({
   const [speakingOutcome, setSpeakingOutcome] =
     useState<PlacementSpeakingOutcome | null>(null);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(QUESTION_TIME_LIMIT_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    initialQuestion ? secondsForQuestion(initialQuestion) : MC_SECONDS_BY_TIER[1],
+  );
+  const creditAppliedRef = useRef(false);
+
+  // Applies General Level point credit the moment the result screen is
+  // reached (2026-08-24, "How placement results become real Learning
+  // Journey credit" - project/TASKS.md) - fire-and-forget, doesn't block
+  // the learner from seeing their result. Guarded to run once per mount
+  // even though result/finishedAt don't change again afterward.
+  useEffect(() => {
+    if (!result || !finishedAt || creditAppliedRef.current) return;
+    creditAppliedRef.current = true;
+    void applyPlacementCreditAction(
+      sessionId,
+      speakingOutcome?.creditedLevel ?? null,
+      speakingOutcome?.attempts.map((attempt) => ({
+        level: attempt.level,
+        score: attempt.evaluation.score,
+      })) ?? [],
+    );
+  }, [result, finishedAt, speakingOutcome, sessionId]);
 
   function loadQuestion(next: PlacementQuestionView | null) {
     setQuestion(next);
@@ -158,22 +216,7 @@ export function PlacementExamHome({
     setPool(next?.tokens ?? []);
     setBuilt([]);
     setGroupSelections({});
-    const groupSize = next?.questionGroup?.length ?? 1;
-    const nextIsGrouped = groupSize > 1;
-    // Vocabulary/Grammar batches (2026-08-19 "agrupar preguntas por
-    // pantalla") are several quick recall questions, not one passage/audio
-    // to read or listen to first - GROUP_TIME_LIMIT_SECONDS's generous 2
-    // minutes was tuned for the latter (see its own doc comment), so a
-    // gated batch instead gets the single-question budget scaled by how
-    // many questions are actually in it.
-    const isGatedBatch = nextIsGrouped && !next?.passage && !next?.listening;
-    setSecondsLeft(
-      isGatedBatch
-        ? QUESTION_TIME_LIMIT_SECONDS * groupSize
-        : nextIsGrouped
-          ? GROUP_TIME_LIMIT_SECONDS
-          : QUESTION_TIME_LIMIT_SECONDS,
-    );
+    if (next) setSecondsLeft(secondsForQuestion(next));
   }
 
   function currentAnswer() {
@@ -269,11 +312,10 @@ export function PlacementExamHome({
   }
 
   const isGrouped = Boolean(question?.questionGroup && question.questionGroup.length > 1);
-  const isTimed = Boolean(
-    question &&
-      question.hskLevel <= TIMED_MAX_HSK_LEVEL &&
-      (isGrouped || TIMED_SKILLS.has(question.skill)),
-  );
+  // Every question is timed now (2026-08-27) - kept as a named boolean
+  // (rather than inlining `Boolean(question)`) since it's still the right
+  // guard for the countdown UI and the timeout effect below.
+  const isTimed = Boolean(question);
 
   useEffect(() => {
     if (!isTimed || !question || submitting || result) return;
@@ -316,6 +358,7 @@ export function PlacementExamHome({
         speakingOutcome={speakingOutcome}
         answeredCount={answeredCount}
         elapsedMs={finishedAt - startedAt}
+        footer={footer}
       />
     );
   }
@@ -359,6 +402,7 @@ export function PlacementExamHome({
               key={question.listening.id}
               size="md"
               label="listening passage"
+              maxPlays={1}
               fetchUrl={async () => {
                 const response = await getPlacementListeningAudioAction(question.id);
                 return response.ok
@@ -367,7 +411,8 @@ export function PlacementExamHome({
               }}
             />
             <Caption className="text-text-muted">
-              Listen, then answer below - the text isn&apos;t shown.
+              You can only play this once - listen carefully, then answer
+              below. The text isn&apos;t shown.
             </Caption>
           </div>
         )}
@@ -501,11 +546,13 @@ function PlacementResultScreen({
   speakingOutcome,
   answeredCount,
   elapsedMs,
+  footer,
 }: {
   result: PlacementResult;
   speakingOutcome: PlacementSpeakingOutcome | null;
   answeredCount: number;
   elapsedMs: number;
+  footer?: ReactNode;
 }) {
   const totalMinutes = Math.max(1, Math.round(elapsedMs / 60000));
   const rows: { label: string; level: number | null }[] = [
@@ -533,28 +580,34 @@ function PlacementResultScreen({
           >
             <Body>{row.label}</Body>
             <span className="rounded-full bg-accent-300/20 px-3 py-1 font-interface text-supporting font-semibold text-accent-300">
-              {row.level == null ? "Not reached" : (HSK_LABEL[row.level] ?? `HSK ${row.level}`)}
+              {row.level == null ? "Not reached" : tierNameForLevel(row.level)}
             </span>
           </div>
         ))}
       </Card>
-      {rows.some((row) => row.level === DIAGNOSTIC_ONLY_LEVEL) && (
+      {rows.some(
+        (row) => row.level != null && row.level >= DIAGNOSTIC_ONLY_LEVEL,
+      ) && (
         <Caption className="text-text-muted">
-          HSK 7-9 is shown for your reference only - it doesn&apos;t grant
-          real placement or points, since that tier is only ever earned
-          through sustained Lab evidence.
+          The top tier shown here is for your reference only - it
+          doesn&apos;t grant real placement or points, since that range is
+          only ever earned through sustained Lab evidence.
         </Caption>
       )}
-      {speakingOutcome?.diagnosticLevel === 7 && (
+      {speakingOutcome?.diagnosticLevel != null && (
         <Caption className="text-text-muted">
-          Your HSK 7-9 Speaking attempt is diagnostic only. Your credited
-          Speaking placement remains HSK 6 or below.
+          Your {tierNameForLevel(speakingOutcome.diagnosticLevel)} Speaking
+          attempt is diagnostic only. Your credited Speaking placement
+          remains {tierNameForLevel(6)} or below.
         </Caption>
       )}
       <Caption className="text-text-muted">
-        Lesson-skipping and point credit from this result aren&apos;t wired
-        up yet - see project/TASKS.md for the phased plan.
+        Every lesson at or below your placed level has been credited with
+        General Level points automatically. Those lessons show a
+        &quot;Placed by exam&quot; badge on the Learning Journey - complete
+        one for real anytime to confirm or improve its score.
       </Caption>
+      {footer}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, Play, Lock, Star } from "lucide-react";
+import { Check, Play, Lock, Star, GraduationCap } from "lucide-react";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import type { LessonAvailabilityStatus } from "@/lib/content/learning-journey";
 import { REFLECTION_PASS_SCORE } from "@/lib/points-system";
@@ -11,6 +11,12 @@ export interface LessonPathItem {
   title: string;
   availability: LessonAvailabilityStatus;
   reflectionTotalScore: number | null;
+  /** Null for a lesson with no completion at all yet. "PLACEMENT" means the
+   * points came from a placement-exam credit, not a real attempt - see
+   * placement-credit.ts. Drives the "Placed by exam" badge below, which
+   * exists to invite the learner to do the lesson for real, not to look
+   * like a genuine completion. */
+  source?: "PLACEMENT" | "COMPLETED" | null;
 }
 
 const STATUS_ICON: Record<LessonAvailabilityStatus, typeof Lock> = {
@@ -85,6 +91,17 @@ export function LessonPath({
                 {lesson.title}
               </span>
               {lesson.availability === "COMPLETED" &&
+                lesson.source === "PLACEMENT" && (
+                  <span
+                    className="inline-flex w-fit items-center gap-1 rounded-full bg-accent-500/15 px-2 py-0.5 font-interface text-caption font-semibold text-accent-300"
+                    title="Complete it yourself to confirm or improve your score."
+                  >
+                    <GraduationCap className="size-3" aria-hidden="true" />
+                    Placed by exam
+                  </span>
+                )}
+              {lesson.availability === "COMPLETED" &&
+                lesson.source !== "PLACEMENT" &&
                 lesson.reflectionTotalScore !== null && (
                   <span
                     className={cn(

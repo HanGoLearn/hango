@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Body, Caption, SectionTitle } from "@/components/ui/typography";
 import { gradePlacementSpeakingAction } from "@/lib/actions/placement-exam";
+import { tierNameForLevel } from "@/lib/points-system";
 import type { AiChatMessage } from "@/components/ai-teacher/ai-teacher-provider";
 import {
   nextPlacementSpeakingLevel,
@@ -163,7 +164,7 @@ export function PlacementSpeakingExam({
 
       <Caption className="text-text-muted">
         Speak naturally. The character&apos;s words never count as your own exam
-        evidence, and HSK 7-9 remains diagnostic only.
+        evidence, and {tierNameForLevel(7)} remains diagnostic only.
       </Caption>
       {error && (
         <Button type="button" variant="secondary" onClick={() => setError(null)}>

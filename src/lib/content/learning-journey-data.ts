@@ -204,7 +204,7 @@ export async function getScenarioDetailWithProgress(
       // page's actual scope. Matches the reflectionReports query right
       // below, which was already scoped correctly.
       where: { userId, lessonId: { in: allLessonIds } },
-      select: { lessonId: true },
+      select: { lessonId: true, source: true },
     }),
     db.lessonReflectionReport.findMany({
       where: { userId, lessonId: { in: allLessonIds } },
@@ -212,6 +212,7 @@ export async function getScenarioDetailWithProgress(
     }),
   ]);
   const completedIds = new Set(completions.map((c) => c.lessonId));
+  const sourceByLesson = new Map(completions.map((c) => [c.lessonId, c.source]));
   const totalScoreByLesson = new Map(
     reflectionReports.map((r) => [r.lessonId, r.totalScore]),
   );
@@ -224,6 +225,7 @@ export async function getScenarioDetailWithProgress(
         ...lesson,
         availability: availability.get(lesson.id)!,
         reflectionTotalScore: totalScoreByLesson.get(lesson.id) ?? null,
+        source: sourceByLesson.get(lesson.id) ?? null,
       })),
     };
   });

@@ -26,7 +26,7 @@ export type OnboardingStep =
   | "explanation-language"
   | "skills"
   | "daily-target"
-  | "ai-preferences"
+  | "placement-offer"
   | "recommendation";
 
 const STEP_ORDER: OnboardingStep[] = [
@@ -36,7 +36,7 @@ const STEP_ORDER: OnboardingStep[] = [
   "explanation-language",
   "skills",
   "daily-target",
-  "ai-preferences",
+  "placement-offer",
   "recommendation",
 ];
 
@@ -50,6 +50,13 @@ const STEP_ORDER: OnboardingStep[] = [
  * question" — both must resume at "welcome" (never skip straight to "goal"),
  * since a first-time learner landing on a question with no introduction at
  * all would be a real regression, not just a harmless repeat.
+ *
+ * AI Preferences was removed as an onboarding step (2026-08-24) -
+ * `correctionStyle` is still independently editable in Settings
+ * (learning-preferences-section.tsx), it's just no longer asked here.
+ * `placementExamOfferAcknowledgedAt` is the "como unica vez" marker for the
+ * placement-exam offer that replaced it in the step order - set the moment
+ * the learner skips the offer or starts the exam, so it's never re-shown.
  */
 export function resolveResumeStep(profile: {
   learningGoals: string[];
@@ -57,14 +64,14 @@ export function resolveResumeStep(profile: {
   explanationLanguage: string | null;
   skillPriorities: string[];
   dailyStudyTargetMinutes: number | null;
-  correctionStyle: string | null;
+  placementExamOfferAcknowledgedAt: Date | null;
 }): OnboardingStep {
   if (profile.learningGoals.length === 0) return "welcome";
   if (!profile.currentLevel) return "level";
   if (!profile.explanationLanguage) return "explanation-language";
   if (profile.skillPriorities.length === 0) return "skills";
   if (profile.dailyStudyTargetMinutes === null) return "daily-target";
-  if (!profile.correctionStyle) return "ai-preferences";
+  if (!profile.placementExamOfferAcknowledgedAt) return "placement-offer";
   return "recommendation";
 }
 

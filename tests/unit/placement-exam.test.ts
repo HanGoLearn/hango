@@ -2,15 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   computeCategoryProgress,
   currentGatedLevel,
-  currentSkillLevel,
   hasGatedSkillStopped,
-  isLevelMastered,
   levelGateStatus,
   levelPassThreshold,
   nextGatedQuestionTarget,
   nextGatedQuestionTargets,
   questionsPerCategory,
-  selectNextCategory,
   type PlacementAttemptRecord,
   type PlacementQuestionMeta,
 } from "@/lib/placement-exam";
@@ -35,7 +32,7 @@ function attempt(questionId: string, isCorrect: boolean, sequence: number): Plac
 }
 
 // ============================================================================
-// computeCategoryProgress - shared by both mechanisms
+// computeCategoryProgress - shared by every skill
 // ============================================================================
 
 describe("computeCategoryProgress", () => {
@@ -59,127 +56,11 @@ describe("computeCategoryProgress", () => {
 });
 
 // ============================================================================
-// Accumulate-to-mastery mechanism - Reading/Listening (unchanged design)
+// Level-gate mechanism - all 4 written skills (2026-08-19 redesign;
+// unified across Reading/Listening 2026-08-27)
 // ============================================================================
 
-describe("accumulate-to-mastery mechanism (Reading/Listening)", () => {
-  describe("isLevelMastered", () => {
-    const questions = new Map(
-      [
-        question("q1", 1, "noun"), question("q2", 1, "noun"),
-        question("q3", 1, "verb"), question("q4", 1, "verb"),
-      ].map((q) => [q.id, q]),
-    );
-
-    it("does not master a level until every category clears the threshold", () => {
-      const attempts = [attempt("q1", true, 1), attempt("q2", true, 2)]; // noun x2, verb x0
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(isLevelMastered(progress, "VOCABULARY", 1, ["noun", "verb"])).toBe(false);
-    });
-
-    it("masters a level once every category clears the threshold", () => {
-      const attempts = [
-        attempt("q1", true, 1), attempt("q2", true, 2),
-        attempt("q3", true, 3), attempt("q4", true, 4),
-      ];
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(isLevelMastered(progress, "VOCABULARY", 1, ["noun", "verb"])).toBe(true);
-    });
-
-    it("ignores incorrect attempts", () => {
-      const attempts = [attempt("q1", false, 1), attempt("q2", false, 2)];
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(isLevelMastered(progress, "VOCABULARY", 1, ["noun", "verb"])).toBe(false);
-    });
-
-    it("a category with no item bank entries can never be mastered - not silently ignored", () => {
-      const progress = computeCategoryProgress([], questions);
-      expect(isLevelMastered(progress, "VOCABULARY", 1, ["noun", "verb", "adjective"])).toBe(false);
-    });
-  });
-
-  describe("currentSkillLevel", () => {
-    const questions = new Map(
-      [
-        question("l1n1", 1, "noun"), question("l1n2", 1, "noun"),
-        question("l1v1", 1, "verb"), question("l1v2", 1, "verb"),
-        question("l2n1", 2, "noun"), question("l2n2", 2, "noun"),
-        question("l2v1", 2, "verb"), question("l2v2", 2, "verb"),
-      ].map((q) => [q.id, q]),
-    );
-
-    it("returns 0 (Pre-HSK) when nothing is mastered", () => {
-      const progress = computeCategoryProgress([], questions);
-      expect(currentSkillLevel(progress, "VOCABULARY", CATEGORIES_BY_LEVEL)).toBe(0);
-    });
-
-    it("cannot skip to level 2 without mastering level 1 first - a gap blocks credit", () => {
-      const attempts = [
-        attempt("l2n1", true, 1), attempt("l2n2", true, 2),
-        attempt("l2v1", true, 3), attempt("l2v2", true, 4),
-      ];
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(currentSkillLevel(progress, "VOCABULARY", CATEGORIES_BY_LEVEL)).toBe(0);
-    });
-
-    it("credits level 1 once mastered, even if level 2 isn't", () => {
-      const attempts = [
-        attempt("l1n1", true, 1), attempt("l1n2", true, 2),
-        attempt("l1v1", true, 3), attempt("l1v2", true, 4),
-      ];
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(currentSkillLevel(progress, "VOCABULARY", CATEGORIES_BY_LEVEL)).toBe(1);
-    });
-
-    it("credits level 2 once both levels are mastered", () => {
-      const attempts = [
-        attempt("l1n1", true, 1), attempt("l1n2", true, 2),
-        attempt("l1v1", true, 3), attempt("l1v2", true, 4),
-        attempt("l2n1", true, 5), attempt("l2n2", true, 6),
-        attempt("l2v1", true, 7), attempt("l2v2", true, 8),
-      ];
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(currentSkillLevel(progress, "VOCABULARY", CATEGORIES_BY_LEVEL)).toBe(2);
-    });
-  });
-
-  describe("selectNextCategory", () => {
-    it("targets the category furthest from the threshold first", () => {
-      const questions = new Map(
-        [question("q1", 1, "noun"), question("q2", 1, "verb")].map((q) => [q.id, q]),
-      );
-      const attempts = [attempt("q1", true, 1)]; // noun=1, verb=0
-      const progress = computeCategoryProgress(attempts, questions);
-      const next = selectNextCategory(progress, "VOCABULARY", CATEGORIES_BY_LEVEL);
-      expect(next).toEqual({ hskLevel: 1, category: "verb" });
-    });
-
-    it("returns null once the pilot ceiling is fully mastered", () => {
-      const questions = new Map(
-        [
-          question("l1n1", 1, "noun"), question("l1n2", 1, "noun"),
-          question("l1v1", 1, "verb"), question("l1v2", 1, "verb"),
-          question("l2n1", 2, "noun"), question("l2n2", 2, "noun"),
-          question("l2v1", 2, "verb"), question("l2v2", 2, "verb"),
-        ].map((q) => [q.id, q]),
-      );
-      const attempts = [
-        attempt("l1n1", true, 1), attempt("l1n2", true, 2),
-        attempt("l1v1", true, 3), attempt("l1v2", true, 4),
-        attempt("l2n1", true, 5), attempt("l2n2", true, 6),
-        attempt("l2v1", true, 7), attempt("l2v2", true, 8),
-      ];
-      const progress = computeCategoryProgress(attempts, questions);
-      expect(selectNextCategory(progress, "VOCABULARY", CATEGORIES_BY_LEVEL)).toBeNull();
-    });
-  });
-});
-
-// ============================================================================
-// Level-gate mechanism - Vocabulary/Grammar (2026-08-19 redesign)
-// ============================================================================
-
-describe("level-gate mechanism (Vocabulary/Grammar)", () => {
+describe("level-gate mechanism (Vocabulary/Grammar/Reading/Listening)", () => {
   describe("questionsPerCategory", () => {
     it("is 2 for Vocabulary HSK1-4", () => {
       expect(questionsPerCategory("VOCABULARY", 1)).toBe(2);
@@ -195,6 +76,21 @@ describe("level-gate mechanism (Vocabulary/Grammar)", () => {
       expect(questionsPerCategory("GRAMMAR", 1)).toBe(2);
       expect(questionsPerCategory("GRAMMAR", 5)).toBe(2);
       expect(questionsPerCategory("GRAMMAR", 9)).toBe(2);
+    });
+
+    it("matches Reading's real seeded bank size per level (2026-08-27 unification)", () => {
+      expect(questionsPerCategory("READING", 1)).toBe(4);
+      expect(questionsPerCategory("READING", 2)).toBe(6);
+      expect(questionsPerCategory("READING", 4)).toBe(6);
+      expect(questionsPerCategory("READING", 5)).toBe(2);
+      expect(questionsPerCategory("READING", 7)).toBe(2);
+    });
+
+    it("matches Listening's real seeded bank size per level (2026-08-27 unification)", () => {
+      expect(questionsPerCategory("LISTENING", 1)).toBe(4);
+      expect(questionsPerCategory("LISTENING", 4)).toBe(4);
+      expect(questionsPerCategory("LISTENING", 5)).toBe(2);
+      expect(questionsPerCategory("LISTENING", 7)).toBe(2);
     });
   });
 
@@ -306,6 +202,19 @@ describe("level-gate mechanism (Vocabulary/Grammar)", () => {
         const attempts = [attempt("n1", true, 1), attempt("n2", false, 2)];
         const progress = computeCategoryProgress(attempts, threeCategoryQuestions);
         expect(levelGateStatus(progress, "GRAMMAR", 1, categories)).toBe("pending");
+      });
+
+      it("Reading/Listening's single-category levels resolve 'failed' after just one wrong answer when required matches the real small bank (e.g. HSK5-9's 2 questions, threshold 2)", () => {
+        const readingQuestions = new Map(
+          [question("r1", 5, "comprehension", "READING"), question("r2", 5, "comprehension", "READING")].map(
+            (q) => [q.id, q],
+          ),
+        );
+        const attempts = [attempt("r1", false, 1)];
+        const progress = computeCategoryProgress(attempts, readingQuestions);
+        // required=2 (questionsPerCategory("READING", 5)), threshold=ceil(2*0.8)=2 -
+        // 1 remaining question, 0 correct so far: 0+1=1 < 2, already decided.
+        expect(levelGateStatus(progress, "READING", 5, ["comprehension"])).toBe("failed");
       });
     });
   });

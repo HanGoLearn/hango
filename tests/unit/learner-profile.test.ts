@@ -7,7 +7,7 @@ const emptyProfile = {
   explanationLanguage: null,
   skillPriorities: [] as string[],
   dailyStudyTargetMinutes: null,
-  correctionStyle: null,
+  placementExamOfferAcknowledgedAt: null as Date | null,
 };
 
 describe("resolveResumeStep", () => {
@@ -54,7 +54,7 @@ describe("resolveResumeStep", () => {
     ).toBe("daily-target");
   });
 
-  it("resumes at 'ai-preferences' once a daily target is set", () => {
+  it("resumes at 'placement-offer' once a daily target is set", () => {
     expect(
       resolveResumeStep({
         ...emptyProfile,
@@ -64,7 +64,7 @@ describe("resolveResumeStep", () => {
         skillPriorities: ["SPEAKING"],
         dailyStudyTargetMinutes: 20,
       }),
-    ).toBe("ai-preferences");
+    ).toBe("placement-offer");
   });
 
   it("resumes at 'recommendation' once everything is answered", () => {
@@ -76,7 +76,7 @@ describe("resolveResumeStep", () => {
         explanationLanguage: "EN",
         skillPriorities: ["SPEAKING"],
         dailyStudyTargetMinutes: 20,
-        correctionStyle: "ONLY_IMPORTANT",
+        placementExamOfferAcknowledgedAt: new Date(),
       }),
     ).toBe("recommendation");
   });

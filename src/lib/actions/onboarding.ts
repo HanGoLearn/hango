@@ -9,8 +9,12 @@ import {
   explanationLanguageStepSchema,
   skillsStepSchema,
   dailyTargetStepSchema,
-  aiPreferencesStepSchema,
 } from "@/lib/validation/onboarding";
+import {
+  computeRecommendation,
+  type Recommendation,
+  type SelfReportedLevel,
+} from "@/lib/recommendation";
 
 export interface OnboardingStepState {
   status: "idle" | "error";
@@ -117,22 +121,26 @@ export async function saveDailyTargetStepAction(
   return idleState;
 }
 
-export async function saveAiPreferencesStepAction(
-  _prevState: OnboardingStepState,
-  formData: FormData,
-): Promise<OnboardingStepState> {
-  const parsed = aiPreferencesStepSchema.safeParse({
-    correctionStyle: formData.get("correctionStyle"),
-  });
-  if (!parsed.success) {
-    return { status: "error", message: parsed.error.issues[0]?.message };
-  }
+/**
+ * Marks the one-time placement-exam offer as resolved, whether the learner
+ * skipped it or started the exam (2026-08-24 "como unica vez" request) -
+ * resolveResumeStep uses this to never show the offer step again.
+ */
+export async function acknowledgePlacementOfferAction(): Promise<void> {
   const userId = await requireUserId();
   await db.learnerProfile.update({
     where: { userId },
-    data: { correctionStyle: parsed.data.correctionStyle },
+    data: { placementExamOfferAcknowledgedAt: new Date() },
   });
-  return idleState;
+}
+
+export async function getRecommendationAction(
+  currentLevel: SelfReportedLevel,
+  learningGoals: string[],
+  skillPriorities: string[],
+): Promise<Recommendation> {
+  const userId = await requireUserId();
+  return computeRecommendation({ userId, currentLevel, learningGoals, skillPriorities });
 }
 
 export async function completeOnboardingAction(): Promise<void> {

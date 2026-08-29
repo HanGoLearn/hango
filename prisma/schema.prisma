@@ -210,6 +210,13 @@ model LearnerProfile {
   /// whether a returning user should see onboarding again (3.3).
   onboardingCompletedAt DateTime?
 
+  /// Set the moment the onboarding placement-exam offer is resolved either
+  /// way (skipped, or the exam was started) - the "como unica vez" one-time
+  /// offer marker (2026-08-24). Null means the offer step still needs to be
+  /// shown; resolveResumeStep uses this to skip straight to "recommendation"
+  /// once it's set, same pattern as every other onboarding field.
+  placementExamOfferAcknowledgedAt DateTime?
+
   /// FASE 8.6 "Store conversations only when enabled" - when false, the AI
   /// Teacher still answers but nothing is written to AiConversation/
   /// AiMessage, and no prior history is sent as context on the next
@@ -1030,11 +1037,26 @@ model MissionEvaluationCriterion {
 // rules genuinely can't be built without knowing what's been completed.
 // ---------------------------------------------------------------------------
 
+/// How a LearnerLessonCompletion came to exist (2026-08-24, "How placement
+/// results become real Learning Journey credit" - project/TASKS.md). Lets
+/// the Learning Journey UI show a distinct "Placed by exam" badge instead
+/// of the normal "Completed" state, inviting the learner to do the lesson
+/// for real - see LessonPath's source-aware rendering.
+enum LessonCompletionSource {
+  PLACEMENT
+  COMPLETED
+}
+
 model LearnerLessonCompletion {
-  id          String   @id @default(cuid())
+  id          String                 @id @default(cuid())
   userId      String
   lessonId    String
-  completedAt DateTime @default(now())
+  completedAt DateTime               @default(now())
+  /// Defaults to COMPLETED (a real completion) - only applyPlacementCredit
+  /// (placement-credit.ts) ever writes PLACEMENT. redoLesson/redoScenario
+  /// delete the row outright on a real redo, so there's no separate
+  /// transition to model here beyond the row's own re-creation.
+  source      LessonCompletionSource @default(COMPLETED)
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)

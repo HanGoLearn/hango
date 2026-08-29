@@ -5,7 +5,7 @@ export type OnboardingStep =
   | "explanation-language"
   | "skills"
   | "daily-target"
-  | "ai-preferences"
+  | "placement-offer"
   | "recommendation";
 
 export interface OnboardingValues {
@@ -14,7 +14,6 @@ export interface OnboardingValues {
   explanationLanguage: string | null;
   skillPriorities: string[];
   dailyStudyTargetMinutes: number | null;
-  correctionStyle: string | null;
 }
 
 export const STEP_ORDER: OnboardingStep[] = [
@@ -24,6 +23,6 @@ export const STEP_ORDER: OnboardingStep[] = [
   "explanation-language",
   "skills",
   "daily-target",
-  "ai-preferences",
+  "placement-offer",
   "recommendation",
 ];

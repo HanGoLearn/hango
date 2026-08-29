@@ -17,7 +17,7 @@ const {
   saveExplanationLanguageStepAction,
   saveSkillsStepAction,
   saveDailyTargetStepAction,
-  saveAiPreferencesStepAction,
+  acknowledgePlacementOfferAction,
   completeOnboardingAction,
 } = await import("@/lib/actions/onboarding");
 
@@ -89,10 +89,12 @@ describe("onboarding (integration, real database)", () => {
       { status: "idle" },
       formDataOf([["dailyStudyTargetMinutes", "20"]]),
     );
-    await saveAiPreferencesStepAction(
-      { status: "idle" },
-      formDataOf([["correctionStyle", "ONLY_IMPORTANT"]]),
-    );
+    profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    expect(resolveResumeStep(profile)).toBe("placement-offer");
+
+    await acknowledgePlacementOfferAction();
 
     profile = await db.learnerProfile.findUniqueOrThrow({
       where: { userId: user.id },

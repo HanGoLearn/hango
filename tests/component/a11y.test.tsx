@@ -111,7 +111,6 @@ describe("Accessibility (axe)", () => {
           explanationLanguage: null,
           skillPriorities: [],
           dailyStudyTargetMinutes: null,
-          correctionStyle: null,
         }}
       />,
     );

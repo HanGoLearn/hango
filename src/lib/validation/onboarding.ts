@@ -59,10 +59,3 @@ export const dailyTargetStepSchema = z.object({
     ),
 });
 
-export const aiPreferencesStepSchema = z.object({
-  correctionStyle: z.enum([
-    "IMMEDIATE",
-    "AFTER_CONVERSATION",
-    "ONLY_IMPORTANT",
-  ]),
-});
