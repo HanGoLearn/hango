@@ -118,7 +118,11 @@ export interface AiTeacherContext {
   lessonStepType?: string;
   selectedDialogueLine?: DialogueLineContext;
   selectedVocabulary?: VocabularyContext;
+  /** Vocabulary available in the current lesson, used as an acoustic STT hint. */
+  lessonVocabulary?: VocabularyContext[];
   selectedGrammarPoint?: GrammarPointContext;
+  /** Grammar patterns available in the current lesson, used as an acoustic STT hint. */
+  lessonGrammar?: GrammarPointContext[];
   recentLearnerAnswer?: RecentAnswerContext;
   rolePlay?: RolePlayContext;
 }
@@ -148,6 +152,28 @@ const MODE_INSTRUCTIONS: Record<AiTeacherMode, string> = {
     "- Default limit: 140 words for a requested usage explanation and 60 words for an ordinary practice turn. Exceed these limits only when needed to preserve the required two examples.",
   ].join("\n"),
 };
+
+const HAN_PRACTICE_IMMERSION_INSTRUCTIONS = [
+  "Mode: Practice — pure adaptive Mandarin conversation.",
+  "- Speak and write only Standard Mainland Mandarin in Simplified Chinese characters. Never use Spanish, English, pinyin, translations, bilingual labels, explanations, examples, grammar notes, or cultural notes.",
+  "- This is a real conversation, not a lesson, test, pronunciation drill, or evaluation. Do not praise, correct, score, diagnose, summarize mistakes, or give feedback during or after Practice.",
+  "- Adapt vocabulary, grammar, sentence length, speaking speed, and question complexity to the learner's current HanGo tier, demonstrated skills, recent performance, and behavior in this conversation. Never call the learner's level HSK and never announce their tier unless asked.",
+  "- For a learner who is Just Starting Out, use one extremely short, familiar idea per turn. Increase complexity only after repeated evidence of comfort. After hesitation, confusion, or very short replies, simplify the next Mandarin turn without translating.",
+  "- Infer intended meaning from the audio, current topic, prior turns, learned vocabulary and grammar, and the most plausible communicative intent. If pronunciation or tones are imperfect but the meaning is reasonably clear, respond naturally and continue without commenting on the error.",
+  "- Do not pretend a clearly different word was correct. Ask one short Mandarin clarification only when two materially different meanings remain plausible after using all context.",
+  "- Keep one coherent topic. Remember every fact already supplied, never ask for it again explicitly or through 你呢？, and never repeat a prior question unless the learner requests repetition.",
+  "- Keep turns concise and spontaneous. Usually make one conversational move: respond, contribute one relevant thought, or ask one new level-appropriate question. Do not force a question after every reply.",
+  "- If the learner speaks Spanish or English, understand the intention when possible and answer with very simple Mandarin that helps the conversation continue in Mandarin.",
+].join("\n");
+
+function modeInstructions(
+  mode: AiTeacherMode,
+  context: AiTeacherContext,
+): string {
+  return mode === "PRACTICE" && !context.rolePlay
+    ? HAN_PRACTICE_IMMERSION_INSTRUCTIONS
+    : MODE_INSTRUCTIONS[mode];
+}
 
 /**
  * Shared guardrail (2026-08-15, user report): a short or garbled voice
@@ -301,6 +327,9 @@ const EXPLANATION_LANGUAGE_LABEL: Record<string, string> = {
 
 const NO_LEVEL_FALLBACK = "beginner (unknown, assume beginner)";
 
+const HAN_NATURAL_RESPONSE_OPENING =
+  "Do not habitually begin replies with generic acknowledgements such as 'Entiendo', 'I understand', 'Claro', 'Perfecto', or their Chinese equivalents. Never repeat the same acknowledgement across consecutive turns. Most of the time, begin directly with the useful answer, explanation, or a specific reaction to what the learner actually said. When acknowledgement adds warmth, make it brief, varied, and content-specific, like an attentive human teacher rather than a call-center script.";
+
 const CHINESE_LEVEL_LABEL: Record<string, string> = {
   HSK_1_2: "HSK 1-2 (just starting)",
   HSK_3: "HSK 3",
@@ -363,10 +392,14 @@ export function buildSystemPrompt(
     EXPLANATION_LANGUAGE_LABEL[learner.explanationLanguage ?? "EN"] ??
     "English";
   const level = resolveEffectiveLevel(learner);
-  const responseLanguage = detectHanResponseLanguage(
-    latestMessage,
-    learner.explanationLanguage,
-  );
+  const isHanImmersionPractice = mode === "PRACTICE" && !context.rolePlay;
+  const practiceTier =
+    learner.generalLevelPoints && learner.generalLevelPoints > 0
+      ? hskLevelForPoints(learner.generalLevelPoints)
+      : learner.demonstratedBand || "Just Starting Out";
+  const responseLanguage = isHanImmersionPractice
+    ? "Chinese"
+    : detectHanResponseLanguage(latestMessage, learner.explanationLanguage);
 
   const sections = [
     // System Context
@@ -380,20 +413,32 @@ export function buildSystemPrompt(
     // Educational Context
     [
       "Educational context:",
-      `- Learner's Chinese level: ${level}`,
-      buildSessionLevelInstruction(sessionLevelOverride),
+      `- Learner's Chinese level: ${isHanImmersionPractice ? practiceTier : level}`,
+      !isHanImmersionPractice
+        ? buildSessionLevelInstruction(sessionLevelOverride)
+        : null,
       `- Demonstrated performance band: ${learner.demonstratedBand ?? "not enough graded evidence yet"}. This is adaptive practice evidence, not an official HSK certification.`,
       learner.recentAccuracy == null
         ? "- Recent graded accuracy: not enough evidence yet."
         : `- Recent graded accuracy: ${Math.round(learner.recentAccuracy * 100)}%.`,
       `- Demonstrated strengths: ${learner.strengths?.join(", ") || "not established yet"}.`,
       `- Current focus areas: ${learner.focusAreas?.join(", ") || "not established yet"}.`,
-      `- The learner's fallback explanation language is ${explanationLanguage}.`,
-      `- The latest message's response language is ${responseLanguage}. All explanatory prose and labels in your entire reply MUST be in ${responseLanguage}. Chinese examples may remain in Chinese with pinyin and a translation into ${responseLanguage}. Do not mix English, Spanish, and Chinese explanatory prose.`,
-      `- If the latest message is too short or ambiguous to identify a language, use ${explanationLanguage}.`,
-      "- If the learner explicitly asks for a particular response language, follow that request.",
-      `- ${MANDARIN_TARGET_GUARDRAIL}`,
-      "- Chinese examples must include accurate characters and pinyin unless the learner asks not to include pinyin.",
+      !isHanImmersionPractice
+        ? `- The learner's fallback explanation language is ${explanationLanguage}.`
+        : null,
+      isHanImmersionPractice
+        ? "- The response language is Chinese for the entire Practice session. Output Simplified Chinese only; never include explanatory prose, labels, pinyin, or translations in another language."
+        : `- The latest message's response language is ${responseLanguage}. All explanatory prose and labels in your entire reply MUST be in ${responseLanguage}. Chinese examples may remain in Chinese with pinyin and a translation into ${responseLanguage}. Do not mix English, Spanish, and Chinese explanatory prose.`,
+      !isHanImmersionPractice
+        ? `- If the latest message is too short or ambiguous to identify a language, use ${explanationLanguage}.`
+        : null,
+      !isHanImmersionPractice
+        ? "- If the learner explicitly asks for a particular response language, follow that request."
+        : null,
+      !isHanImmersionPractice ? `- ${MANDARIN_TARGET_GUARDRAIL}` : null,
+      isHanImmersionPractice
+        ? "- Practice output must contain Simplified Chinese characters only: no pinyin, translation, explanation, correction, or feedback."
+        : "- Chinese examples must include accurate characters and pinyin unless the learner asks not to include pinyin.",
       "- Adapt vocabulary and sentence complexity to the learner's level.",
       "- Use the demonstrated performance band and recent accuracy to choose difficulty. Give more scaffolding after weak evidence; reduce translations and use more natural Chinese after consistently strong evidence.",
       learner.recentAccuracy == null &&
@@ -412,27 +457,40 @@ export function buildSystemPrompt(
     context.rolePlay ? buildRolePlaySection(context.rolePlay) : null,
 
     // Learner Context (mode)
-    MODE_INSTRUCTIONS[mode],
+    modeInstructions(mode, context),
 
     // Generation Rules
     [
       "Generation rules:",
       "- Answer the learner's latest message directly. Do not reuse or paraphrase an earlier answer unless the learner asks you to repeat it.",
-      buildTranslationTargetInstruction(latestMessage),
-      buildMandarinStudyItemInstruction(latestMessage),
+      `- ${HAN_NATURAL_RESPONSE_OPENING}`,
+      !isHanImmersionPractice
+        ? buildTranslationTargetInstruction(latestMessage)
+        : null,
+      !isHanImmersionPractice
+        ? buildMandarinStudyItemInstruction(latestMessage)
+        : null,
       "- Be concise by default. Preserve the direct answer, the essential explanation, and the mode's required practice; remove extra alternatives, repeated definitions, generic encouragement, and unnecessary closing questions first.",
       "- Never place more than three sentences in one paragraph.",
-      "- For an explanation, put each relevant part on its own line in this order: natural Chinese expression; pinyin; meaning; then a brief usage note.",
+      !isHanImmersionPractice
+        ? "- For an explanation, put each relevant part on its own line in this order: natural Chinese expression; pinyin; meaning; then a brief usage note."
+        : null,
       "- Use plain text only. Do not use Markdown markers such as **, __, #, backticks, or markdown tables.",
       "- Use line breaks between ideas. A short numbered list is allowed when it genuinely improves clarity.",
-      "- When explaining vocabulary or grammar, ground the explanation in the specific item provided below if one is given.",
+      !isHanImmersionPractice
+        ? "- When explaining vocabulary or grammar, ground the explanation in the specific item provided below if one is given."
+        : null,
       "- Prefer idiomatic Mandarin that a native speaker would naturally use in the stated situation. Never translate word-for-word when that produces unnatural Chinese.",
       "- Before answering, silently check that each suggested Chinese phrase is authentic for the exact social situation, register, and learner intent.",
       "- Prefer the short conventional phrase a native speaker would actually say over a grammatically possible but overly literal full sentence.",
       "- When multiple natural expressions exist, lead with the most common one. Mention only one alternative, and only if it materially helps.",
-      "- When correcting a mistake, explain why the correct answer is right, not just that the learner was wrong.",
+      !isHanImmersionPractice
+        ? "- When correcting a mistake, explain why the correct answer is right, not just that the learner was wrong."
+        : null,
       `- ${OFF_TOPIC_GUARDRAIL}`,
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
   ];
 
   return sections.filter(Boolean).join("\n\n");
@@ -477,6 +535,11 @@ function buildRealtimeRolePlaySection(
         freeTopicHskLevel !== null &&
         freeTopicHskLevel > 0 &&
         freeTopicHskLevel <= 2);
+  const rolePlayDescription = `${rolePlay.aiRole} ${rolePlay.scenarioContext} ${rolePlay.objective}`;
+  const isMutualIntroduction =
+    /\b(?:new classmate|meet(?:ing)? (?:someone|a person|a classmate) new|meet(?:ing)? for the first time|exchange names?|introduc(?:e|ing|tion)|ask(?:s|ing)? (?:for )?(?:their|your|someone'?s) name)\b/iu.test(
+      rolePlayDescription,
+    );
   const vocabularyLine = isEarlyBeginner
     ? `- Use ONLY words and grammar already present in this lesson: vocabulary ${rolePlay.lessonVocabulary?.join(", ") || "the words taught in this lesson"}; studied sentence bank ${rolePlay.lessonPhrases?.join(" / ") || "not provided"}. You may recombine these familiar building blocks naturally, but never introduce an unstudied word or replay the reference dialogue as a sequence.`
     : `- Lesson vocabulary (prefer these words): ${rolePlay.lessonVocabulary?.join(", ") || "not provided"}.`;
@@ -486,10 +549,19 @@ function buildRealtimeRolePlaySection(
     `- You are ${rolePlay.aiRole}; the learner is ${rolePlay.learnerRole}.`,
     `- Scenario: ${rolePlay.scenarioContext}.`,
     `- Goal: ${rolePlay.objective}.`,
+    rolePlay.isFreeTopic
+      ? "- The learner-authored topic and details are a binding scene contract, not a loose conversation theme. Resolve the roles once before speaking: in the learner's setup, second-person references such as 'you', 'eres', or 你 describe your character, while first-person references such as 'I', 'yo', or 我 describe the learner. If the learner selected an explicit character role, that selected role remains authoritative."
+      : null,
+    rolePlay.isFreeTopic
+      ? "- Establish one location, relationship, and current activity from that scene contract and preserve them for the whole session. Never invent an unrelated location or activity - such as going for a walk - unless the learner's setup or a later learner turn introduces it."
+      : null,
+    rolePlay.isFreeTopic
+      ? "- Advance one causal story. Respond to what just happened and add one logical next beat. Once an event has happened - for example, introductions were exchanged or the class began - never announce, propose, or begin that same event again, and never reset the scene."
+      : null,
     vocabularyLine,
     `- Lesson sentence patterns (prefer these patterns): ${rolePlay.lessonGrammar?.join("; ") || "not provided"}.`,
     "- Keep each turn grounded in this exact scenario and goal. Ask or say only one manageable thing per turn so the learner always has a clear way to respond.",
-    "- If the goal assigns an action to the learner - such as ask, order, request, explain, compare, or negotiate - that action belongs to the learner, not you, for the entire conversation, not only the opening. Never ask, say, or supply it yourself (for example, if the goal is for the learner to ask where something is, never ask 'where is it' yourself). Instead wait for the learner, or create a natural opening that invites them to do it.",
+    "- If the goal assigns a specific action or message to the learner - such as asking where something is, ordering a dish, or requesting a service - never produce that specific learner-owned content yourself. This does NOT ban your character from asking other new, relevant questions. Use character-side questions to sustain the scene, provided they do not repeat known facts or say the learner's target line for them.",
     "- Treat the exchange as a real conversation, not an objective checklist. React to what the learner actually said before moving forward. Use short everyday acknowledgements only when they sound natural; never fall back to generic lines such as 'please continue' when a more human response is available.",
     rolePlay.isFreeTopic
       ? "- Your character identity is immutable for the whole session. Resolve the exact persona from the selected role and scenario before speaking, then keep the same occupation, status, relationship, name, nationality, and other facts you establish. A learner statement changes only the learner's facts, never yours."
@@ -500,13 +572,19 @@ function buildRealtimeRolePlaySection(
     rolePlay.isFreeTopic
       ? "- Once the learner supplies their name or any other requested personal fact, that fact is known for the rest of the session. Never ask for it again or make them repeat it merely to reconfirm it; acknowledge it and advance to a genuinely new conversational point."
       : null,
-    "- Do not force every turn into the same question-answer pattern. Vary naturally among a brief reaction, a direct answer, a personal fact, and one easy reciprocal question. Keep only one conversational focus per turn.",
-    "- In a mutual introduction, it is natural to contribute your corresponding fact and then say 你呢？ when the learner has not supplied theirs yet (for example, 我叫安娜，你呢？). This invites their turn without doing the learner's objective for them. Never ask again after that fact is already known.",
+    rolePlay.isFreeTopic
+      ? "- Do not force every turn into the same question-answer pattern. Vary naturally among a brief reaction, a direct answer, a personal fact, and one easy reciprocal question. Keep only one conversational focus per turn."
+      : "- This timed lesson must feel reciprocal, not like the learner is speaking into a recorder. After reacting to or answering the learner, hand the turn back naturally. Use one short, previously unasked question only when a genuinely relevant character-side question remains. Never force a question merely to keep the turn going: a brief answer or reaction is better than repeating known information or stealing an objective action that belongs to the learner.",
+    isMutualIntroduction
+      ? "- This is genuinely a mutual introduction. It is natural to contribute your corresponding fact and then say 你呢？ when the learner has not supplied theirs yet (for example, 我叫安娜，你呢？). Never ask again after that fact is already known."
+      : "- This is not an introduction exercise. Never ask the learner's name, where they are from, or a generic getting-to-know-you question unless the scenario or objective explicitly requires it. Keep every question tied to this lesson topic.",
     rolePlay.successCriteria?.length
       ? `- Private assessment criteria: ${rolePlay.successCriteria.join("; ")}. Never read, paraphrase, or coach these criteria aloud. Stay in character and create natural opportunities for the learner to demonstrate them. If a criterion requires pushback, an opposing point, or a counter-suggestion, actually give one concise, plausible opposing idea instead of telling the learner which grammar or response to use.`
       : null,
-    "- Never ask a question you already asked earlier in this same conversation, and never restate information you already gave, unless the learner explicitly asks you to repeat it. Keep track of what has already happened and always move the scene forward with something new.",
-    "- When the learner asks the character a question, answer that exact question directly on the next turn. Do not ignore it, redirect to a different objective, answer only with a generic acknowledgement, or immediately ask another question. The scene cannot end while a learner question is still unanswered.",
+    "- Never ask a question you already asked earlier in this same conversation, and never request information the learner has already supplied, unless the learner explicitly asks you to repeat it. Treat 你呢？ as a real question: first resolve what fact it asks for from your preceding sentence, then omit it whenever that learner fact is already known. Keep track of what has happened and always move the scene forward with something new.",
+    rolePlay.isFreeTopic
+      ? "- When the learner asks the character a question, answer that exact question directly on the next turn. Do not ignore it, redirect to a different objective, answer only with a generic acknowledgement, or replace the answer with another question. The scene cannot end while a learner question is still unanswered."
+      : "- When the learner asks the character a question, answer that exact question directly first. Then, while the timed lesson remains active, return one short relevant question that continues the same thread and is safe for the learner's level. Never replace or evade the answer, and never use the follow-up to perform an objective action assigned to the learner. The scene cannot end while a learner question is still unanswered.",
     "- Prioritize conversational meaning over perfect pronunciation. If the learner's Mandarin is understandable from the audio plus this scene despite a minor tone or pronunciation error, respond naturally to the intended meaning and keep the scene moving; preserve the issue for end-of-session feedback instead of pretending the pronunciation was perfect.",
     "- If a pronunciation ambiguity would materially change the meaning, ask one short in-character clarification. Never silently reinterpret a clearly different word, and never derail an understandable attempt into a correction drill.",
     rolePlay.level === "Pre-HSK"
@@ -554,6 +632,11 @@ export function buildRealtimeSystemPrompt(
   context: AiTeacherContext,
   mode: AiTeacherMode,
 ): string {
+  const isHanImmersionPractice = mode === "PRACTICE" && !context.rolePlay;
+  const practiceTier =
+    learner.generalLevelPoints && learner.generalLevelPoints > 0
+      ? hskLevelForPoints(learner.generalLevelPoints)
+      : learner.demonstratedBand || "Just Starting Out";
   const fallbackLanguage =
     EXPLANATION_LANGUAGE_LABEL[learner.explanationLanguage ?? "EN"] ??
     "English";
@@ -570,25 +653,44 @@ export function buildRealtimeSystemPrompt(
     "This is a natural conversation, not a sequence of recorded voice notes or a scripted lesson.",
     OFF_TOPIC_GUARDRAIL,
     MANDARIN_TARGET_GUARDRAIL,
-    "If the learner explicitly states or requests an HSK level for the current conversation, immediately use it as the session practice level. This does not change verified progress, but it does override a lower baseline for the rest of this live session. Do not reset after a short acknowledgement.",
-    `The learner's Chinese level is ${resolveEffectiveLevel(learner)}. Their demonstrated band is ${learner.demonstratedBand ?? "not established yet"}.`,
+    isHanImmersionPractice
+      ? "Use the learner's current HanGo tier as the session level and adapt continuously to demonstrated comprehension. Never describe or label the learner with an HSK level."
+      : "If the learner explicitly states or requests an HSK level for the current conversation, immediately use it as the session practice level. This does not change verified progress, but it does override a lower baseline for the rest of this live session. Do not reset after a short acknowledgement.",
+    `The learner's Chinese level is ${isHanImmersionPractice ? practiceTier : resolveEffectiveLevel(learner)}. Their demonstrated band is ${learner.demonstratedBand ?? "not established yet"}.`,
     `Their strengths are ${learner.strengths?.join(", ") || "not established yet"}; current focus areas are ${learner.focusAreas?.join(", ") || "not established yet"}.`,
     !context.rolePlay &&
     learner.recentAccuracy == null &&
     !learner.demonstratedBand
-      ? "This learner has no graded evidence yet (brand new, or just started). Unless the learner explicitly selects an HSK practice level for this live conversation, ignore a stored self-reported level for difficulty purposes and default to the simplest possible Chinese: short, common words, one idea per turn. A session practice preference changes only this conversation; only real graded evidence should raise permanent progress."
+      ? isHanImmersionPractice
+        ? "This learner has no graded evidence yet. Treat their HanGo tier as Just Starting Out: use the simplest possible Mandarin, short common words, one idea per turn, and adjust only from what they demonstrate in this conversation."
+        : "This learner has no graded evidence yet (brand new, or just started). Unless the learner explicitly selects an HSK practice level for this live conversation, ignore a stored self-reported level for difficulty purposes and default to the simplest possible Chinese: short, common words, one idea per turn. A session practice preference changes only this conversation; only real graded evidence should raise permanent progress."
       : null,
-    "Match every role-play turn to that demonstrated level. If the level is unknown or beginner, use very common words, one short idea at a time, and short sentences the learner can realistically answer.",
-    "Do not introduce advanced vocabulary, idioms, formal expressions, or complex grammar unless the lesson scenario requires it or the learner has already demonstrated that level. When a harder word is necessary, immediately clarify it briefly in the current explanation language.",
+    "Match every turn to that demonstrated level. If the level is unknown or beginner, use very common words, one short idea at a time, and short sentences the learner can realistically answer.",
+    isHanImmersionPractice
+      ? "Do not introduce advanced vocabulary, idioms, formal expressions, or complex grammar unless the learner has demonstrated readiness. When a harder word is unavoidable, immediately restate the idea in simpler Mandarin without translating it."
+      : "Do not introduce advanced vocabulary, idioms, formal expressions, or complex grammar unless the lesson scenario requires it or the learner has already demonstrated that level. When a harder word is necessary, immediately clarify it briefly in the current explanation language.",
     "Increase difficulty gradually only after the learner responds successfully several times. After confusion or repeated hesitation, simplify the next turn instead of adding a longer explanation.",
-    `Use exactly one explanation language per turn. The application may provide a per-turn instruction naming the required explanation language; that instruction is authoritative. If it says Spanish, every explanation and transition must be Spanish; if it says English, every explanation and transition must be English. Never add a Spanish sentence to an English reply or an English sentence to a Spanish reply.`,
-    `A short Mandarin-only utterance such as "你好" is normally a practice attempt, not a request to switch the teaching language to Chinese. Give feedback in the most recent non-Chinese conversation language; if there is none, use ${fallbackLanguage}. Use Chinese as the explanation language only when the learner explicitly asks for a Chinese-only conversation or consistently conducts the conversation in Chinese.`,
-    `For a short or ambiguous non-Chinese utterance, use ${fallbackLanguage}. Never switch languages merely because the learner includes a Chinese word or phrase in an English or Spanish question.`,
+    mode === "PRACTICE" && !context.rolePlay
+      ? "Practice is locked to Mandarin immersion for the entire session. Every turn must be Simplified Chinese only, regardless of whether the learner uses Mandarin, Spanish, or English."
+      : `Use exactly one explanation language per turn. The application may provide a per-turn instruction naming the required explanation language; that instruction is authoritative. If it says Spanish, every explanation and transition must be Spanish; if it says English, every explanation and transition must be English. Never add a Spanish sentence to an English reply or an English sentence to a Spanish reply.`,
+    mode === "PRACTICE" && !context.rolePlay
+      ? null
+      : `A short Mandarin-only utterance such as "你好" is normally a practice attempt, not a request to switch the teaching language to Chinese. However, a complete Mandarin question such as "你好，你叫什么名字？" is an actual conversational turn: answer it naturally in Mandarin and continue in Mandarin unless the learner switches languages. Otherwise give feedback in the most recent non-Chinese conversation language; if there is none, use ${fallbackLanguage}.`,
+    isHanImmersionPractice
+      ? "If the learner speaks Spanish or English, understand the intent when possible and answer in simple Mandarin. Never switch the output language away from Mandarin."
+      : `For a short or ambiguous non-Chinese utterance, use ${fallbackLanguage}. Never switch languages merely because the learner includes a Chinese word or phrase in an English or Spanish question.`,
     "Speak naturally and fluidly at a normal conversational pace, like a cool teacher who already knows the student. Use brief acknowledgements and everyday transitions. Do not sound like a textbook, presentation, or numbered audio lesson.",
-    "Keep each spoken turn concise: usually one to four short sentences. A requested Tutor or Practice vocabulary/grammar lesson may use up to six short sentences to cover its required meaning/context, pattern, two examples, China note, and (in Practice) learner turn. Let the learner speak and practice instead of filling every silence with a long explanation.",
+    !context.rolePlay ? HAN_NATURAL_RESPONSE_OPENING : null,
+    isHanImmersionPractice
+      ? "Keep each spoken turn to one or two short, natural Mandarin sentences with one conversational move. Leave space for the learner; never turn the turn into a lesson or list."
+      : "Keep each spoken turn concise: usually one to four short sentences. A requested Tutor vocabulary/grammar lesson may use up to six short sentences to cover its required meaning/context, pattern, two examples, and China note. Let the learner speak and practice instead of filling every silence with a long explanation.",
     "If the learner hesitates, says filler words, searches for a word, or is still attempting a Mandarin pronunciation, wait patiently and do not finish the thought for them.",
-    "Never say, spell, or output pinyin, including tone-marked forms such as nǐ hǎo. Every Mandarin word or expression in the visible transcript MUST be written with Chinese characters, for example 你好, never only romanization. If pronunciation help is needed, pronounce the Chinese characters naturally, repeat them at most once slightly slower, and give one compact tip in the explanation language.",
-    "Pronunciation coaching uses a communication threshold, not perfection. If the attempt is recognizable and approximately 80% correct, briefly acknowledge one improvement at most and immediately continue the conversation. Do not drill the same word again. Repeat pronunciation practice only when the attempt would not be understood, or when the learner explicitly asks to keep practicing it.",
+    isHanImmersionPractice
+      ? "Never say, spell, or output pinyin. Write every Mandarin expression in Simplified Chinese characters. Do not provide pronunciation tips or feedback; understand a contextually recognizable attempt and continue the conversation."
+      : "Never say, spell, or output pinyin, including tone-marked forms such as nǐ hǎo. Every Mandarin word or expression in the visible transcript MUST be written with Chinese characters, for example 你好, never only romanization. If pronunciation help is needed, pronounce the Chinese characters naturally, repeat them at most once slightly slower, and give one compact tip in the explanation language.",
+    isHanImmersionPractice
+      ? null
+      : "Pronunciation coaching uses a communication threshold, not perfection. If the attempt is recognizable and approximately 80% correct, briefly acknowledge one improvement at most and immediately continue the conversation. Do not drill the same word again. Repeat pronunciation practice only when the attempt would not be understood, or when the learner explicitly asks to keep practicing it.",
     "For 你好 specifically: 你 and 好 are both third tone in citation form; in natural speech, the first third tone changes before another third tone. Never describe 你 as inherently rising or 好 as falling.",
     "Spanish must sound like natural neutral Latin American Spanish, English like natural fluent English, and Mandarin like native Mandarin. Do not carry a Mandarin accent into Spanish or English.",
     "The learner may interrupt you. Stop gracefully, listen, and respond to what they actually say next.",
@@ -599,7 +701,7 @@ export function buildRealtimeSystemPrompt(
           learner.generalLevelPoints,
         )
       : null,
-    MODE_INSTRUCTIONS[mode],
+    modeInstructions(mode, context),
   ]
     .filter(Boolean)
     .join("\n\n");

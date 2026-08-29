@@ -11,11 +11,31 @@ import {
 } from "@/lib/ai-context";
 
 describe("buildSystemPrompt", () => {
-  it("keeps an explicitly selected HSK 5 level after a short acknowledgement", () => {
+  it("keeps Han from repeating generic acknowledgements", () => {
+    const textPrompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      "¿Cómo uso 吧?",
+    );
+    const voicePrompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+    );
+
+    for (const prompt of [textPrompt, voicePrompt]) {
+      expect(prompt).toContain("Do not habitually begin replies");
+      expect(prompt).toContain("Never repeat the same acknowledgement");
+      expect(prompt).toContain("begin directly with the useful answer");
+    }
+  });
+
+  it("keeps an explicitly selected HSK 5 level in Tutor after a short acknowledgement", () => {
     const prompt = buildSystemPrompt(
       { level: "BEGINNER", explanationLanguage: "EN" },
       {},
-      "PRACTICE",
+      "TUTOR",
       "Yeah, go ahead.",
       "HSK 5",
     );
@@ -54,7 +74,7 @@ describe("buildSystemPrompt", () => {
       {},
       "TUTOR",
     );
-    expect(prompt).toContain("HSK 4");
+    expect(prompt).toContain("Easily Understood");
     expect(prompt).toContain("950/2000");
     expect(prompt).toContain("more reliable than any self-reported level");
     // The self-reported value itself should not leak into the prompt once earned data exists.
@@ -150,7 +170,7 @@ describe("buildSystemPrompt", () => {
         {},
         "PRACTICE",
       ),
-    ).toContain("Mode: Practice.");
+    ).toContain("Mode: Practice — pure adaptive Mandarin conversation.");
   });
 
   it("gives each mode a distinct concise teaching behavior", () => {
@@ -174,19 +194,16 @@ describe("buildSystemPrompt", () => {
     expect(tutor).toContain(
       "Do not reduce a vocabulary or grammar request to pronunciation alone",
     );
-    expect(practice).toContain(
-      "Context; How to use it; Example 1; Example 2; China note; Your turn",
-    );
-    expect(practice).toContain(
-      "Contexto; Cómo se utiliza; Ejemplo 1; Ejemplo 2; Nota de China; Tu turno",
-    );
-    expect(practice).toContain("Never invent trivia");
-    expect(practice).toContain(
-      "Default limit: 140 words for a requested usage explanation and 60 words for an ordinary practice turn",
-    );
+    expect(practice).toContain("Speak and write only Standard Mainland Mandarin");
+    expect(practice).toContain("This is a real conversation, not a lesson");
+    expect(practice).toContain("Do not praise, correct, score, diagnose");
+    expect(practice).toContain("current HanGo tier");
+    expect(practice).toContain("Never call the learner's level HSK");
+    expect(practice).not.toContain("Context; How to use it; Example 1");
+    expect(practice).not.toContain("Your turn");
   });
 
-  it("turns a Practice usage question into a structured guided exercise", () => {
+  it("keeps a Practice usage question inside Mandarin immersion", () => {
     const prompt = buildSystemPrompt(
       {
         level: "HSK_3",
@@ -204,10 +221,11 @@ describe("buildSystemPrompt", () => {
       "¿Cómo se usa 把?",
     );
 
-    expect(prompt).toContain("Context; How to use it");
-    expect(prompt).toContain("Example 1 and Example 2");
-    expect(prompt).toContain("China note");
-    expect(prompt).toContain("Your turn");
+    expect(prompt).toContain("pure adaptive Mandarin conversation");
+    expect(prompt).toContain("Never use Spanish, English, pinyin, translations");
+    expect(prompt).toContain("Infer intended meaning from the audio, current topic");
+    expect(prompt).not.toContain("Example 1 and Example 2");
+    expect(prompt).not.toContain("China note");
     expect(prompt).toContain("Subject + 把 + object + verb + result/location");
   });
 
@@ -232,7 +250,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("instead of stopping after pronunciation");
   });
 
-  it("keeps 吧 as a Mandarin particle instead of Spanish va", () => {
+  it("does not turn a Practice 吧 request into a Spanish explanation or lesson", () => {
     const prompt = buildSystemPrompt(
       {
         level: "HSK_3",
@@ -245,13 +263,10 @@ describe("buildSystemPrompt", () => {
       "Quiero practicar el uso del吧.",
     );
 
-    expect(prompt).toContain("Mandarin item 吧");
-    expect(prompt).toContain("preserve them exactly");
-    expect(prompt).toContain('NEVER be interpreted as Spanish "va"');
-    expect(prompt).toContain('"Él va al parque" are unrelated and forbidden');
-    expect(prompt).toContain(
-      "complete vocabulary-or-grammar teaching structure",
-    );
+    expect(prompt).toContain("Simplified Chinese characters");
+    expect(prompt).toContain("not a lesson, test, pronunciation drill");
+    expect(prompt).not.toContain('Spanish "va"');
+    expect(prompt).not.toContain("complete vocabulary-or-grammar teaching structure");
   });
 
   it("keeps a Latin ba request inside Mandarin in Tutor mode", () => {
@@ -507,16 +522,17 @@ describe("buildRealtimeSystemPrompt", () => {
     );
   });
 
-  it("preserves a live-session HSK choice after a short acknowledgement", () => {
+  it("uses HanGo tiers rather than HSK labels in live Practice", () => {
     const prompt = buildRealtimeSystemPrompt(
       { level: "BEGINNER", explanationLanguage: "EN" },
       {},
       "PRACTICE",
     );
 
-    expect(prompt).toContain("explicitly states or requests an HSK level");
-    expect(prompt).toContain("Do not reset after a short acknowledgement");
-    expect(prompt).toContain("Unless the learner explicitly selects");
+    expect(prompt).toContain("current HanGo tier");
+    expect(prompt).toContain("Never describe or label the learner with an HSK level");
+    expect(prompt).toContain("Just Starting Out");
+    expect(prompt).not.toContain("explicitly states or requests an HSK level");
   });
 
   it("waits through hesitation and keeps spoken turns natural and concise", () => {
@@ -526,19 +542,26 @@ describe("buildRealtimeSystemPrompt", () => {
       "PRACTICE",
     );
     expect(prompt).toContain("wait patiently");
-    expect(prompt).toContain("one to four short sentences");
-    expect(prompt).toContain(
-      "Tutor or Practice vocabulary/grammar lesson may use up to six short sentences",
-    );
+    expect(prompt).toContain("one or two short, natural Mandarin sentences");
     expect(prompt).toContain("Never say, spell, or output pinyin");
-    expect(prompt).toContain(
-      "Never add a Spanish sentence to an English reply",
-    );
-    expect(prompt).toContain("normally a practice attempt");
-    expect(prompt).toContain("approximately 80% correct");
-    expect(prompt).toContain("MUST be written with Chinese characters");
+    expect(prompt).toContain("Every turn must be Simplified Chinese only");
+    expect(prompt).toContain("understand a contextually recognizable attempt");
+    expect(prompt).not.toContain("approximately 80% correct");
     expect(prompt).toContain("both third tone");
-    expect(prompt).toContain("Mode: Practice.");
+    expect(prompt).toContain("Mode: Practice — pure adaptive Mandarin conversation.");
+  });
+
+  it("answers a complete Mandarin question in Mandarin instead of the saved fallback", () => {
+    const prompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN" },
+      {},
+      "TUTOR",
+    );
+
+    expect(prompt).toContain(
+      'a complete Mandarin question such as "你好，你叫什么名字？"',
+    );
+    expect(prompt).toContain("answer it naturally in Mandarin");
   });
 
   it("keeps lesson role-play grounded and appropriate for the learner level", () => {
@@ -657,6 +680,12 @@ describe("buildRealtimeSystemPrompt", () => {
       "Once the learner supplies their name or any other requested personal fact",
     );
     expect(prompt).toContain("Never ask for it again");
+    expect(prompt).toContain("binding scene contract");
+    expect(prompt).toContain("you', 'eres', or 你");
+    expect(prompt).toContain(
+      "one location, relationship, and current activity",
+    );
+    expect(prompt).toContain("never reset the scene");
   });
 
   it("defaults to the strict in-character rule when correctionMode is unset (existing lesson behavior)", () => {
@@ -677,6 +706,11 @@ describe("buildRealtimeSystemPrompt", () => {
       "Speak Mandarin Chinese only for the entire live role-play",
     );
     expect(prompt).not.toContain("tutoring conversation");
+    expect(prompt).toContain("timed lesson must feel reciprocal");
+    expect(prompt).toContain("only when a genuinely relevant character-side question remains");
+    expect(prompt).toContain("Never force a question");
+    expect(prompt).toContain("This is not an introduction exercise");
+    expect(prompt).toContain("Never ask the learner's name");
   });
 });
 

@@ -56,6 +56,15 @@ export function LessonEngine({
       scenarioName: lesson.scenarioLevel.scenario.name,
       lessonTitle: lesson.title,
       lessonStepType: currentStep.type,
+      lessonVocabulary: lesson.vocabulary.map(({ vocabularyItem }) => ({
+        chineseForm: vocabularyItem.chineseForm,
+        pinyin: vocabularyItem.pinyin,
+        meaning: vocabularyItem.meaning,
+      })),
+      lessonGrammar: lesson.grammar.map(({ grammarPoint }) => ({
+        name: grammarPoint.name,
+        structure: grammarPoint.structure,
+      })),
     });
     // Re-syncs the AI Teacher's context whenever the active step changes;
     // setContext/clearSelection are stable (useCallback in the provider).

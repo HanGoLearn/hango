@@ -42,6 +42,7 @@ import {
   realtimeRolePlayOutputTokenLimit,
   shouldHoldRealtimeLearnerAction,
   shouldBlockForRolePlayAssessment,
+  userFacingRealtimeVoiceError,
   type HanExplanationLanguage,
   type ConversationCompletionAssessment,
   type PronunciationPracticeState,
@@ -891,6 +892,18 @@ export function HanVoiceConversation({
   ) {
     const channel = dataChannelRef.current;
     if (channel?.readyState !== "open") return;
+    if (activeResponseRef.current) {
+      // Realtime accepts only one active response. Keep the newest learner
+      // turn queued until the current response is cancelled/completed.
+      pendingTurnInstructionsRef.current = turnInstructions;
+      interruptActiveRealtimeResponse();
+      setState("thinking");
+      return;
+    }
+    // Mark synchronously, before response.created comes back. Otherwise two
+    // transcription events in the same network window can both request a
+    // response and the API rejects the second one.
+    activeResponseRef.current = true;
     const guardItemId = `item_guard_${crypto.randomUUID().replaceAll("-", "").slice(0, 21)}`;
     ephemeralTurnGuardItemIdRef.current = guardItemId;
     const { guardEvent, responseEvent } =
@@ -1160,10 +1173,13 @@ export function HanVoiceConversation({
           pronunciationPracticeRef.current,
         );
         pronunciationPracticeRef.current = pronunciation.state;
-        const requiredLanguage = nextHanExplanationLanguage(
-          transcript,
-          explanationLanguageRef.current,
-        );
+        const requiredLanguage =
+          !activeContext.rolePlay && mode === "PRACTICE"
+            ? "Chinese"
+            : nextHanExplanationLanguage(
+                transcript,
+                explanationLanguageRef.current,
+              );
         explanationLanguageRef.current = requiredLanguage;
         pendingUserTextRef.current = transcript;
         transcriptRef.current.push({ role: "user", content: transcript });
@@ -1353,9 +1369,8 @@ export function HanVoiceConversation({
         return;
       }
       if (
-        allowsBargeIn &&
-        activeContext.rolePlay &&
-        pendingTurnInstructionsRef.current
+        pendingTurnInstructionsRef.current &&
+        (!activeContext.rolePlay || allowsBargeIn)
       ) {
         const pendingInstructions = pendingTurnInstructionsRef.current;
         pendingTurnInstructionsRef.current = "";
@@ -1366,7 +1381,9 @@ export function HanVoiceConversation({
         confirmedBargeInRef.current = false;
         sendSessionPreservingRealtimeReply(
           pendingInstructions,
-          realtimeRolePlayOutputTokenLimit(activeContext.rolePlay, "turn"),
+          activeContext.rolePlay
+            ? realtimeRolePlayOutputTokenLimit(activeContext.rolePlay, "turn")
+            : undefined,
         );
         return;
       }
@@ -1395,8 +1412,10 @@ export function HanVoiceConversation({
       void completeConversationAfterEvidence();
       return;
     }
-    if (event.type === "error")
-      setError(event.error?.message ?? "The live voice session had a problem.");
+    if (event.type === "error") {
+      activeResponseRef.current = false;
+      setError(userFacingRealtimeVoiceError(event.error?.message));
+    }
   }
 
   async function startConversation() {

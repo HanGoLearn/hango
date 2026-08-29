@@ -28,6 +28,17 @@ describe("Han STT language constraints", () => {
     expect(normalizeHanTranscript("ài qíng")).toBe("爱情");
   });
 
+  it("repairs the reported 一边…一边… and 着 Spanish-biased transcription", () => {
+    expect(
+      normalizeHanTranscript(
+        "¿Cuál es la diferencia entre y bien, y bien y el otro es.",
+      ),
+    ).toBe("¿Cuál es la diferencia entre 一边…一边… y 着?");
+    expect(normalizeHanTranscript("Estoy bien, y bien acompañado.")).toBe(
+      "Estoy bien, y bien acompañado.",
+    );
+  });
+
   it("uses the selected lesson vocabulary to display pinyin as hanzi", () => {
     const hints = transcriptHintsFromContext({
       selectedVocabulary: {
@@ -39,6 +50,34 @@ describe("Han STT language constraints", () => {
 
     expect(normalizeHanTranscript("Quiero decir shang dian", hints)).toBe(
       "Quiero decir 商店",
+    );
+  });
+
+  it("uses current-lesson vocabulary inside a Spanish carrier sentence", () => {
+    const hints = transcriptHintsFromContext({
+      lessonVocabulary: [
+        { chineseForm: "买", pinyin: "mǎi", meaning: "to buy" },
+      ],
+    });
+
+    expect(normalizeHanTranscript("¿Cómo se dice mai en chino?", hints)).toBe(
+      "¿Cómo se dice 买 en chino?",
+    );
+    expect(normalizeHanTranscript("Mai viene mañana", hints)).toBe(
+      "Mai viene mañana",
+    );
+  });
+
+  it("does not guess between tone-distinguished single-syllable hints", () => {
+    const hints = transcriptHintsFromContext({
+      lessonVocabulary: [
+        { chineseForm: "买", pinyin: "mǎi", meaning: "to buy" },
+        { chineseForm: "卖", pinyin: "mài", meaning: "to sell" },
+      ],
+    });
+
+    expect(normalizeHanTranscript("Quiero practicar mai", hints)).toBe(
+      "Quiero practicar mai",
     );
   });
 

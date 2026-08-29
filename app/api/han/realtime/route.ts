@@ -129,6 +129,12 @@ export async function POST(request: Request) {
   const contextualSttVocabulary = transcriptHintsFromContext(context).map(
     (hint) => `${hint.hanzi} (${hint.pinyin})`,
   );
+  const contextualSttGrammar = [
+    context.selectedGrammarPoint,
+    ...(context.lessonGrammar ?? []),
+  ]
+    .filter((item) => item?.name && item.structure)
+    .map((item) => `${item!.name}: ${item!.structure}`);
   const realtimeInstructions = buildRealtimeSystemPrompt(
     {
       level: profile?.currentLevel ?? null,
@@ -163,6 +169,7 @@ export async function POST(request: Request) {
               [
                 ...(context.rolePlay?.lessonVocabulary ?? []),
                 ...contextualSttVocabulary,
+                ...contextualSttGrammar,
               ],
             ),
           },

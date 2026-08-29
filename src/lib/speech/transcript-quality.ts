@@ -7,7 +7,7 @@ export const HAN_STT_REPEAT_MESSAGE =
 export const MIN_HAN_STT_CONFIDENCE = 0.15;
 
 const MULTILINGUAL_PROMPT =
-  "HanGo Mandarin-learning conversation. The learner speaks only Spanish, English, or Standard Mainland Mandarin Chinese (普通话), and may switch between them. Write clearly spoken Mandarin in Simplified Chinese characters, never as an English/Spanish homophone or raw pinyin. Preserve clearly spoken Spanish or English normally. Transcribe only words supported by the audio: never infer a common beginner phrase from silence, background noise, a cough, or an indistinct sound. Never transcribe the speech as Thai or Korean.";
+  "HanGo Mandarin-learning conversation. The learner speaks only Spanish, English, or Standard Mainland Mandarin Chinese (普通话), and may switch languages inside one sentence. A Spanish or English carrier sentence may quote, ask about, or practice a Mandarin word. Write every clearly spoken Mandarin fragment in Simplified Chinese characters, even when the rest of that same sentence is Spanish or English; never render that Mandarin fragment as an English/Spanish homophone or raw pinyin. Preserve clearly spoken Spanish or English normally. Transcribe only words supported by the audio: never infer a common beginner phrase from silence, background noise, a cough, or an indistinct sound. Never transcribe the speech as Thai or Korean.";
 
 const MANDARIN_PROMPT =
   "简体中文普通话学习练习。只转写音频中清楚说出的普通话，并写成简体汉字；不要用拼音、英语或西班牙语近音词。不要根据静音、背景噪音、咳嗽或模糊声音猜测常见初学者词语，也不要转写成韩语、泰语或其他语言。";
@@ -88,9 +88,21 @@ export function transcriptHintsFromContext(
       pinyin: context.selectedDialogueLine.pinyin,
     });
   }
-  return hints.filter(
-    (hint) => hint.hanzi.trim().length > 0 && hint.pinyin.trim().length > 0,
-  );
+  for (const vocabulary of context.lessonVocabulary ?? []) {
+    hints.push({ hanzi: vocabulary.chineseForm, pinyin: vocabulary.pinyin });
+  }
+  return hints
+    .filter(
+      (hint) => hint.hanzi.trim().length > 0 && hint.pinyin.trim().length > 0,
+    )
+    .filter(
+      (hint, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.hanzi === hint.hanzi && candidate.pinyin === hint.pinyin,
+        ) === index,
+    )
+    .slice(0, 12);
 }
 
 export function normalizeHanTranscript(
@@ -98,6 +110,10 @@ export function normalizeHanTranscript(
   hints: readonly MandarinTranscriptHint[] = [],
 ): string {
   let normalized = transcript.trim();
+  const discussesMandarin =
+    /(?:diferencia|compar|palabra|pronunci|decir|dice|digo|practic|mandar[ií]n|chino|difference|compare|word|pronounc|say|saying|practice|mandarin|chinese)/iu.test(
+      normalized,
+    );
 
   // Common beginner expressions are frequently rendered as Latin-language
   // homophones. Correct only recognizable Mandarin-learning patterns; keep
@@ -116,6 +132,26 @@ export function normalizeHanTranscript(
       "谢谢",
     );
 
+  if (discussesMandarin) {
+    // Spanish-biased STT commonly hears yìbiān...yìbiān... as
+    // "y bien, y bien". Restrict this repair to an explicit Mandarin or
+    // comparison question so ordinary Spanish "bien" remains untouched.
+    normalized = normalized.replace(
+      /(?<![\p{Letter}\p{Number}])(?:yi|y|i)[-\s]+bi[ae]n\s*[,;]?\s*(?:yi|y|i)[-\s]+bi[ae]n(?![\p{Letter}\p{Number}])/giu,
+      "一边…一边…",
+    );
+
+    // Exact field regression: the final isolated 着 (zhe) disappeared into
+    // the Spanish carrier phrase "y el otro es" after the first grammar
+    // pattern. Recover it only in this narrow comparison shape.
+    if (normalized.includes("一边…一边…")) {
+      normalized = normalized.replace(
+        /\s+y\s+el\s+otro\s+es\s*[.]?$/iu,
+        " y 着?",
+      );
+    }
+  }
+
   // In the reported failure, the first attempt was guessed as "IT" and the
   // clarification as "ahí, chin". Once 爱情 is present, the earlier explicit
   // "word/palabra IT" reference is unambiguously the same learning target.
@@ -126,8 +162,22 @@ export function normalizeHanTranscript(
     );
   }
 
-  for (const hint of hints.slice(0, 8)) {
-    normalized = replaceExpectedPinyin(normalized, hint);
+  const plainSingleSyllableCounts = new Map<string, number>();
+  for (const hint of hints.slice(0, 12)) {
+    const pieces = hint.pinyin.trim().split(/[\s'-]+/u).filter(Boolean);
+    if (pieces.length !== 1) continue;
+    const plain = removePinyinMarks(pieces[0]!).toLocaleLowerCase("es");
+    plainSingleSyllableCounts.set(
+      plain,
+      (plainSingleSyllableCounts.get(plain) ?? 0) + 1,
+    );
+  }
+  for (const hint of hints.slice(0, 12)) {
+    normalized = replaceExpectedPinyin(
+      normalized,
+      hint,
+      plainSingleSyllableCounts,
+    );
   }
 
   const bareUtterance = normalized
@@ -197,6 +247,7 @@ export function assessMandarinRolePlayTranscript(
 function replaceExpectedPinyin(
   transcript: string,
   hint: MandarinTranscriptHint,
+  plainSingleSyllableCounts: ReadonlyMap<string, number>,
 ): string {
   const hanzi = hint.hanzi.trim();
   const pinyin = hint.pinyin.trim();
@@ -210,6 +261,14 @@ function replaceExpectedPinyin(
       .map((piece) => escapeRegExp(piece))
       .filter(Boolean);
     if (pieces.length === 0) continue;
+    const isUnmarkedSingleSyllable =
+      pieces.length === 1 && variant === removePinyinMarks(pinyin);
+    if (
+      isUnmarkedSingleSyllable &&
+      (plainSingleSyllableCounts.get(variant.toLocaleLowerCase("es")) ?? 0) > 1
+    ) {
+      continue;
+    }
 
     const source = pieces.join("[\\s,.;:!?¿¡'-]+");
     const pattern = new RegExp(
@@ -226,6 +285,18 @@ function replaceExpectedPinyin(
       .trim()
       .toLocaleLowerCase("es");
     if (bare === variant.toLocaleLowerCase("es")) return hanzi;
+
+    // A one-syllable pinyin spelling is too ambiguous to replace globally
+    // (for example, "mai" could be ordinary Latin-language text). Replace
+    // it inside a longer sentence only when the nearby words explicitly say
+    // the learner is quoting or practising Chinese.
+    const learningCue =
+      /(?:palabra|pronunci|decir|dice|digo|practic|mandar[ií]n|chino|word|pronounc|say|saying|practice|mandarin|chinese)/iu;
+    result = result.replace(pattern, (match, offset: number, whole: string) => {
+      const before = whole.slice(Math.max(0, offset - 60), offset);
+      const after = whole.slice(offset + match.length, offset + match.length + 60);
+      return learningCue.test(before) || learningCue.test(after) ? hanzi : match;
+    });
   }
   return result;
 }

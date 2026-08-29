@@ -52,7 +52,10 @@ interface AiTeacherState {
   setOpen: (open: boolean) => void;
   /** Opens the floating Han bubble - used by "Ask AI" buttons everywhere. */
   openTeacher: (patch?: Partial<AiTeacherContextData>) => Promise<void>;
-  sendMessage: (text: string) => Promise<AiChatMessage | null>;
+  sendMessage: (
+    text: string,
+    contextOverride?: AiTeacherContextData,
+  ) => Promise<AiChatMessage | null>;
   appendRealtimeMessage: (message: Omit<AiChatMessage, "id">) => void;
   resetConversation: () => Promise<void>;
 }
@@ -113,6 +116,8 @@ export function AiTeacherProvider({
       scenarioName: current.scenarioName,
       lessonTitle: current.lessonTitle,
       lessonStepType: current.lessonStepType,
+      lessonVocabulary: current.lessonVocabulary,
+      lessonGrammar: current.lessonGrammar,
     }));
   }, []);
 
@@ -162,7 +167,7 @@ export function AiTeacherProvider({
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, contextOverride?: AiTeacherContextData) => {
       const userMessage: AiChatMessage = {
         id: nextMessageId(),
         role: "user",
@@ -172,7 +177,11 @@ export function AiTeacherProvider({
       setSending(true);
       setError(null);
 
-      const result = await sendAiTeacherMessageAction(text, context, mode);
+      const result = await sendAiTeacherMessageAction(
+        text,
+        contextOverride ?? context,
+        mode,
+      );
 
       setSending(false);
       if (result.ok) {

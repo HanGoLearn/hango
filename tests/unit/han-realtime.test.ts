@@ -30,6 +30,7 @@ import {
   shouldHoldRealtimeLearnerAction,
   shouldBlockForRolePlayAssessment,
   stabilizeConversationPracticeTargets,
+  userFacingRealtimeVoiceError,
 } from "@/lib/han-realtime";
 
 describe("nextHanExplanationLanguage", () => {
@@ -47,6 +48,16 @@ describe("nextHanExplanationLanguage", () => {
     expect(
       nextHanExplanationLanguage("Quiero practicar otra vez", "English"),
     ).toBe("Spanish");
+  });
+
+  it("treats a complete Mandarin question as Chinese conversation", () => {
+    expect(
+      nextHanExplanationLanguage("你好，你叫什么名字？", "English"),
+    ).toBe("Chinese");
+    expect(nextHanExplanationLanguage("你是哪国人？", "Spanish")).toBe(
+      "Chinese",
+    );
+    expect(nextHanExplanationLanguage("你好", "Spanish")).toBe("Spanish");
   });
 });
 
@@ -240,8 +251,45 @@ describe("buildRealtimeTurnInstructions", () => {
     expect(instructions).toContain("LEARNER NAME STATUS: already answered");
     expect(instructions).toContain("Never ask their name again");
     expect(instructions).toContain(
-      "continue with a different relevant question",
+      "end with a brief natural statement instead of inventing a question",
     );
+  });
+
+  it("keeps a learner-authored classroom scene coherent across turns", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole:
+          "the exact character assigned to 'you' (the assistant) in the learner-authored scene",
+        learnerRole:
+          "the exact character assigned to 'I/me' (the learner) in the learner-authored scene",
+        scenarioContext:
+          "Eres un profesor y yo soy un alumno nuevo. Estamos dentro del aula.",
+        objective:
+          "Sustain one continuous, coherent in-character classroom interaction.",
+        level: "HSK 1",
+        isFreeTopic: true,
+      },
+      null,
+      "好。",
+      null,
+      "PRACTICE",
+      "direct",
+      [
+        { role: "assistant", content: "你好，我是老师。" },
+        { role: "user", content: "我叫马丁。" },
+        { role: "assistant", content: "马丁，你好。我们开始上课吧。" },
+        { role: "user", content: "好。" },
+      ],
+    );
+
+    expect(instructions).toContain("SCENE CONTRACT");
+    expect(instructions).toContain("Eres un profesor");
+    expect(instructions).toContain("COMPACT DIALOGUE MEMORY");
+    expect(instructions).toContain("SCENE CONTINUITY");
+    expect(instructions).toContain("continue from that exact moment");
+    expect(instructions).toContain("Never restart an introduction");
+    expect(instructions).toContain("walking and starting class");
   });
 
   it("applies the same known-name memory to timed Learning Journey Speaking", () => {
@@ -274,6 +322,7 @@ describe("buildRealtimeTurnInstructions", () => {
     );
     expect(timedInstructions).toContain("我叫安娜。");
     expect(timedInstructions).toContain("Never ask their name again");
+    expect(timedInstructions).toContain("FORBIDDEN from now on: 你呢？");
 
     const placementInstructions = buildRealtimeTurnInstructions(
       "English",
@@ -287,6 +336,68 @@ describe("buildRealtimeTurnInstructions", () => {
     );
     expect(placementInstructions).not.toContain("LEARNER NAME STATUS");
     expect(placementInstructions).not.toContain("COMPACT DIALOGUE MEMORY");
+  });
+
+  it("answers the character-name question without asking the learner's known name again", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole: "New classmate",
+        learnerRole: "Yourself",
+        scenarioContext: "Meeting a new classmate for the first time.",
+        objective:
+          "Greet them, introduce yourself, and ask their name and where they're from.",
+        lessonHskLevel: 1,
+      },
+      null,
+      "你叫什么名字？",
+      null,
+      "PRACTICE",
+      "direct",
+      [
+        { role: "assistant", content: "你好，你叫什么名字？" },
+        { role: "user", content: "我叫马丁。" },
+        { role: "user", content: "你叫什么名字？" },
+      ],
+    );
+
+    expect(instructions).toContain("Their name is already known");
+    expect(instructions).toContain("MUST NOT contain 你呢？");
+    expect(instructions).toContain(
+      "ask at most one different, previously unasked introduction question",
+    );
+    expect(instructions).toContain(
+      "The same memory rule applies to every learner fact",
+    );
+  });
+
+  it("applies the no-repeat rule to every known learner fact, not only names", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole: "New classmate",
+        learnerRole: "Yourself",
+        scenarioContext: "Two classmates introduce themselves.",
+        objective: "Have a short mutual introduction.",
+        lessonHskLevel: 1,
+      },
+      null,
+      "你喜欢什么？",
+      null,
+      "PRACTICE",
+      "direct",
+      [
+        { role: "assistant", content: "你喜欢什么？" },
+        { role: "user", content: "我喜欢中文。" },
+        { role: "user", content: "你喜欢什么？" },
+      ],
+    );
+
+    expect(instructions).toContain("learner: 我喜欢中文。");
+    expect(instructions).toContain("preferences");
+    expect(instructions).toContain("Before asking any explicit question OR saying 你呢？");
+    expect(instructions).toContain("If known, that question is forbidden");
+    expect(instructions).toContain("This is not a ban on all character questions");
   });
 
   it("allows barge-in only for free-topic Practice with Han", () => {
@@ -331,7 +442,7 @@ describe("buildRealtimeTurnInstructions", () => {
     expect(responseEvent.response).not.toHaveProperty("instructions");
   });
 
-  it("keeps 吧 as the Mandarin study item in a Spanish voice turn", () => {
+  it("keeps a 吧 request as pure Mandarin conversation in Practice", () => {
     const instructions = buildRealtimeTurnInstructions(
       "Spanish",
       undefined,
@@ -341,12 +452,12 @@ describe("buildRealtimeTurnInstructions", () => {
       "PRACTICE",
     );
 
-    expect(instructions).toContain("Mandarin item 吧");
-    expect(instructions).toContain('NEVER be interpreted as Spanish "va"');
-    expect(instructions).toContain("every practice example must be a Mandarin");
-    expect(instructions).toContain(
-      "complete vocabulary-or-grammar teaching structure",
-    );
+    expect(instructions).toContain("required explanation language is Chinese");
+    expect(instructions).toContain("pure adaptive Mandarin conversation");
+    expect(instructions).toContain("Do not explain, translate, teach examples");
+    expect(instructions).toContain("Infer intended meaning from audio plus topic");
+    expect(instructions).not.toContain("Mandarin item 吧");
+    expect(instructions).not.toContain("complete vocabulary-or-grammar teaching structure");
     expect(instructions).not.toContain(
       "Prioritize conversational meaning over perfect pronunciation",
     );
@@ -489,8 +600,32 @@ describe("buildRealtimeTurnInstructions", () => {
       "洗手间在哪儿？",
     );
 
+    expect(instructions).toContain("Answer it directly in-character first");
+    expect(instructions).toContain("After the actual answer");
+    expect(instructions).toContain("at most one short, relevant reciprocal question");
+    expect(instructions).toContain("RECIPROCAL HANDOFF");
+  });
+
+  it("keeps the reciprocal lesson handoff out of Practice with Han", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole: "a friend",
+        learnerRole: "the learner",
+        scenarioContext: "Two friends talk about their day.",
+        objective: "Have a natural conversation.",
+        isFreeTopic: true,
+      },
+      null,
+      "你今天做什么？",
+      null,
+      "PRACTICE",
+      "direct",
+    );
+
     expect(instructions).toContain("Answer it directly in-character now");
-    expect(instructions).toContain("do not ask a question back");
+    expect(instructions).toContain("do not replace the answer with a question");
+    expect(instructions).not.toContain("RECIPROCAL HANDOFF");
   });
 
   it("keeps authored openings exact and gives normal lessons a short contextual cue", () => {
@@ -505,6 +640,15 @@ describe("buildRealtimeTurnInstructions", () => {
       objective: "Exchange names.",
     });
     expect(classmateOpening).toContain('Output exactly "你好，你叫什么名字？"');
+
+    const timeAndDatesOpening = buildRealtimeOpeningTurnGuard({
+      aiRole: "Friend",
+      scenarioContext: "You want to meet a friend for coffee.",
+      objective:
+        "Suggest a day and time to meet, and confirm it with your friend.",
+    });
+    expect(timeAndDatesOpening).toContain('Output exactly "你明天忙吗？"');
+    expect(timeAndDatesOpening).not.toContain("你叫什么名字");
 
     const directionsOpening = buildRealtimeOpeningTurnGuard({
       aiRole: "Passerby",
@@ -522,6 +666,22 @@ describe("buildRealtimeTurnInstructions", () => {
     });
     expect(instructions).toContain("Do not output only 你好 or 您好");
     expect(instructions).toContain("no more than 12 Chinese characters");
+  });
+
+  it("hides raw millisecond audio errors from the learner", () => {
+    expect(
+      userFacingRealtimeVoiceError(
+        "Audio buffer duration was 2700ms but only 2300ms could be applied.",
+      ),
+    ).toBe("That audio turn could not be processed cleanly. Please try again.");
+    expect(userFacingRealtimeVoiceError("Quota exceeded")).toBe(
+      "Quota exceeded",
+    );
+    expect(
+      userFacingRealtimeVoiceError(
+        "Conversation already has an active response in progress:",
+      ),
+    ).toBe("Han received two voice turns at once. Please continue speaking.");
   });
 
   it("lets free-topic practice create a contextual emotional opening instead of a generic fixed line", () => {

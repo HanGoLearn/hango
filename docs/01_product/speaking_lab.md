@@ -1,10 +1,14 @@
 # HanGo Speaking Lab
 
-Version: 1.0
+Version: 1.1
 
 Status: Official
 
 Last Updated: August 2026
+
+The original "7 practice modes" below described an early, aspirational
+design. **"Speaking Practice Modes"** has been rewritten to match the real
+shipped structure — see "Real Implementation" at the end.
 
 ---
 
@@ -51,115 +55,42 @@ The Speaking Lab helps learners improve:
 
 ---
 
-# Speaking Practice Modes
+# Speaking Practice Modes (real implementation)
 
-The Speaking Lab contains different practice experiences.
+Speaking Lab's home screen offers three entry points, plus every lesson's
+own embedded Speaking step. There's no separate "pronunciation drill,"
+"interview practice," or "debate practice" screen — those needs are met
+through the scenario content itself, at the difficulty appropriate to
+where the learner is in the curriculum (a Foundations lesson's Speaking
+step is a simple daily exchange; an Advanced Situations lesson's is a job
+interview, a debate, or a diplomatic negotiation — see
+`curriculum_structure.md`).
 
-Each mode develops a different aspect of speaking ability.
+## 1. Practice with Han (free topic)
 
----
+The learner sets their own topic, who Han should be, level, pace, and
+correction style, then has a live spoken conversation built around exactly
+that. This is the open-ended, self-directed practice surface.
 
-# 1. Pronunciation Training
+## 2. Shadowing
 
-## Purpose
+Two ways to shadow a lesson's real dialogue: turn-by-turn like a chat
+(`ConversationShadowing`), or the whole conversation as one continuous
+passage with pinyin always shown. **Currently locked behind a Pre-MVP
+release gate** — fully built, temporarily hidden (see `project/TASKS.md`).
 
-Improve pronunciation accuracy and confidence.
+## 3. Scenario Role Play
 
-The learner practices:
+Respond in character to a chosen scenario's mission, outside the guided
+lesson flow. **Also currently Pre-MVP-locked**, same as Shadowing.
 
-- Individual sounds.
-- Tones.
-- Words.
-- Sentences.
-- Longer expressions.
+## 4. The lesson's own Speaking step
 
----
-
-## Feedback
-
-The system evaluates:
-
-- Tone accuracy.
-- Pronunciation clarity.
-- Rhythm.
-- Fluency.
-
-Feedback should be actionable.
-
-Example:
-
-Instead of:
-
-"Your pronunciation is wrong."
-
-The system provides:
-
-"The third tone in 你好 needs a deeper falling-rising movement."
-
----
-
-# 2. Shadowing Practice
-
-## Purpose
-
-Develop natural pronunciation and listening ability by imitating authentic Chinese speech.
-
-The learner:
-
-1. Listens to native audio.
-2. Repeats the sentence.
-3. Receives feedback.
-4. Repeats until improvement.
-
----
-
-## Difficulty Progression
-
-Beginner:
-
-- Short sentences.
-- Slow speed.
-
-Intermediate:
-
-- Natural conversations.
-
-Advanced:
-
-- News.
-- Presentations.
-- Professional speech.
-
----
-
-# 3. Conversation Practice
-
-## Purpose
-
-Develop spontaneous communication.
-
-The learner interacts with AI in realistic scenarios.
-
-Examples:
-
-Daily situations:
-
-- Restaurant.
-- Shopping.
-- Travel.
-- Meeting people.
-
-Professional situations:
-
-- Interviews.
-- Meetings.
-- Negotiations.
-
-Advanced situations:
-
-- Discussions.
-- Debates.
-- Opinions.
+Every published lesson's Speaking step is a real in-character AI
+conversation (not a placeholder) built from that specific lesson's
+scenario, vocabulary, and grammar — this is the primary way most learners
+encounter Speaking practice, reached automatically as part of the Learning
+Journey rather than chosen from Speaking Lab's menu.
 
 ---
 
@@ -173,119 +104,6 @@ The AI should:
 - Provide feedback after the interaction.
 
 The goal is communication first.
-
----
-
-# 4. Role Play
-
-## Purpose
-
-Simulate real-world situations.
-
-The learner receives a role.
-
-Examples:
-
-Restaurant:
-
-Learner:
-Customer.
-
-AI:
-Waiter.
-
----
-
-Job interview:
-
-Learner:
-Candidate.
-
-AI:
-Interviewer.
-
----
-
-Business meeting:
-
-Learner:
-Employee.
-
-AI:
-Manager.
-
----
-
-Role plays should become increasingly complex as the learner progresses.
-
----
-
-# 5. Interview Practice
-
-## Purpose
-
-Develop formal speaking ability.
-
-Examples:
-
-- University interviews.
-- Job interviews.
-- Self-introduction.
-- Professional questions.
-
-The AI evaluates:
-
-- Content.
-- Vocabulary.
-- Grammar.
-- Fluency.
-- Confidence.
-
----
-
-# 6. Debate Practice
-
-## Purpose
-
-Develop advanced communication skills.
-
-Debates are designed for upper-intermediate and advanced learners.
-
-Examples:
-
-Topics:
-
-- Technology.
-- Education.
-- Economy.
-- Society.
-- Culture.
-
-The learner practices:
-
-- Expressing opinions.
-- Supporting arguments.
-- Responding to opposing views.
-
----
-
-# 7. Presentation Practice
-
-## Purpose
-
-Develop structured speaking ability.
-
-The learner practices:
-
-- Organizing ideas.
-- Explaining topics.
-- Speaking for longer periods.
-
-Examples:
-
-- Presenting a project.
-- Explaining a topic.
-- Giving an opinion.
 
 ---
 
@@ -370,6 +188,19 @@ The Speaking Lab succeeds when learners become comfortable using Chinese spontan
 The final objective is not perfect speech.
 
 The final objective is confident communication.
+
+---
+
+# Real Implementation
+
+Reconciled 2026-08-23 against the shipped codebase
+(`src/components/speaking/speaking-lab-home.tsx`,
+`src/components/lesson/steps/speaking-step.tsx`). The Speaking Evaluation
+System's 5 metrics above (Pronunciation, Fluency, Accuracy, Complexity,
+Communication Effectiveness) are real and match the scored rubric in
+`points_system.md`'s Speaking formula exactly. The original 7-mode
+enumeration did not match the shipped 3-tile-plus-embedded-step structure
+and has been rewritten accordingly.
 
 ---
 

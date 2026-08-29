@@ -1,10 +1,16 @@
 # HanGo Learning Journey
 
-Version: 1.0
+Version: 1.1
 
 Status: Official
 
 Last Updated: August 2026
+
+The original "4 levels" and "11-step lesson" sections below described an
+early, aspirational design. Both have been rewritten to match the real
+shipped structure — see `curriculum_structure.md` for the full
+chapter/domain/scenario breakdown and "Real Implementation" at the end of
+this document.
 
 ---
 
@@ -40,17 +46,21 @@ The learner uses Chinese to accomplish increasingly complex objectives.
 
 ---
 
-# Learning Structure
+# Learning Structure (real implementation)
 
-The Learning Journey is organized into four main levels:
+The real hierarchy is **Chapter → Domain → Scenario → Difficulty Level →
+Lesson**, not the four generic levels originally listed here. Full detail
+lives in `curriculum_structure.md` — summary:
 
-1. Scenario
-
-2. Stage
-
-3. Lesson
-
-4. Activity
+- The learner sees exactly **3 chapters** on the Learning Journey screen —
+  Foundations, Everyday Life, Advanced Situations — grouped by difficulty
+  tier, not by the 9 content Domains behind them (Foundations, Daily
+  Life, Travel, Getting Around, Making Friends, Health, Work & Office,
+  Everyday Life, Advanced Situations).
+- Each Domain contains one or more **Scenarios** (a real situation —
+  Restaurant, Job Interview, Negotiating a Contract).
+- Each Scenario has one or more **Difficulty Levels** (Beginner,
+  Intermediate, Advanced), each containing several **Lessons**.
 
 ---
 
@@ -100,70 +110,17 @@ The learner should understand:
 
 ---
 
-# Scenario Difficulty Levels
+# Scenario Difficulty Levels (real implementation)
 
-Each Scenario contains multiple difficulty levels.
-
-## Intermediate
-
-Focus:
-
-- Understanding common situations.
-- Building confidence.
-- Using essential structures.
-- Maintaining short conversations.
-
-Example:
-
-Restaurant:
-
-Ordering food.
-
-Asking about prices.
-
-Requesting changes.
-
----
-
-## Upper Intermediate
-
-Focus:
-
-- More natural conversations.
-- Longer responses.
-- More complex grammar.
-- Greater vocabulary range.
-
-Example:
-
-Restaurant:
-
-Discussing preferences.
-
-Explaining dietary restrictions.
-
-Making recommendations.
-
----
-
-## Advanced
-
-Focus:
-
-- Nuanced communication.
-- Opinions.
-- Cultural understanding.
-- Professional and academic language.
-
-Example:
-
-Restaurant:
-
-Discussing food culture.
-
-Comparing regional cuisines.
-
-Debating social trends.
+Unlike the earlier "every scenario spans 3 tiers" design, in the real
+curriculum **each scenario carries only the difficulty level(s) it was
+actually authored at** — most scenarios exist at a single tier (e.g.
+Restaurant is Intermediate-only; every Foundations scenario is
+Beginner-only), and a handful span two (e.g. Health has both Intermediate
+and Advanced lessons; Getting Around has Beginner and Intermediate). No
+scenario currently spans all of Beginner through Advanced. See
+`points_system.md`'s scenario tables for exactly which scenarios exist at
+which tier.
 
 ---
 
@@ -205,163 +162,74 @@ Example:
 
 "After this lesson, the learner can order a meal, ask questions about ingredients, and express preferences in Chinese."
 
-Learning objectives must focus on communication abilities.
+Learning objectives must focus on communication abilities. This is stored
+as the lesson's `communicationObjective`, shown to the learner at the
+start of the Situation step (below) — there is no separate "Objective"
+step in the real flow.
 
 ---
 
-# 2. Context Introduction
+# Real Lesson Step Flow
 
-Before learning vocabulary or grammar, learners understand the situation.
+A published lesson does not use all 11 originally-planned steps. The
+actual, consistent flow is **6 steps**, in this fixed order:
 
-The learner should know:
+## 1. Vocabulary
 
-- Who is speaking.
-- Where the conversation happens.
-- What the objective is.
-- What problem needs to be solved.
+Taught before the learner meets it in context (deliberately ahead of
+Situation/Dialogue). Each word has its Chinese characters, pinyin,
+English meaning, part of speech, and 1-3 example sentences, each with its
+own audio. The learner is quizzed on each word — question count and mix
+scale with the scenario's difficulty (see `points_system.md` Part 1).
 
----
+## 2. Grammar
 
-# 3. Vocabulary
+Each grammar point includes its meaning, structure, a worked example, and
+a common-mistake note, followed by exercises. Grammar is presented before
+Situation so the learner recognizes the pattern when they meet it in the
+dialogue.
 
-Vocabulary is introduced through context.
+## 3. Situation (includes the dialogue)
 
-Each vocabulary item includes:
+Han presents the scene and the lesson's numbered communication goals,
+then the full model dialogue between two characters (a waiter and
+customer, an interviewer and candidate, etc.) — with real, natural-sounding
+generated audio for the whole conversation, seekable like a normal audio
+player, plus a tap-to-play button per line.
 
-- Chinese characters.
-- Pinyin.
-- Meaning.
-- Pronunciation.
-- Example sentences.
-- Related vocabulary.
-- Previous connections.
+## 4. Comprehension
 
-Vocabulary should never exist as isolated information.
+Listening comes before reading — the learner hears the full conversation
+again first, with the questions and Chinese text held back until they
+choose to move on. 5 comprehension questions per lesson, checking real
+understanding of the dialogue just heard.
 
----
+## 5. Speaking
 
-# 4. Grammar
+A real in-character AI conversation with Han, built from that lesson's
+own scenario, vocabulary, and grammar — not a placeholder. Graded on the
+5-metric rubric in `points_system.md` (pronunciation, fluency, accuracy,
+complexity, communication effectiveness), gated by how much of the
+lesson's target vocabulary was engaged with and how completely the
+scenario's objective was met.
 
-Grammar is introduced as a communication tool.
+## 6. Reflection
 
-Every grammar point includes:
-
-- Meaning.
-- When to use it.
-- Sentence structure.
-- Examples.
-- Common mistakes.
-- Comparison with similar structures.
-
-The learner should understand why the grammar exists.
-
----
-
-# 5. Dialogue
-
-Dialogues represent realistic communication.
-
-They should include:
-
-- Natural expressions.
-- Appropriate difficulty.
-- Cultural context.
-- Previously learned vocabulary.
-- Target grammar structures.
-
-Dialogues should not feel like artificial textbook conversations.
+The lesson's single graded outcome screen — the weighted 0-100 session
+score described in `points_system.md` Part 1 (Vocabulary 20 + Grammar 20
++ Comprehension 30 + Speaking 30, 70/100 to pass).
 
 ---
 
-# 6. Listening Practice
+# Content That Exists Outside the Step Flow
 
-Learners practice understanding spoken Chinese.
-
-Activities include:
-
-- Normal speed audio.
-- Slower audio.
-- Key phrase identification.
-- Comprehension questions.
-
----
-
-# 7. Speaking Practice
-
-Learners actively produce Chinese.
-
-Activities include:
-
-- Repetition.
-- Shadowing.
-- Role-play.
-- Free conversation.
-- AI interaction.
-
----
-
-# 8. Writing Practice
-
-Learners produce written Chinese.
-
-Activities include:
-
-- Sentence creation.
-- Short messages.
-- Paragraphs.
-- Longer compositions.
-
----
-
-# 9. Exercises
-
-Exercises reinforce learning.
-
-Possible activities:
-
-- Fill in the blanks.
-- Sentence ordering.
-- Translation.
-- Listening comprehension.
-- Grammar selection.
-- Vocabulary application.
-
-Exercises should always connect to communication.
-
----
-
-# 10. Mission
-
-Every lesson ends with a practical objective.
-
-The learner must use Chinese to accomplish something.
-
-Examples:
-
-- Order food without help.
-- Explain a problem.
-- Ask for information.
-- Write a message.
-- Give an opinion.
-
-Missions transform knowledge into ability.
-
----
-
-# 11. Evaluation
-
-The learner receives feedback.
-
-Evaluation includes:
-
-- Accuracy.
-- Vocabulary usage.
-- Grammar.
-- Pronunciation.
-- Fluency.
-- Communication effectiveness.
-
-The goal is improvement, not punishment.
+**Mission** — each *scenario* (not every lesson) has one mission: a
+practical, open-ended real-world task ("order food without help," "explain
+a problem") completed as a free AI role-play once its lessons are done.
+**Writing** — each lesson can have an attached Write-a-Paragraph writing
+task (see `writing_lab.md`), reached through Writing Lab, not as an
+in-lesson step. **Quiz** — a short end-of-scenario multiple-choice review
+exists in the data model but isn't wired into the current step flow.
 
 ---
 
@@ -412,6 +280,26 @@ Stores learning history and preferences.
 Completing the Learning Journey does not mean finishing Chinese.
 
 It means reaching a level where the learner can continue improving independently through real communication.
+
+---
+
+# Real Implementation
+
+Reconciled 2026-08-23 against the shipped codebase
+(`prisma/schema.prisma`'s `LessonStepType` enum, the `steps: { create:
+[...] }` pattern used for every lesson in `prisma/seed.ts`,
+`src/components/lesson/lesson-engine.tsx`). The real step flow uses 6 of
+the enum's 13 values per lesson (Vocabulary, Grammar, Situation,
+Comprehension, Speaking, Reflection — Situation absorbed Dialogue per a
+2026-08-06 design decision, documented directly in
+`situation-step.tsx`'s own code comments). The remaining enum values
+(Objective, Guided Practice, Writing, AI Challenge, Quiz, Mission) exist
+in the schema but are either unused, or — for Writing and Mission —
+implemented as separate scenario/lesson-attached content rather than
+in-lesson steps. The original 11-step design has been rewritten
+accordingly; see `points_system.md` for how each graded step contributes
+to the lesson's score and `curriculum_structure.md` for the full
+chapter/domain/scenario hierarchy.
 
 ---
 

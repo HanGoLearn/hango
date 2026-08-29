@@ -1,10 +1,15 @@
 # HanGo Writing Lab
 
-Version: 1.0
+Version: 1.1
 
 Status: Official
 
 Last Updated: August 2026
+
+The original "5 levels of writing development" and "5 practice modes"
+below described an early, aspirational design. Both sections have been
+rewritten to match the real shipped structure — see "Real Implementation"
+at the end.
 
 ---
 
@@ -48,246 +53,62 @@ The Writing Lab helps learners improve:
 
 ---
 
-# Writing Development Path
+# Writing Lab Structure (real implementation)
 
-Writing ability develops progressively.
+Writing Lab's home screen offers three options, not a five-level ladder or
+five separate modes:
 
-The learner moves through different levels of production.
+## 1. Write a Paragraph — handwritten, leveled, photo-graded
 
----
+The learner picks a level — **Basic** (~5–6 lines, ~60-90 characters),
+**Intermediate** (~6–20 lines, ~90-300 characters), or **Advanced**
+(20+ lines, 300+ characters) — and a topic (currently Family, Daily
+Routine, or Shopping, each phrased differently per level). The learner
+writes the paragraph **by hand on paper**, photographs it (1-3 photos for
+longer Advanced submissions), and uploads it.
 
-# Level 1: Sentence Building
+A vision-capable AI model (`gpt-5-mini`) transcribes the handwriting,
+flags specific malformed or illegible characters (up to 8, with what's
+wrong), and grades it against a level-specific weighted rubric:
 
-## Purpose
+| Level | Rubric dimensions (weight) |
+|---|---|
+| Basic | Legibility (25%), Topic & length (20%), Sentence construction (20%), Grammar (15%), Vocabulary (10%), Clarity (10%) |
+| Intermediate | Legibility (20%), Topic development (15%), Grammar variety (20%), Vocabulary precision (15%), Cohesion/transitions (20%), Naturalness (10%) |
+| Advanced | Legibility (15%), Content depth (15%), Complex grammar (20%), Lexical precision/register (20%), Organization (20%), Style (10%) |
 
-Develop the ability to create correct and natural sentences.
+Honest limit: a static photo can confirm a character's final form is
+correct, but **cannot verify stroke order** — that requires watching the
+writing happen, not just the result.
 
-Activities:
+## 2. Translation Challenge
 
-- Sentence creation.
-- Word ordering.
-- Grammar application.
-- Translation practice.
-- Sentence expansion.
+A standalone pool of ~15 topic-diverse texts. The learner translates one
+into Chinese; grading checks meaning accuracy against a hidden reference
+translation while still accepting any other natural, correct phrasing —
+not a word-for-word match.
 
-Example:
+## 3. Custom Writing
 
-Basic:
-
-我喜欢中国菜。
-
-Advanced:
-
-我特别喜欢中国南方的菜，因为不同地区的饮食文化非常丰富。
-
----
-
-# Level 2: Short Messages
-
-## Purpose
-
-Develop practical daily writing.
-
-Examples:
-
-- Text messages.
-- Social media messages.
-- Short notes.
-- Invitations.
-
-Skills developed:
-
-- Natural expressions.
-- Appropriate tone.
-- Everyday vocabulary.
-
----
-
-# Level 3: Paragraph Writing
-
-## Purpose
-
-Develop structured written expression.
-
-Learners practice:
-
-- Introducing topics.
-- Explaining ideas.
-- Describing experiences.
-- Comparing concepts.
-
----
-
-# Level 4: Practical Writing
-
-## Purpose
-
-Prepare learners for real communication.
-
-Examples:
-
-- Emails.
-- Requests.
-- Applications.
-- Reviews.
-- Explanations.
-
-The learner develops the ability to write for specific purposes.
-
----
-
-# Level 5: Advanced Writing
-
-## Purpose
-
-Develop high-level written communication.
-
-Examples:
-
-- Essays.
-- Opinions.
-- Reports.
-- Academic writing.
-
-Skills:
-
-- Argumentation.
-- Organization.
-- Formal vocabulary.
-- Complex grammar.
-
----
-
-# Writing Practice Modes
-
----
-
-# 1. Free Writing
-
-## Purpose
-
-Allow learners to express ideas freely.
-
-Examples:
-
-"Describe your hometown."
-
-"Explain your opinion about technology."
-
-The AI evaluates the writing and provides feedback.
-
----
-
-# 2. Guided Writing
-
-## Purpose
-
-Support learners who need structure.
-
-The system provides:
-
-- Topic.
-- Required vocabulary.
-- Grammar structures.
-- Writing objectives.
-
----
-
-# 3. Rewrite Practice
-
-## Purpose
-
-Improve existing writing.
-
-The learner provides a text.
-
-The AI helps improve:
-
-- Grammar.
-- Vocabulary.
-- Naturalness.
-- Style.
-
----
-
-# 4. Translation Challenge
-
-## Purpose
-
-Develop active language production.
-
-The learner translates ideas into Chinese.
-
-The focus is not literal translation.
-
-The focus is expressing the meaning naturally.
-
----
-
-# 5. Professional Writing
-
-## Purpose
-
-Prepare learners for real professional communication.
-
-Examples:
-
-- Business emails.
-- Reports.
-- Presentations.
-- Formal messages.
+The learner defines their own topic, level, format, and tone in plain
+language, and gets graded against exactly what they asked for — an
+ephemeral prompt, not drawn from a fixed catalog.
 
 ---
 
 # AI Writing Feedback
 
-The AI should analyze writing through multiple dimensions.
+**Translation Challenge and Custom Writing** (typed text) are scored on 4
+dimensions, 0-100 each: **Grammar**, **Vocabulary**, **Naturalness**
+(does it sound like real Chinese, not a textbook), and **Communication
+Clarity** (for Translation Challenge specifically, how accurately the
+meaning matches the source text). Every grading pass also returns a
+corrected version and a short list of the specific changes made.
 
----
-
-## Grammar Accuracy
-
-Identifies incorrect structures and explains corrections.
-
----
-
-## Vocabulary Usage
-
-Evaluates:
-
-- Word choice.
-- Appropriateness.
-- Variety.
-
----
-
-## Naturalness
-
-Determines whether the writing sounds like natural Chinese.
-
----
-
-## Organization
-
-Evaluates:
-
-- Logical flow.
-- Paragraph structure.
-- Clarity.
-
----
-
-## Style
-
-Analyzes whether the writing matches the intended context.
-
-Examples:
-
-Casual.
-
-Professional.
-
-Academic.
+**Write a Paragraph** (handwritten) uses the richer, level-specific
+rubric described above instead — Organization and Style only appear as
+named dimensions at the Advanced level, not as universal categories every
+submission is graded on.
 
 ---
 
@@ -371,6 +192,19 @@ The Writing Lab succeeds when learners can express their thoughts naturally and 
 The goal is not perfect academic writing.
 
 The goal is confident written communication.
+
+---
+
+# Real Implementation
+
+Reconciled 2026-08-23 against the shipped codebase
+(`src/components/writing/writing-lab-home.tsx`,
+`src/lib/handwritten-writing.ts`, `src/lib/writing-feedback.ts`). The
+original 5-level writing-development ladder and 5 separate practice modes
+did not match the shipped 3-option structure and have been rewritten
+accordingly. Write a Paragraph's handwritten/photo/leveled-rubric design
+is new (2026-08-23) — it replaced an earlier, lesson-scoped typed-text
+version of the same feature.
 
 ---
 

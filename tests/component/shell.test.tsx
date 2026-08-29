@@ -33,8 +33,36 @@ import { TopBar } from "@/components/shell/top-bar";
 import { AiTeacherBubble } from "@/components/shell/ai-teacher-bubble";
 import { AppShell } from "@/components/shell/app-shell";
 import { UserMenu } from "@/components/shell/user-menu";
-import { AiTeacherProvider } from "@/components/ai-teacher/ai-teacher-provider";
-import { resetAiTeacherConversationAction } from "@/lib/actions/ai-teacher";
+import {
+  AiTeacherProvider,
+  useAiTeacher,
+} from "@/components/ai-teacher/ai-teacher-provider";
+import {
+  resetAiTeacherConversationAction,
+  sendAiTeacherMessageAction,
+} from "@/lib/actions/ai-teacher";
+
+function InjectSpeakingContext() {
+  const { setContext } = useAiTeacher();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        setContext({
+          rolePlay: {
+            aiRole: "old classmate",
+            learnerRole: "learner",
+            scenarioContext: "Remembering an old school",
+            objective: "Talk about the old school",
+            lessonHskLevel: 5,
+          },
+        })
+      }
+    >
+      Inject Speaking context
+    </button>
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -177,6 +205,33 @@ describe("AiTeacherBubble", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
     expect(screen.getByText("No active lesson context")).toBeInTheDocument();
+  });
+
+  it("never sends a stale Speaking role-play through the floating Han tutor", async () => {
+    vi.mocked(sendAiTeacherMessageAction).mockResolvedValueOnce({
+      ok: true,
+      reply: "Hola, soy Han.",
+      responseLanguage: "Spanish",
+    });
+    render(
+      <AiTeacherProvider initialMessages={[]}>
+        <InjectSpeakingContext />
+        <AiTeacherBubble />
+      </AiTeacherProvider>,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Inject Speaking context" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Message Han" }), "Hola");
+    await userEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(sendAiTeacherMessageAction).toHaveBeenCalledWith(
+      "Hola",
+      expect.objectContaining({ rolePlay: undefined }),
+      "TUTOR",
+    );
   });
 });
 

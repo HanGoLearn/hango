@@ -83,7 +83,7 @@ export function AiTeacherBubble() {
             Chat with Han about your current lesson.
           </DialogPrimitive.Description>
           <div className="min-h-0 flex-1 p-4">
-            <AiTeacherChat />
+            <AiTeacherChat rolePlayEnabled={false} />
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

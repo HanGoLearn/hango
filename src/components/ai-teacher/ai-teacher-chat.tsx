@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Send, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,8 +48,11 @@ function suggestedPromptsFor(context: AiTeacherContext): string[] {
 /** The chat body shared by the desktop panel (expanded) and the mobile drawer (8.3). */
 export function AiTeacherChat({
   voiceEnabled = true,
+  rolePlayEnabled = true,
 }: {
   voiceEnabled?: boolean;
+  /** The floating Han tutor must never inherit Speaking's Mandarin-only persona. */
+  rolePlayEnabled?: boolean;
 }) {
   const {
     context,
@@ -73,6 +76,16 @@ export function AiTeacherChat({
     null,
   );
   const listRef = useRef<HTMLDivElement>(null);
+  const activeContext = useMemo(
+    () =>
+      rolePlayEnabled
+        ? context
+        : {
+            ...context,
+            rolePlay: undefined,
+          },
+    [context, rolePlayEnabled],
+  );
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -82,7 +95,7 @@ export function AiTeacherChat({
     const trimmed = text.trim();
     if (!trimmed || sending || resetting) return;
     setDraft("");
-    const reply = await sendMessage(trimmed);
+    const reply = await sendMessage(trimmed, activeContext);
     setLastFailedMessage(reply ? null : trimmed);
   }
 
@@ -94,7 +107,9 @@ export function AiTeacherChat({
   }
 
   const contextLabel =
-    [context.lessonTitle, context.lessonStepType].filter(Boolean).join(" · ") ||
+    [activeContext.lessonTitle, activeContext.lessonStepType]
+      .filter(Boolean)
+      .join(" · ") ||
     "No active lesson context";
 
   return (
@@ -208,7 +223,7 @@ export function AiTeacherChat({
       )}
 
       <div className="flex flex-wrap gap-1.5">
-        {suggestedPromptsFor(context).map((prompt) => (
+        {suggestedPromptsFor(activeContext).map((prompt) => (
           <button
             key={prompt}
             type="button"
@@ -232,7 +247,7 @@ export function AiTeacherChat({
         />
         <HanVoiceInput
           disabled={sending || resetting || voiceConversationActive}
-          context={context}
+          context={activeContext}
           onTranscript={(transcript) => setDraft(transcript)}
         />
         <IconButton
@@ -249,7 +264,7 @@ export function AiTeacherChat({
           voice={voice}
           explanationLanguage={explanationLanguage}
           mode={mode}
-          context={context}
+          context={activeContext}
           open={open}
           appendMessage={appendRealtimeMessage}
           onActiveChange={setVoiceConversationActive}

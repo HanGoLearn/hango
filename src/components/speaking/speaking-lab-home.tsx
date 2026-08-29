@@ -11,6 +11,7 @@ import {
   Sparkles,
   ChevronDown,
   FlaskConical,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
@@ -72,23 +73,32 @@ type View =
       dialogueId?: string;
     };
 
+/**
+ * Locked for the Pre-MVP release (user request, 2026-08-23) - both modes
+ * are fully built and working, just deliberately hidden behind a lock icon
+ * for this release. Pending: project/TASKS.md tracks re-enabling this by
+ * flipping `locked` back to false - no other code change needed.
+ */
 const MODES: {
   type: ActivityType;
   title: string;
   description: string;
   icon: typeof Repeat;
+  locked?: boolean;
 }[] = [
   {
     type: "SHADOWING",
     title: "Shadowing",
     description: "Repeat a real conversation or a long passage, with pinyin.",
     icon: Repeat,
+    locked: true,
   },
   {
     type: "SCENARIO_ROLE_PLAY",
     title: "Scenario Role Play",
     description: "Respond in character to the scenario's mission.",
     icon: Drama,
+    locked: true,
   },
 ];
 
@@ -484,7 +494,8 @@ export function SpeakingLabHome({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {MODES.map((mode) => {
-          const available = prompts[mode.type] !== null;
+          const locked = mode.locked ?? false;
+          const available = !locked && prompts[mode.type] !== null;
           const Icon = mode.icon;
           return (
             <Card
@@ -507,16 +518,25 @@ export function SpeakingLabHome({
                   : undefined
               }
             >
-              <Icon
-                className="mb-2 size-5 text-primary-500"
-                aria-hidden="true"
-              />
+              <div className="mb-2 flex items-center justify-between">
+                <Icon className="size-5 text-primary-500" aria-hidden="true" />
+                {locked && (
+                  <Lock
+                    className="size-4 text-text-muted"
+                    aria-label="Locked"
+                  />
+                )}
+              </div>
               <CardTitle>{mode.title}</CardTitle>
               <Body className="text-text-secondary">{mode.description}</Body>
-              {!available && (
-                <Body className="mt-1 text-text-muted">
-                  Not available yet — no content for this mode.
-                </Body>
+              {locked ? (
+                <Body className="mt-1 text-text-muted">Coming soon.</Body>
+              ) : (
+                !available && (
+                  <Body className="mt-1 text-text-muted">
+                    Not available yet — no content for this mode.
+                  </Body>
+                )
               )}
             </Card>
           );
