@@ -42,8 +42,8 @@ async function buildGeneralProgressContext(userId: string): Promise<string> {
   ]);
   return [
     header(),
-    `Earned General Level: ${Math.round(general.points)}/${CURRENT_MAX_GENERAL_LEVEL_POINTS} points (${general.hskLevel}).`,
-    `Starting level selected by the learner (self-report, not a score): ${startingLevel?.hskLabel ?? "not set"}.`,
+    `Earned General Level: ${Math.round(general.points)}/${CURRENT_MAX_GENERAL_LEVEL_POINTS} points (${general.levelLabel}).`,
+    `Starting level selected by the learner (self-report, not a score): ${startingLevel?.startingLevelLabel ?? "not set"}.`,
     `Learning Journey weighted average: ${general.learningJourneyAverage == null ? "not enough completed scenarios yet" : `${general.learningJourneyAverage}%`} across ${general.scenariosCompleted} completed scenario(s).`,
     next
       ? `Recommended next lesson: ${next.lessonTitle} (/lesson/${next.lessonSlug}).`

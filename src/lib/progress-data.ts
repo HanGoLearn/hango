@@ -11,7 +11,7 @@ import {
   getLessonGrammarPointRows,
 } from "@/lib/content/learning-journey-data";
 import { isEvidenceRelevantToCompetency } from "@/lib/progress-evidence";
-import { hskLevelForPoints } from "@/lib/points-system";
+import { hskLevelForPoints, tierNameForLevel } from "@/lib/points-system";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
 
 export interface CompetencyProgressSummary extends CompetencyProgress {
@@ -106,29 +106,35 @@ export async function getVocabularyGrammarExposure(userId: string) {
   };
 }
 
-const HSK_LABELS: Record<string, string> = {
-  HSK_1_2: "HSK 1-2",
-  HSK_3: "HSK 3",
-  HSK_4: "HSK 4",
-  HSK_5: "HSK 5",
-  HSK_6: "HSK 6",
-  HSK_7_9: "HSK 7-9",
+// The learner's self-reported ChineseLevel enum value, mapped to the same
+// tier names shown everywhere else (2026-08-27 audit) - not tierNameForLevel
+// directly, since this bucket is a coarser self-report scale, not a real
+// per-skill level.
+const STARTING_LEVEL_LABELS: Record<string, string> = {
+  HSK_1_2: tierNameForLevel(1),
+  HSK_3: tierNameForLevel(3),
+  HSK_4: tierNameForLevel(4),
+  HSK_5: tierNameForLevel(5),
+  HSK_6: tierNameForLevel(6),
+  HSK_7_9: tierNameForLevel(7),
   UNSURE: "Not yet assessed",
 };
 
 /** Self-reported at onboarding, not computed from evidence - no scoring formula for this exists in any doc. */
 export async function getEstimatedLevel(userId: string): Promise<{
-  hskLabel: string;
+  startingLevelLabel: string;
 } | null> {
   const profile = await getOrCreateLearnerProfile(userId);
   if (!profile.currentLevel) return null;
-  return { hskLabel: HSK_LABELS[profile.currentLevel] ?? profile.currentLevel };
+  return {
+    startingLevelLabel: STARTING_LEVEL_LABELS[profile.currentLevel] ?? profile.currentLevel,
+  };
 }
 
 export interface GeneralLevelSummary {
   /** 0-2000, earned - see docs/02_academy/points_system.md. Distinct from getEstimatedLevel's self-reported currentLevel. */
   points: number;
-  hskLevel: string;
+  levelLabel: string;
   /** Simple average of weightedReflectionAverage across every completed scenario - null with 0 completions. */
   learningJourneyAverage: number | null;
   scenariosCompleted: number;
@@ -163,7 +169,7 @@ export async function getGeneralLevelSummary(
 
   return {
     points,
-    hskLevel: hskLevelForPoints(points),
+    levelLabel: hskLevelForPoints(points),
     learningJourneyAverage,
     scenariosCompleted: completions.length,
   };

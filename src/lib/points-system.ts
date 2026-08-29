@@ -181,34 +181,67 @@ export function computeScenarioEarnedPoints(
 }
 
 /**
- * General Level (0-2000) → HSK equivalent (points_system.md Part 2's
- * table). Thresholds are the point at which each level is *reached*; a
- * score is labeled by the highest threshold it has crossed. `level` is 0
- * for Pre-HSK (no numeric HSK band applies yet).
+ * General Level (0-2000) → display tier name (points_system.md Part 2's
+ * table, reconciled 2026-08-24: no longer claims a literal official-HSK
+ * equivalence - see "Relationship to Existing Docs" at the bottom of that
+ * file for why). Thresholds are the point at which each tier is *reached*;
+ * a score is labeled by the highest threshold it has crossed. `level` is
+ * the same 0-9 internal difficulty number the curriculum's hskReference
+ * field already uses - unchanged, and load-bearing: han-realtime.ts's
+ * character-limit/pace/vocabulary-scaling logic and
+ * speech/realtime-turn-guard.ts's turn-timeout logic both derive their
+ * "HSK N" technical string from hskNumberForPoints() (below), never from
+ * this table's `label`. Only `label` is safe to reword freely - `minPoints`
+ * and `level` must stay exactly as-is, or Han's real-time Speaking pacing
+ * shifts at different point totals than it used to.
  */
 const HSK_POINT_THRESHOLDS: { minPoints: number; level: number; label: string }[] = [
-  { minPoints: 2000, level: 9, label: "HSK 9" },
-  { minPoints: 1800, level: 8, label: "HSK 8" },
-  { minPoints: 1650, level: 7, label: "HSK 7" },
-  { minPoints: 1500, level: 6, label: "HSK 6" },
-  { minPoints: 1150, level: 5, label: "HSK 5" },
-  { minPoints: 900, level: 4, label: "HSK 4" },
-  { minPoints: 700, level: 3, label: "HSK 3" },
-  { minPoints: 350, level: 2, label: "HSK 2" },
-  { minPoints: 100, level: 1, label: "HSK 1" },
-  { minPoints: 0, level: 0, label: "Pre-HSK" },
+  { minPoints: 2000, level: 9, label: "Mastering the Language" },
+  { minPoints: 1800, level: 8, label: "Refined Fluency" },
+  { minPoints: 1650, level: 7, label: "Nearing Mastery" },
+  { minPoints: 1500, level: 6, label: "Speaking Like a Professional" },
+  { minPoints: 1150, level: 5, label: "Handling Real Situations" },
+  { minPoints: 900, level: 4, label: "Easily Understood" },
+  { minPoints: 700, level: 3, label: "Speaking with Ease" },
+  { minPoints: 350, level: 2, label: "Finding Your Footing" },
+  { minPoints: 100, level: 1, label: "Getting By" },
+  { minPoints: 0, level: 0, label: "Just Starting Out" },
 ];
 
+/**
+ * The friendly tier name shown to the learner (Dashboard, Progress) and to
+ * Han himself (ai-context.ts's resolveEffectiveLevel - Han is meant to see
+ * this exact wording). Never feed this into anything that parses an "HSK N"
+ * pattern back out of it - use hskNumberForPoints() for that instead.
+ */
 export function hskLevelForPoints(points: number): string {
   const match = HSK_POINT_THRESHOLDS.find((tier) => points >= tier.minPoints);
-  return match?.label ?? "Pre-HSK";
+  return match?.label ?? "Just Starting Out";
 }
 
 /**
- * Same table as hskLevelForPoints(), but the bare number (0 for Pre-HSK)
+ * Same 10 tier names as hskLevelForPoints(), keyed directly by the 0-9
+ * internal level instead of a points total (2026-08-24) - for callers that
+ * already have a raw skill level, not a General Level score. The placement
+ * exam's per-skill results (placement-exam-home.tsx) are the first caller:
+ * each of Vocabulary/Grammar/Reading/Listening/Speaking lands on its own
+ * 0-9 level, independent of General Level points, but should still use the
+ * exact same vocabulary the rest of the app does - "Easily Understood"
+ * means the same thing whether it's describing earned points or a
+ * placement result.
+ */
+export function tierNameForLevel(level: number): string {
+  const match = HSK_POINT_THRESHOLDS.find((tier) => tier.level === level);
+  return match?.label ?? "Just Starting Out";
+}
+
+/**
+ * Same table as hskLevelForPoints(), but the bare number (0 for none yet)
  * instead of a display label - for callers that feed it into a numeric
- * scale like describeSpeakingDifficulty() rather than showing it to the
- * learner directly.
+ * scale like describeSpeakingDifficulty(), or that need to reconstruct a
+ * literal "HSK N" string for han-realtime.ts's/realtime-turn-guard.ts's
+ * regex-based pacing logic, rather than showing anything to the learner
+ * directly.
  */
 export function hskNumberForPoints(points: number): number {
   const match = HSK_POINT_THRESHOLDS.find((tier) => points >= tier.minPoints);

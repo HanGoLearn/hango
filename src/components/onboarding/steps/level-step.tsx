@@ -6,14 +6,18 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle } from "@/components/ui/typography";
+import { tierNameForLevel } from "@/lib/points-system";
 
+// Labels use the same tier names shown everywhere else in the app
+// (2026-08-27 audit) - the `value`s stay the ChineseLevel enum's real
+// values (HSK_1_2 etc.), an internal/schema concern the learner never sees.
 const OPTIONS: { value: string; label: string }[] = [
-  { value: "HSK_1_2", label: "Just starting (HSK 1–2)" },
-  { value: "HSK_3", label: "HSK 3" },
-  { value: "HSK_4", label: "HSK 4" },
-  { value: "HSK_5", label: "HSK 5" },
-  { value: "HSK_6", label: "HSK 6" },
-  { value: "HSK_7_9", label: "HSK 7–9" },
+  { value: "HSK_1_2", label: `${tierNameForLevel(1)} (just starting)` },
+  { value: "HSK_3", label: tierNameForLevel(3) },
+  { value: "HSK_4", label: tierNameForLevel(4) },
+  { value: "HSK_5", label: tierNameForLevel(5) },
+  { value: "HSK_6", label: tierNameForLevel(6) },
+  { value: "HSK_7_9", label: tierNameForLevel(7) },
   { value: "UNSURE", label: "Unsure" },
 ];
 

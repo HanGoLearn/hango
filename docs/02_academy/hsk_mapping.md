@@ -1,16 +1,30 @@
 # HanGo HSK Mapping
 
-Version: 1.1
+Version: 1.2
 
 Status: Official
 
 Last Updated: August 2026
 
-For the exact points-based mapping (General Level 0-2000 → HSK 1-9) and how
-a learner actually earns each level, see
-[`points_system.md`](points_system.md) — this document defines the
-*content* mapping (which scenarios teach which HSK level); that one defines
-the *measurement* (how progress through them is scored).
+**2026-08-24**: a word-for-word audit of the curriculum's real vocabulary
+against the official 国际中文教育中文水平等级标准 (2021) list
+(`informe_academico_hango.md` Section 10) found that the General Level's
+point thresholds did not, in fact, certify the official HSK number each one
+used to claim — the gap widened the higher the score. `points_system.md`
+no longer maps points to an HSK number at all; it shows a plain-language
+tier name instead (see its "General Level Tiers" section), and neither the
+learner nor Han ever sees an HSK number tied to their score. **What this
+document still does, unchanged**: describe HSK as a loose *content design
+reference* — roughly which band of difficulty each chapter's scenarios were
+written toward — which is a softer, non-falsifiable claim than "reaching
+this many points certifies HSK-N," and doesn't need to change. Read every
+"HSK N" below in that spirit, not as a scored equivalence.
+
+For how the General Level is actually scored and displayed, see
+[`points_system.md`](points_system.md) — this document describes the
+*content* design reference (roughly which HSK band each scenario's
+vocabulary was aimed at); that one defines the *measurement* (how progress
+is scored and what tier name the learner and Han actually see).
 
 ---
 
@@ -47,9 +61,9 @@ near-native fluency:
 
 The learner-facing Learning Journey groups this into 3 chapters —
 Foundations, Everyday Life, Advanced Situations — not by HSK level
-directly. See `points_system.md` for exactly how General Level points map
-to each HSK level and how the 3 chapters relate to the 9 content domains
-behind them.
+directly. See `points_system.md` for how General Level points map to a
+named difficulty tier (not an HSK number) and how the 3 chapters relate to
+the 9 content domains behind them.
 
 ---
 
@@ -252,11 +266,11 @@ This allows learners to understand both their communication ability and their ap
 
 The AI Teacher should understand:
 
-- The learner's earned General Level (0-2000 points) and its HSK
-  equivalent — the authoritative signal once it exists, since it is earned
-  through completed scenarios rather than declared at onboarding. See
-  `points_system.md`'s "AI Teacher Responsibilities" section for the exact
-  precedence rule.
+- The learner's earned General Level (0-2000 points) and its tier name
+  (not an HSK number — see `points_system.md`'s 2026-08-24 note) — the
+  authoritative signal once it exists, since it is earned through completed
+  scenarios rather than declared at onboarding. See `points_system.md`'s
+  "AI Teacher Responsibilities" section for the exact precedence rule.
 - The learner's self-reported level, used only until real evidence exists.
 - Grammar already mastered.
 - Vocabulary already mastered.

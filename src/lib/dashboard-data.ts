@@ -116,12 +116,12 @@ export async function getDashboardData(userId: string) {
     // derived field already sitting on the `profile` row this function
     // fetches anyway (see progress-data.ts's getGeneralLevelSummary, which
     // reads the identical field for the Progress page's fuller card). Only
-    // the headline number/HSK label, not the scenario-completion average -
+    // the headline number/tier label, not the scenario-completion average -
     // that needs its own query and belongs on Progress, not this glanceable
     // summary.
     generalLevel: {
       points: profile.generalLevelPoints,
-      hskLevel: hskLevelForPoints(profile.generalLevelPoints),
+      levelLabel: hskLevelForPoints(profile.generalLevelPoints),
     },
     weeklyActivity: computeLast7DaysActivity(activityDates),
   };

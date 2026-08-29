@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, CircleCheck, Mic, PenLine } from "lucide-react";
+import { ChevronRight, CircleCheck, Mic, PenLine, Sparkles } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,18 @@ export default async function DashboardPage() {
             Go to Learning Journey
           </Button>
         </Link>
+        {/* New-learner nudge toward Welcome to Chinese (2026-08-24) - the
+            page fills a real gap the curriculum itself never covers
+            (pronouns, numbers, tones - see the informe's Section 10.4
+            audit), so a brand-new learner is pointed at it before their
+            first scenario, not after. Ungraded and permanent - see the
+            quick-actions row below for where returning learners find it. */}
+        <Link
+          href="/welcome-to-chinese"
+          className="text-supporting font-medium text-secondary-400 underline-offset-4 hover:underline"
+        >
+          New to Chinese? Start with a quick cultural primer →
+        </Link>
       </div>
     );
   }
@@ -89,11 +101,11 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-8">
       <PageTitle>Dashboard</PageTitle>
 
-      {/* Renders nothing except right after a real HSK level-up (client-only
-          comparison, src/components/progress/level-up-banner.tsx) - zero
-          extra queries, reuses the generalLevel this page already
+      {/* Renders nothing except right after a real tier level-up (client-
+          only comparison, src/components/progress/level-up-banner.tsx) -
+          zero extra queries, reuses the generalLevel this page already
           computed. */}
-      <LevelUpBanner hskLevel={data.generalLevel.hskLevel} />
+      <LevelUpBanner levelLabel={data.generalLevel.levelLabel} />
 
       {/* Today hero — rounded-panel + soft gradient, not a bordered Card,
           so it reads as the page's one clear "primary action" rather than
@@ -249,6 +261,22 @@ export default async function DashboardPage() {
             Writing practice
           </span>
         </Link>
+        {/* Permanent entry point (2026-08-24), same low-key treatment as
+            the two links above - deliberately never gated or hidden after
+            the first visit (unlike LevelUpBanner's dismiss-and-remember
+            pattern): the page has standing reference value - the tone demo
+            and courtesy phrases - not just onboarding value. */}
+        <Link
+          href="/welcome-to-chinese"
+          className="flex items-center gap-2 text-text-secondary transition-colors duration-fast ease-standard hover:text-text-primary"
+        >
+          <span className="flex size-8 items-center justify-center rounded-full bg-accent-500/15 text-accent-300">
+            <Sparkles className="size-4" aria-hidden="true" />
+          </span>
+          <span className="font-interface text-body font-medium">
+            Welcome to Chinese
+          </span>
+        </Link>
       </div>
 
       {/* Two-column split: a primary learning-path column (genuine list
@@ -285,7 +313,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-6 lg:col-span-1">
-          {/* General Level - the Points & Leveling System's HSK-equivalent
+          {/* General Level - the Points & Leveling System's headline
               score (points-system.md), surfaced on the Dashboard for the
               first time (2026-08-21). Headline number only, no explanation
               text - that stays on Progress (the detail view this links to),
@@ -316,7 +344,7 @@ export default async function DashboardPage() {
               </CardTitle>
               <Body className="text-text-secondary">
                 / {CURRENT_MAX_GENERAL_LEVEL_POINTS} &middot;{" "}
-                {data.generalLevel.hskLevel}
+                {data.generalLevel.levelLabel}
               </Body>
             </div>
             <ProgressBar value={generalLevelPercent} />

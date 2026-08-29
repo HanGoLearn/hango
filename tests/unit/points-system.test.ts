@@ -114,18 +114,18 @@ describe("computeSpeakingConversationScore", () => {
 
 describe("hskLevelForPoints", () => {
   it.each([
-    [0, "Pre-HSK"],
-    [99, "Pre-HSK"],
-    [100, "HSK 1"],
-    [349, "HSK 1"],
-    [350, "HSK 2"],
-    [700, "HSK 3"],
-    [900, "HSK 4"],
-    [1150, "HSK 5"],
-    [1500, "HSK 6"],
-    [1650, "HSK 7"],
-    [1800, "HSK 8"],
-    [2000, "HSK 9"],
+    [0, "Just Starting Out"],
+    [99, "Just Starting Out"],
+    [100, "Getting By"],
+    [349, "Getting By"],
+    [350, "Finding Your Footing"],
+    [700, "Speaking with Ease"],
+    [900, "Easily Understood"],
+    [1150, "Handling Real Situations"],
+    [1500, "Speaking Like a Professional"],
+    [1650, "Nearing Mastery"],
+    [1800, "Refined Fluency"],
+    [2000, "Mastering the Language"],
   ])("labels %i points as %s", (points, expected) => {
     expect(hskLevelForPoints(points)).toBe(expected);
   });

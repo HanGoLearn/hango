@@ -89,7 +89,7 @@ export default async function ProgressPage() {
         <PageTitle>Progress</PageTitle>
         {level && (
           <Body className="text-text-secondary">
-            Starting level selected: {level.hskLabel}
+            Starting level selected: {level.startingLevelLabel}
           </Body>
         )}
       </div>
@@ -109,7 +109,7 @@ export default async function ProgressPage() {
             {generalLevel.points.toFixed(0)}
           </CardTitle>
           <Body className="text-text-secondary">
-            / {CURRENT_MAX_GENERAL_LEVEL_POINTS} &middot; {generalLevel.hskLevel}
+            / {CURRENT_MAX_GENERAL_LEVEL_POINTS} &middot; {generalLevel.levelLabel}
           </Body>
         </div>
         <Caption className="text-text-muted">

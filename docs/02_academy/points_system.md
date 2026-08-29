@@ -1,10 +1,19 @@
 # HanGo Points & Leveling System
 
-Version: 1.0
+Version: 1.1
 
 Status: Official
 
 Last Updated: August 2026
+
+2026-08-24: the General Level's point thresholds no longer map to a literal
+official-HSK number. A word-for-word audit against the real 国际中文教育
+中文水平等级标准 (2021) list (`informe_academico_hango.md` Section 10)
+found the curriculum's actual vocabulary breadth didn't support that
+equivalence claim, worse the higher the score. The 10 thresholds themselves
+are unchanged (so is the internal 0-9 difficulty number driving Han's live
+Speaking pacing) — only the label each threshold shows changed, from an HSK
+number to a plain-language tier name. See "General Level Tiers" below.
 
 ---
 
@@ -12,7 +21,9 @@ Last Updated: August 2026
 
 This document defines HanGo's two-tier scoring system: a per-session Reflection
 score (0-100, immediate feedback on one lesson) and a General Level score
-(0-2000, the learner's real cumulative proficiency, mapped to HSK 1-9).
+(0-2000, the learner's real cumulative proficiency, shown as a named tier —
+see below — with HSK kept only as an internal design-calibration reference,
+never a certification claim).
 
 It supersedes the point-related gaps in `hsk_mapping.md` and
 `curriculum_structure.md` (see "Relationship to Existing Docs" below) — this
@@ -143,7 +154,7 @@ When a learner finishes all lessons in a scenario, show:
 
 ---
 
-# Part 2 — General Level (0-2000, mapped to HSK)
+# Part 2 — General Level (0-2000, named tiers)
 
 ## Why 3 chapters, not 9 domains
 
@@ -164,20 +175,40 @@ The General Level system is built around these 3 chapters, matching exactly
 what the learner sees and interacts with. The 7-domains-inside-one-chapter
 split stays an internal calculation detail.
 
-## HSK ↔ Points Table
+## General Level Tiers (2026-08-24: no longer literal HSK-equivalence claims)
 
-| Points | HSK Level | Reached at |
+An HSK-vocabulary audit (see `informe_academico_hango.md` Section 10) found
+that, checked word-for-word against the official
+国际中文教育中文水平等级标准 (2021) list, the old "N points = HSK-X"
+table did not hold up — the curriculum's real vocabulary breadth undershoots
+what each claimed official level actually requires, by a wider margin the
+higher the score. Presenting an exact point-to-official-HSK-number mapping
+is a falsifiable equivalence claim; presenting a difficulty tier is not.
+The table below replaces the old one — same 10 thresholds
+(`HSK_POINT_THRESHOLDS` in `src/lib/points-system.ts` is unchanged at the
+`minPoints`/`level` level, only `label` changed), new names, no HSK number
+in anything the learner or Han sees.
+
+| Points | Tier name | Reached at |
 |---|---|---|
-| 0 | Pre-HSK | New learner |
-| 100 | HSK 1 | Inside Foundations |
-| **350** | **HSK 2** | Foundations complete |
-| 700 | HSK 3 | Inside Everyday Life chapter |
-| **900** | **HSK 4** | Everyday Life chapter complete |
-| 1150 | HSK 5 | Inside Advanced Situations |
-| **1500** | **HSK 6** | Advanced Situations complete |
-| 1650 | HSK 7 | Writing/Speaking Lab only |
-| 1800 | HSK 8 | Writing/Speaking Lab only |
-| **2000** | **HSK 9** | Maximum |
+| 0 | Just Starting Out | New learner |
+| 100 | Getting By | Inside Foundations |
+| **350** | **Finding Your Footing** | Foundations complete |
+| 700 | Speaking with Ease | Inside Everyday Life chapter |
+| **900** | **Easily Understood** | Everyday Life chapter complete |
+| 1150 | Handling Real Situations | Inside Advanced Situations |
+| **1500** | **Speaking Like a Professional** | Advanced Situations complete |
+| 1650 | Nearing Mastery | Writing/Speaking Lab only |
+| 1800 | Refined Fluency | Writing/Speaking Lab only |
+| **2000** | **Mastering the Language** | Maximum |
+
+The internal 0-9 difficulty number (`hskNumberForPoints()`) behind each
+threshold is unchanged and still drives Han's real-time Speaking pacing
+(character limits, speech speed, vocabulary scaling in
+`han-realtime.ts`/`speech/realtime-turn-guard.ts`) — none of that logic
+changed, only what's displayed. HSK still exists internally purely as a
+*design calibration reference* (see "Relationship to Existing Docs" below)
+— it is never shown to the learner or to Han as a level claim.
 
 ## Chapter Point Budgets (cumulative)
 
@@ -373,7 +404,7 @@ existing learners' scores, which must never happen.
 
 The Progress screen shows:
 
-- General Level: `X / 2000`, with its HSK equivalent from the table above.
+- General Level: `X / 2000`, with its tier name from the table above.
 - Learning Journey weighted average (how the learner is doing across
   completed scenarios).
 - Per-skill scores (0-100): Listening, Speaking, Reading, Writing, Daily
@@ -383,34 +414,44 @@ The Progress screen shows:
 
 # Part 5 — AI Teacher (Han) Responsibilities
 
-In addition to the self-reported HSK level and the evidence-based
-competency band Han already uses, **Han must adapt to the learner's General
-Level score (0-2000)** as the primary, most precise signal of real ability —
-more precise than the coarse self-reported level, since it is earned, not
+In addition to the self-reported level and the evidence-based competency
+band Han already uses, **Han must adapt to the learner's General Level
+score (0-2000)** as the primary, most precise signal of real ability — more
+precise than the coarse self-reported level, since it is earned, not
 declared.
 
-- Han should treat the General Level's HSK-equivalent (from the table above)
-  as authoritative over the learner's self-reported `currentLevel` whenever
-  the two disagree.
+- Han should treat the General Level's tier name (from the table above,
+  `hskLevelForPoints()`) as authoritative over the learner's self-reported
+  `currentLevel` whenever the two disagree — and should see that tier name
+  directly (`resolveEffectiveLevel()` in `ai-context.ts`), not a raw HSK
+  number, both in tutoring mode and inside role-play/Speaking sessions
+  (2026-08-24: Han's own text no longer references HSK at all).
 - Difficulty of examples, vocabulary choice, and correction style should
-  scale continuously with the General Level score, not just its rounded HSK
-  band — a learner at 340 points and one at 950 points are both "close to a
+  scale continuously with the General Level score, not just its rounded
+  tier — a learner at 340 points and one at 950 points are both "close to a
   boundary" in different directions and should be treated accordingly.
 - This does not replace the existing zero-evidence fallback (a brand-new
   learner with 0 points defaults to the simplest possible Chinese,
   regardless of anything self-reported).
+- Live Speaking practice (`han-realtime.ts`) is a separate, unaffected
+  concern: its per-turn character-limit/pace/vocabulary-scaling logic reads
+  `hskNumberForPoints()` (the untouched internal 0-9 number) or a literal
+  `"HSK N"` string built from it, never the tier name — see that file's
+  `resolveRealtimePracticeLevel()` doc comment for why the two must stay
+  separate.
 
 ---
 
 # Confirmed Enhancements
 
-- **Real HSK syllabus coverage as a secondary signal.** Cross-check how much
-  of the official HSK-N vocabulary/grammar list a learner has actually
-  encountered and scored well on, alongside the points total — makes the
-  reported level defensible against two learners reaching the same point
-  total via very different content mixes.
-- **Milestone celebrations.** A badge or small certificate moment when a
-  learner crosses each HSK point threshold.
+- **Real HSK syllabus coverage as a secondary, internal-only signal.**
+  Cross-check how much of the official HSK-N vocabulary/grammar list a
+  learner has actually encountered and scored well on, alongside the points
+  total — useful as a design-calibration sanity check (see
+  `informe_academico_hango.md` Section 10's verified audit), but never
+  surfaced to the learner as a certification claim.
+- **Milestone celebrations.** A badge or small moment when a learner
+  crosses each tier threshold.
 
 ---
 
@@ -424,6 +465,15 @@ table in this document. `curriculum_structure.md` describes a generic
 doesn't match the real 9-domain / 3-chapter structure used here. Both should
 be reconciled with this document before or during implementation — not done
 yet, flagged for a separate pass.
+
+**2026-08-24 addition**: `hsk_mapping.md` still frames the *entire* General
+Level system as HSK-equivalence ("HanGo covers the full HSK 3.0 range... HSK
+1-2 (Foundations)... HSK 7-9 (reachable only through sustained Lab
+practice)"). That content-side framing (which scenarios teach roughly
+HSK-N-level material, as a design reference) is still fine to keep — the
+part that needs correcting is anywhere it implies the *point score itself*
+certifies a specific official HSK number, which this document no longer
+does (see "General Level Tiers" above). Not reconciled yet in that file.
 
 ---
 

@@ -18,19 +18,25 @@ import { Body, Caption, CardTitle, PageTitle } from "@/components/ui/typography"
 import { WritingFeedbackDisplay } from "@/components/writing/writing-feedback-display";
 import { submitCustomWritingAction } from "@/lib/actions/writing";
 import type { WritingFeedback } from "@/lib/writing-feedback";
+import { tierNameForLevel } from "@/lib/points-system";
 
 // Radix Select rejects an empty-string item value (same workaround as Speaking Lab's free-topic practice).
 const PROFILE_LEVEL = "PROFILE";
 
+// `value` is free text sent straight into the AI grading prompt (writing-
+// feedback.ts's CustomWritingCharacteristics.level) - unlike Speaking Lab's
+// free-topic level, nothing parses it back out with a regex, so only
+// `label` needs to stay in sync with the app's tier names; `value` is kept
+// as "HSK N" anyway for consistency with that other picker.
 const LEVEL_OPTIONS = [
   { value: PROFILE_LEVEL, label: "Use my profile level" },
-  { value: "HSK 1", label: "HSK 1" },
-  { value: "HSK 2", label: "HSK 2" },
-  { value: "HSK 3", label: "HSK 3" },
-  { value: "HSK 4", label: "HSK 4" },
-  { value: "HSK 5", label: "HSK 5" },
-  { value: "HSK 6", label: "HSK 6" },
-  { value: "HSK 7-9", label: "HSK 7–9" },
+  { value: "HSK 1", label: tierNameForLevel(1) },
+  { value: "HSK 2", label: tierNameForLevel(2) },
+  { value: "HSK 3", label: tierNameForLevel(3) },
+  { value: "HSK 4", label: tierNameForLevel(4) },
+  { value: "HSK 5", label: tierNameForLevel(5) },
+  { value: "HSK 6", label: tierNameForLevel(6) },
+  { value: "HSK 7-9", label: tierNameForLevel(7) },
 ];
 
 const FORMAT_OPTIONS = [

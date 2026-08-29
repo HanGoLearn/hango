@@ -32,20 +32,29 @@ import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import type { SpeakingFeedback } from "@/lib/speaking-feedback";
 import { SPEAKING_CLOSING_RESERVE_MS } from "@/lib/speaking-session-timing";
 import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
+import { buildFreeTopicRolePlay } from "@/lib/free-topic-role-play";
+import { tierNameForLevel } from "@/lib/points-system";
 
 // Radix Select rejects an empty-string item value, so "use my profile
 // level" (level: undefined in rolePlay) is represented by this sentinel.
 const PROFILE_LEVEL = "PROFILE";
 
+// `value` must stay exactly "HSK N" / "HSK 7-9" - it's sent to the server
+// as-is and han-realtime.ts parses that literal pattern (via a `/HSK\s*
+// ([1-9])/` regex) to set the character limit and speech pace for this
+// session. Only `label`, what the learner actually sees, is free to reword -
+// now the same tierNameForLevel() names used everywhere else in the app
+// (2026-08-27 audit: this used to be its own ad-hoc Beginner/Elementary/...
+// scale, a second naming system that could disagree with the canonical one).
 const LEVEL_OPTIONS = [
   { value: PROFILE_LEVEL, label: "Use my profile level" },
-  { value: "HSK 1", label: "HSK 1" },
-  { value: "HSK 2", label: "HSK 2" },
-  { value: "HSK 3", label: "HSK 3" },
-  { value: "HSK 4", label: "HSK 4" },
-  { value: "HSK 5", label: "HSK 5" },
-  { value: "HSK 6", label: "HSK 6" },
-  { value: "HSK 7-9", label: "HSK 7–9" },
+  { value: "HSK 1", label: tierNameForLevel(1) },
+  { value: "HSK 2", label: tierNameForLevel(2) },
+  { value: "HSK 3", label: tierNameForLevel(3) },
+  { value: "HSK 4", label: tierNameForLevel(4) },
+  { value: "HSK 5", label: tierNameForLevel(5) },
+  { value: "HSK 6", label: tierNameForLevel(6) },
+  { value: "HSK 7-9", label: tierNameForLevel(7) },
 ];
 
 const PACE_OPTIONS: { value: "slow" | "normal" | "fast"; label: string }[] = [
@@ -71,12 +80,6 @@ const ROLE_OPTIONS: {
     label: "A friend",
     aiRole: "a friend",
     displayLabel: "Han, as a friend",
-  },
-  {
-    value: "TEACHER",
-    label: "A teacher",
-    aiRole: "a teacher speaking with a student",
-    displayLabel: "Han, as a teacher",
   },
   {
     value: "COLLEAGUE",
@@ -162,21 +165,16 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
     ROLE_OPTIONS.find((option) => option.value === role) ?? ROLE_OPTIONS[0]!;
 
   const rolePlay = useMemo(
-    () => ({
-      aiRole:
-        selectedRole.value === "AUTO"
-          ? "the single character explicitly assigned to you by the learner's scenario; if the scenario gives no character, a conversation partner whose persona naturally fits the topic"
-          : selectedRole.aiRole,
-      learnerRole: "yourself",
-      scenarioContext: extra.trim()
-        ? `${topic.trim()} Additional instructions from the learner: ${extra.trim()}`
-        : topic.trim(),
-      objective: `Have a natural spoken conversation about: ${topic.trim()}`,
-      level: level === PROFILE_LEVEL ? undefined : level,
-      pace,
-      isFreeTopic: true as const,
-      correctionMode,
-    }),
+    () =>
+      buildFreeTopicRolePlay({
+        topic,
+        extraInstructions: extra,
+        selectedAiRole: selectedRole.aiRole,
+        useScenarioRole: selectedRole.value === "AUTO",
+        level: level === PROFILE_LEVEL ? undefined : level,
+        pace,
+        correctionMode,
+      }),
     [selectedRole, topic, level, pace, extra, correctionMode],
   );
 

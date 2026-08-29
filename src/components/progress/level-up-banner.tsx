@@ -4,10 +4,13 @@ import { useEffect, useSyncExternalStore } from "react";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import { Body, Caption } from "@/components/ui/typography";
 
+// Storage key kept as-is (not renamed to match levelLabel below) -
+// invalidating it would just re-show this banner once to every existing
+// learner for no real benefit.
 const STORAGE_KEY = "hango:last-seen-hsk-level";
 
 /**
- * Detects an HSK level-up (General Level crossing a new threshold,
+ * Detects a tier level-up (General Level crossing a new threshold,
  * points-system.md's hskLevelForPoints) purely client-side - no new query,
  * no LearnerProfile column, just a remembered last-seen label compared
  * against the level the Dashboard already computed server-side. Same
@@ -54,16 +57,16 @@ function recordSeen(level: string) {
   listeners.forEach((listener) => listener());
 }
 
-export function LevelUpBanner({ hskLevel }: { hskLevel: string }) {
+export function LevelUpBanner({ levelLabel }: { levelLabel: string }) {
   const lastSeen = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const resolved = lastSeen !== undefined;
-  const isLevelUp = resolved && lastSeen !== null && lastSeen !== hskLevel;
+  const isLevelUp = resolved && lastSeen !== null && lastSeen !== levelLabel;
 
   useEffect(() => {
-    if (resolved && lastSeen !== hskLevel) {
-      recordSeen(hskLevel);
+    if (resolved && lastSeen !== levelLabel) {
+      recordSeen(levelLabel);
     }
-  }, [resolved, lastSeen, hskLevel]);
+  }, [resolved, lastSeen, levelLabel]);
 
   if (!isLevelUp) return null;
 
@@ -74,7 +77,7 @@ export function LevelUpBanner({ hskLevel }: { hskLevel: string }) {
         <Caption className="font-semibold uppercase tracking-wide text-accent-300">
           Level up
         </Caption>
-        <Body>You&apos;ve reached {hskLevel}</Body>
+        <Body>You&apos;ve reached {levelLabel}</Body>
       </div>
     </div>
   );
