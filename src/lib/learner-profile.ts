@@ -21,6 +21,8 @@ export const getOrCreateLearnerProfile = cache(async (userId: string) => {
 
 export type OnboardingStep =
   | "welcome"
+  | "profile"
+  | "avatar"
   | "goal"
   | "level"
   | "explanation-language"
@@ -31,6 +33,8 @@ export type OnboardingStep =
 
 const STEP_ORDER: OnboardingStep[] = [
   "welcome",
+  "profile",
+  "avatar",
   "goal",
   "level",
   "explanation-language",
@@ -57,8 +61,19 @@ const STEP_ORDER: OnboardingStep[] = [
  * `placementExamOfferAcknowledgedAt` is the "como unica vez" marker for the
  * placement-exam offer that replaced it in the step order - set the moment
  * the learner skips the offer or starts the exam, so it's never re-shown.
+ *
+ * `displayName` (2026-08-29) is now the field that plays "welcome has no
+ * field of its own" role described above - "profile" is the step right
+ * after welcome, same relationship goal/learningGoals used to have.
+ *
+ * `avatarAnimal` (2026-08-30) lives on the separate `LearnerAvatar` table,
+ * not `LearnerProfile` - the caller (app/onboarding/page.tsx) fetches it
+ * alongside the profile and passes it in here as a plain field, same as
+ * every other resume check.
  */
 export function resolveResumeStep(profile: {
+  displayName: string | null;
+  avatarAnimal: string | null;
   learningGoals: string[];
   currentLevel: string | null;
   explanationLanguage: string | null;
@@ -66,7 +81,9 @@ export function resolveResumeStep(profile: {
   dailyStudyTargetMinutes: number | null;
   placementExamOfferAcknowledgedAt: Date | null;
 }): OnboardingStep {
-  if (profile.learningGoals.length === 0) return "welcome";
+  if (!profile.displayName) return "welcome";
+  if (!profile.avatarAnimal) return "avatar";
+  if (profile.learningGoals.length === 0) return "goal";
   if (!profile.currentLevel) return "level";
   if (!profile.explanationLanguage) return "explanation-language";
   if (profile.skillPriorities.length === 0) return "skills";

@@ -12,6 +12,7 @@ import {
   Translation,
   Caption,
 } from "@/components/ui/typography";
+import { HanAvatar } from "@/components/ui/han-mascot";
 import { AskAiButton } from "@/components/lesson/ask-ai-button";
 import { AudioPlayButton } from "@/components/lesson/audio-play-button";
 import { ExerciseItem } from "@/components/exercise/exercise-item";
@@ -98,7 +99,10 @@ export function GrammarStep({
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Grammar</SectionTitle>
+      <div className="flex items-center gap-2">
+        <HanAvatar pose="curious" size={32} />
+        <SectionTitle>Grammar</SectionTitle>
+      </div>
 
       {grammar.map(({ grammarPoint }) => (
         <GrammarPointCard
@@ -145,7 +149,10 @@ function GrammarPointCard({
   const exercises = grammarPoint.exercises;
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Card
+      className="flex flex-col gap-4"
+      style={{ animation: "card-slide-in var(--duration-slow) var(--ease-standard)" }}
+    >
       <div className="flex flex-col gap-1">
         <CardTitle>{grammarPoint.name}</CardTitle>
         <span className="w-fit rounded-control bg-elevated px-2.5 py-1 font-mono text-supporting text-accent-300">

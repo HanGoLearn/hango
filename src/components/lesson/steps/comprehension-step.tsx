@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Headphones } from "lucide-react";
 import { SectionTitle, Body, Caption } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
+import { HanAvatar } from "@/components/ui/han-mascot";
 import { EmptyState } from "@/components/ui/states";
 import { ExerciseItem } from "@/components/exercise/exercise-item";
 import { StepContinueButton } from "@/components/lesson/step-continue-button";
@@ -90,7 +91,10 @@ export function ComprehensionStep({
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Comprehension</SectionTitle>
+      <div className="flex items-center gap-2">
+        <HanAvatar pose="curious" size={32} />
+        <SectionTitle>Comprehension</SectionTitle>
+      </div>
 
       {canListenFirst && dialogue && !questionsRevealed && (
         <div className="flex flex-col gap-3 rounded-panel border border-accent-500 bg-surface p-4">
@@ -119,7 +123,10 @@ export function ComprehensionStep({
       {questionsRevealed &&
         (exercises.length > 0 ? (
           <>
-            <div className="flex flex-col gap-3">
+            <div
+              className="flex flex-col gap-3"
+              style={{ animation: "card-slide-in var(--duration-slow) var(--ease-standard)" }}
+            >
               {exercises.map((exercise) => (
                 <ExerciseItem
                   key={exercise.id}

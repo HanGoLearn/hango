@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { Check, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Body, Caption } from "@/components/ui/typography";
 import { InformationBanner } from "@/components/ui/banner";
+import { HanAvatar } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
 import type {
   ClientExercise,
@@ -67,6 +69,7 @@ export function ExerciseItem({
   const [submitting, setSubmitting] = useState(false);
   const [internalResult, setInternalResult] = useState<ExerciseSubmitResult | null>(null);
   const [visibleHints, setVisibleHints] = useState(0);
+  const reduceMotion = useReducedMotion();
 
   const result = hideControls ? (externalResult ?? null) : internalResult;
   const usedRights = new Set(pairs.map(([, right]) => right));
@@ -327,30 +330,52 @@ export function ExerciseItem({
       )}
 
       {result && (
-        <InformationBanner
-          variant={
-            result.isCorrect === true
-              ? "success"
-              : result.isCorrect === false
-                ? "error"
-                : "info"
-          }
-        >
-          <span className="flex items-center gap-1.5 font-medium">
-            {result.isCorrect === true && (
-              <Check className="size-4" aria-hidden="true" />
-            )}
-            {result.isCorrect === false && (
-              <X className="size-4" aria-hidden="true" />
-            )}
-            {result.isCorrect === true
-              ? "Correct."
-              : result.isCorrect === false
-                ? "Not quite."
-                : "Submitted."}
-          </span>
-          {feedbackMode === "learning" && result.explanation && ` ${result.explanation}`}
-        </InformationBanner>
+        <div className="flex items-start gap-3">
+          {/* Han's reaction (2026-08-29, Milestone 5) - layered next to the
+              existing color/icon/banner feedback, never replacing it (the
+              banner alone still carries the full meaning for anyone who
+              has motion/mascot reduced or just isn't looking at Han). No
+              reaction for a null isCorrect (SHORT_RESPONSE's "Submitted."
+              case) - there's no right/wrong for Han to react to yet. */}
+          {result.isCorrect !== null && (
+            <motion.div
+              className="shrink-0"
+              initial={reduceMotion ? undefined : { opacity: 0, scale: 0.6 }}
+              animate={reduceMotion ? undefined : { opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
+              <HanAvatar
+                pose={result.isCorrect ? "celebrating" : "wrong"}
+                size={40}
+              />
+            </motion.div>
+          )}
+          <InformationBanner
+            className="flex-1"
+            variant={
+              result.isCorrect === true
+                ? "success"
+                : result.isCorrect === false
+                  ? "error"
+                  : "info"
+            }
+          >
+            <span className="flex items-center gap-1.5 font-medium">
+              {result.isCorrect === true && (
+                <Check className="size-4" aria-hidden="true" />
+              )}
+              {result.isCorrect === false && (
+                <X className="size-4" aria-hidden="true" />
+              )}
+              {result.isCorrect === true
+                ? "Correct."
+                : result.isCorrect === false
+                  ? "Not quite."
+                  : "Submitted."}
+            </span>
+            {feedbackMode === "learning" && result.explanation && ` ${result.explanation}`}
+          </InformationBanner>
+        </div>
       )}
 
       {!hideControls && !result && (

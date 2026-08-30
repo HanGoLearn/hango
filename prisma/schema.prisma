@@ -59,6 +59,11 @@ model User {
   vocabularyQuizAttempts VocabularyQuizAttempt[]
   scenarioCompletions    ScenarioCompletion[]
   placementSessions      PlacementSession[]
+  achievements           Achievement[]
+  avatar                 LearnerAvatar?
+  coinLedgerEntries      CoinLedgerEntry[]
+  accessoryOwnerships    LearnerAccessoryOwnership[]
+  equippedAccessories    LearnerEquippedAccessory[]
 }
 
 model Account {
@@ -179,6 +184,18 @@ model LearnerProfile {
   id     String @id @default(cuid())
   userId String @unique
 
+  /// Onboarding-collected display name (2026-08-29) - independent of
+  /// User.name (captured at registration, used for the verification email).
+  /// Null means the "profile" onboarding step hasn't been completed yet -
+  /// resolveResumeStep uses this the same way every other step field is
+  /// used, as the resume marker.
+  displayName String?
+  /// Public handle for a future XP leaderboard (2026-08-29) - the ranking
+  /// feature itself isn't built yet, this only reserves a unique handle for
+  /// every learner now so it's ready when it ships. Unique so learners are
+  /// distinguishable on a ranking.
+  nickname    String? @unique
+
   /// Has a default and no dedicated onboarding step (3.2's step list doesn't
   /// include one) — set elsewhere (or left default) rather than tracked as
   /// an onboarding resume point.
@@ -250,6 +267,11 @@ model LearnerProfile {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// XP leaderboard (2026-08-29) - supports both the ranked top-N query
+  /// (ORDER BY generalLevelPoints DESC) and the "how many users rank above
+  /// me" COUNT a learner's own position needs.
+  @@index([generalLevelPoints])
 }
 
 /// Mirrors src/lib/ai-context.ts's `AiTeacherMode` type (TUTOR/PRACTICE).
@@ -1547,4 +1569,96 @@ model PlacementAttempt {
   question PlacementQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+/// Achievements (added 2026-08-29, user request) - one row per learner per
+/// unlocked achievement. `key` refers to a fixed, code-defined catalog in
+/// src/lib/achievements-catalog.ts - content (title/description/icon) lives
+/// in code, not the DB, the same way HSK_POINT_THRESHOLDS tier labels do.
+/// `seenAt` is null until the celebration UI has shown it, independent of
+/// `unlockedAt` which is the real, permanent unlock record the user asked for.
+model Achievement {
+  id         String    @id @default(cuid())
+  userId     String
+  key        String
+  unlockedAt DateTime  @default(now())
+  seenAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId, seenAt])
+}
+
+/// HanCoins + avatar (added 2026-08-29, user request) - a cosmetic-only
+/// economy, deliberately separate from generalLevelPoints/Achievements:
+/// neither of those can ever be spent or decreased, coins can be both. See
+/// project/TASKS.md for the full design conversation this schema follows.
+
+/// One row per learner - which zodiac animal they picked. `animal` is a
+/// plain string validated against src/lib/avatar-catalog.ts, not a Prisma
+/// enum, so unlocking a 4th animal later is a catalog edit, never a
+/// migration (same reasoning as Achievement.key).
+model LearnerAvatar {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  animal    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Append-only ledger - the coin balance is always SUM(amount), never a
+/// mutable field, to make double-spending structurally impossible.
+/// `sourceKey` is the one-time-only key for BOTH earning and spending
+/// ("lesson:{lessonId}", "scenario:{scenarioId}", "achievement:{key}",
+/// "purchase:{accessoryKey}") - the same event (or the same purchase) can
+/// never write a second entry, enforced by the unique constraint below,
+/// not by application logic alone.
+/// `seenAt` (2026-08-30) powers a small coin-gain toast (CoinCelebration),
+/// same decoupled detection/celebration split as Achievement.seenAt - only
+/// ever set/queried for positive (earned) entries, a purchase's own debit
+/// row is never "unseen" since the tienda UI already gives instant feedback.
+model CoinLedgerEntry {
+  id        String    @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String
+  sourceKey String
+  seenAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceKey])
+  @@index([userId])
+}
+
+/// What a learner has purchased. `accessoryKey` refers to the code-defined
+/// catalog in avatar-catalog.ts, same convention as Achievement.key.
+model LearnerAccessoryOwnership {
+  id           String   @id @default(cuid())
+  userId       String
+  accessoryKey String
+  purchasedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accessoryKey])
+}
+
+/// What a learner currently has equipped, at most one item per slot
+/// ("HEAD"/"FACE"/"TORSO") - upserted when equipping, deleted to go back to
+/// the bare animal for that slot.
+model LearnerEquippedAccessory {
+  id           String   @id @default(cuid())
+  userId       String
+  slot         String
+  accessoryKey String
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slot])
 }

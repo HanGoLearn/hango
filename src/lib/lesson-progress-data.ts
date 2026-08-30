@@ -4,6 +4,7 @@ import { getLessonsForScenarioLevel } from "@/lib/content/lesson";
 import { resolveLessonAvailability } from "@/lib/content/learning-journey";
 import { resolveNextStepId, isLessonComplete } from "@/lib/lesson-progress";
 import type { StepForProgress } from "@/lib/lesson-progress";
+import { checkLessonCompletionAchievements } from "@/lib/achievements";
 
 async function loadSiblingCompletionIds(
   userId: string,
@@ -142,6 +143,7 @@ export async function advanceLessonStep(
       update: {},
       create: { userId, lessonId },
     });
+    await checkLessonCompletionAchievements(userId);
   }
 
   return updated;

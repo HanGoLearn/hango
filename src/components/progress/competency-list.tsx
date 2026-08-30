@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { CardTitle } from "@/components/ui/typography";
 import { cn } from "@/lib/cn";
@@ -64,14 +65,14 @@ export function CompetencyList({
               {NAME_LABELS[competency.name] ?? competency.name}
             </CardTitle>
             {strengthNames?.has(competency.name) && (
-              <span className="shrink-0 rounded-full bg-secondary-500 px-2 py-0.5 font-interface text-caption font-semibold text-on-color-light">
+              <Chip tone="secondary" variant="solid" size="sm" className="shrink-0">
                 Strong
-              </span>
+              </Chip>
             )}
             {priorityNames?.has(competency.name) && (
-              <span className="shrink-0 rounded-full bg-accent-500 px-2 py-0.5 font-interface text-caption font-semibold text-on-color-dark">
+              <Chip tone="accent" variant="solid" size="sm" className="shrink-0">
                 Focus area
-              </span>
+              </Chip>
             )}
           </div>
           <ProgressBar

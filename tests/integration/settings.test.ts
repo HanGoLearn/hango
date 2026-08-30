@@ -8,7 +8,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 const {
-  updateProfileNameAction,
+  updateDisplayNameAction,
+  updateAccountNameAction,
   updateLearningPreferencesAction,
   updateDefaultAiModeAction,
   updateHanAudioSettingsAction,
@@ -41,25 +42,93 @@ function formDataOf(entries: [string, string][]): FormData {
 }
 
 describe("Settings actions (integration, real database)", () => {
-  it("updates the user's name", async () => {
-    const user = await createTestUser(`settings-name-${Date.now()}@hango.dev`);
+  it("updates the display name (the name Han uses) freely, any number of times", async () => {
+    const user = await createTestUser(
+      `settings-displayname-${Date.now()}@hango.dev`,
+    );
 
-    const result = await updateProfileNameAction(
+    let result = await updateDisplayNameAction(
       { status: "idle" },
-      formDataOf([["name", "New Name"]]),
+      formDataOf([["displayName", "First Name"]]),
+    );
+    expect(result.status).toBe("idle");
+
+    result = await updateDisplayNameAction(
+      { status: "idle" },
+      formDataOf([["displayName", "Changed My Mind"]]),
+    );
+    expect(result.status).toBe("idle");
+
+    const profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    expect(profile.displayName).toBe("Changed My Mind");
+  });
+
+  it("sets the Account Name retroactively (2026-08-29 - accounts from before onboarding's profile step existed)", async () => {
+    const user = await createTestUser(
+      `settings-accountname-${Date.now()}@hango.dev`,
+    );
+
+    const result = await updateAccountNameAction(
+      { status: "idle" },
+      formDataOf([["nickname", `retro${Date.now()}`]]),
     );
 
     expect(result.status).toBe("idle");
-    const updated = await db.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(updated.name).toBe("New Name");
+    const profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    expect(profile.nickname).toMatch(/^retro\d+$/);
   });
 
-  it("rejects an empty name", async () => {
-    await createTestUser(`settings-name-empty-${Date.now()}@hango.dev`);
-
-    const result = await updateProfileNameAction(
+  it("rejects changing the Account Name once it's already set (2026-08-29 - permanent for the life of the account)", async () => {
+    const user = await createTestUser(
+      `settings-accountname-locked-${Date.now()}@hango.dev`,
+    );
+    const firstNickname = `locked${Date.now()}`;
+    await updateAccountNameAction(
       { status: "idle" },
-      formDataOf([["name", ""]]),
+      formDataOf([["nickname", firstNickname]]),
+    );
+
+    const result = await updateAccountNameAction(
+      { status: "idle" },
+      formDataOf([["nickname", `different${Date.now()}`]]),
+    );
+
+    expect(result.status).toBe("error");
+    const profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    expect(profile.nickname).toBe(firstNickname);
+  });
+
+  it("rejects an Account Name already taken by another user", async () => {
+    const nickname = `lbtaken${Date.now()}`;
+    await createTestUser(`settings-accountname-a-${Date.now()}@hango.dev`);
+    await updateAccountNameAction(
+      { status: "idle" },
+      formDataOf([["nickname", nickname]]),
+    );
+
+    await createTestUser(`settings-accountname-b-${Date.now()}@hango.dev`);
+    const result = await updateAccountNameAction(
+      { status: "idle" },
+      formDataOf([["nickname", nickname]]),
+    );
+
+    expect(result.status).toBe("error");
+  });
+
+  it("rejects an Account Name with invalid characters", async () => {
+    await createTestUser(
+      `settings-accountname-invalid-${Date.now()}@hango.dev`,
+    );
+
+    const result = await updateAccountNameAction(
+      { status: "idle" },
+      formDataOf([["nickname", "not a valid nickname!"]]),
     );
 
     expect(result.status).toBe("error");
@@ -193,7 +262,10 @@ describe("Settings actions (integration, real database)", () => {
   it("Server Actions require an authenticated session", async () => {
     authMock.mockResolvedValue(null);
     await expect(
-      updateProfileNameAction({ status: "idle" }, formDataOf([["name", "x"]])),
+      updateDisplayNameAction(
+        { status: "idle" },
+        formDataOf([["displayName", "x"]]),
+      ),
     ).rejects.toThrow("Not authenticated");
   });
 });

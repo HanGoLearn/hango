@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export const profileStepSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, "Enter your name")
+    .max(60, "Keep it under 60 characters"),
+  nickname: z
+    .string()
+    .trim()
+    .min(3, "At least 3 characters")
+    .max(24, "Keep it under 24 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers, and underscores only"),
+});
+
 export const goalStepSchema = z.object({
   learningGoals: z
     .array(

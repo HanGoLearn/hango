@@ -105,7 +105,7 @@ export function RecommendationStep({
         <Button variant="tertiary" onClick={onBack} type="button">
           Back
         </Button>
-        <Button onClick={handleStart} loading={isPending} className="flex-1">
+        <Button size="lg" onClick={handleStart} loading={isPending} className="flex-1">
           Start learning
         </Button>
       </div>

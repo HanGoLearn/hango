@@ -1,14 +1,16 @@
 import { User, GraduationCap, Palette, Shield, UserCog } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
+import { getAvatarPageData } from "@/lib/avatar-data";
 import { PageTitle, SectionTitle, Caption } from "@/components/ui/typography";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { AiConversationStorageToggle } from "@/components/settings/ai-conversation-storage-toggle";
-import { ProfileSection } from "@/components/settings/profile-section";
+import { AccountNameSection } from "@/components/settings/account-name-section";
+import { DisplayNameSection } from "@/components/settings/display-name-section";
+import { AvatarSection } from "@/components/settings/avatar-section";
 import { LearningPreferencesSection } from "@/components/settings/learning-preferences-section";
 import { DefaultAiModeSelect } from "@/components/settings/default-ai-mode-select";
 import { RecordingRetentionSelect } from "@/components/settings/recording-retention-select";
@@ -42,9 +44,9 @@ import { HanAudioSettings } from "@/components/settings/han-audio-settings";
 export default async function SettingsPage() {
   const session = await auth();
   const userId = session!.user!.id!;
-  const [profile, user] = await Promise.all([
+  const [profile, avatar] = await Promise.all([
     getOrCreateLearnerProfile(userId),
-    db.user.findUniqueOrThrow({ where: { id: userId } }),
+    getAvatarPageData(userId),
   ]);
 
   return (
@@ -60,8 +62,28 @@ export default async function SettingsPage() {
         >
           Profile
         </SectionHeading>
+        <Card className="flex flex-col gap-4">
+          <DisplayNameSection
+            initialDisplayName={profile.displayName ?? ""}
+          />
+          <div className="flex flex-col gap-3 border-t border-border pt-4">
+            <AccountNameSection nickname={profile.nickname} />
+          </div>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {/* Same "skip SectionHeading, the character art is its own badge"
+            treatment as the Han section below (2026-08-30, user request -
+            "en setting tampoco [aparece mi personaje]"). */}
+        <SectionTitle>Avatar</SectionTitle>
         <Card>
-          <ProfileSection initialName={user.name ?? ""} />
+          <AvatarSection
+            animal={avatar.animal}
+            animalName={avatar.animalName}
+            equipped={avatar.equipped}
+            coinBalance={avatar.coinBalance}
+          />
         </Card>
       </div>
 

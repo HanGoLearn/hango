@@ -5,8 +5,19 @@
  * tested without a database or provider.
  *
  * Deliberately excluded (8.2 "Do not send unnecessary personal
- * information"): name, email, and any other account-identifying field -
+ * information"): email, id, and any other account-identifying field -
  * only pedagogical state goes into the prompt.
+ *
+ * `learnerName` (2026-08-29) is a deliberate, explicit exception to that
+ * original rule, not an oversight of it - added after the user directly
+ * confirmed they want to override the original "no PII" decision so Han
+ * can know their name ("no que use mi nombre, pero que Han sepa mi
+ * nombre"). Sourced from `LearnerProfile.displayName` (the name the
+ * learner set specifically for Han to use - see the "Account Name"/"Name"
+ * split in Settings), never `User.name` or email. Only surfaced outside
+ * role-play (`!context.rolePlay`) - a role-play scene has Han playing a
+ * different character entirely, who has no reason to know the real-world
+ * learner's name unless the scene itself establishes it.
  */
 import { hskLevelForPoints, hskNumberForPoints } from "@/lib/points-system";
 
@@ -17,6 +28,8 @@ export type HskSessionLevel = `HSK ${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
 export interface LearnerAiContext {
   level: string | null;
   explanationLanguage: string | null;
+  /** See this file's top comment - a deliberate, explicit exception to the "no PII" rule below. Only used outside role-play. */
+  learnerName?: string | null;
   demonstratedBand?: string;
   recentAccuracy?: number | null;
   strengths?: string[];
@@ -407,6 +420,9 @@ export function buildSystemPrompt(
       "You are Han, the learner's patient, encouraging, and highly accurate Mandarin Chinese tutor inside HanGo, a Mandarin Chinese learning app.",
       'Your name is always Han. If asked your name, always answer "Han" - never say you have no name, and never call yourself a generic assistant.',
       "If asked what HanGo is, explain that it is this Mandarin Chinese learning app you are part of. HanGo is unrelated to Hangeul, the Korean writing system, despite the similar-sounding name - never confuse the two or answer a question about HanGo with information about Korean.",
+      !context.rolePlay && learner.learnerName
+        ? `The learner's name is ${learner.learnerName}. You already know it - never ask for it. Use it occasionally when it feels natural, the way an attentive teacher would, not mechanically in every reply.`
+        : null,
     ].join(" "),
     !context.rolePlay ? buildHanAppKnowledgeSection(context) : null,
 
@@ -648,6 +664,9 @@ export function buildRealtimeSystemPrompt(
           "You are Han, the learner's warm, confident Mandarin tutor in a live voice conversation, inside HanGo, a Mandarin Chinese learning app.",
           'Your name is always Han. If asked your name, always answer "Han" - never say you have no name, and never call yourself a generic assistant.',
           "If asked what HanGo is, explain that it is this Mandarin Chinese learning app you are part of. HanGo is unrelated to Hangeul, the Korean writing system, despite the similar-sounding name - never confuse the two or answer a question about HanGo with information about Korean.",
+          learner.learnerName
+            ? `The learner's name is ${learner.learnerName}. You already know it - never ask for it. Use it occasionally when it feels natural, the way an attentive teacher would, not mechanically in every reply.`
+            : null,
         ].join(" "),
     !context.rolePlay ? buildHanAppKnowledgeSection(context) : null,
     "This is a natural conversation, not a sequence of recorded voice notes or a scripted lesson.",

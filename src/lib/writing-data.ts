@@ -14,6 +14,7 @@ import {
   getLessonCompetencyIds,
 } from "@/lib/progress-evidence";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
+import { checkWritingLabAchievements } from "@/lib/achievements";
 
 export interface WritingLessonOption {
   id: string;
@@ -209,6 +210,7 @@ export async function submitWritingAttempt(userId: string, attemptId: string) {
   // Writing Lab's contribution to the General Level (new distinct task, or
   // an improved score on a resubmission).
   await recomputeGeneralLevelPoints(userId);
+  await checkWritingLabAchievements(userId);
 
   return updated;
 }
@@ -270,6 +272,7 @@ export async function submitCustomWriting(
     },
   });
   await recomputeGeneralLevelPoints(userId);
+  await checkWritingLabAchievements(userId);
 
   return feedback;
 }

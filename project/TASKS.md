@@ -4464,3 +4464,508 @@ the reason this is OpenAI's task):
 - [ ] **Pending**: unlock by flipping `locked: true` → `false` (or removing
   the field) on both `MODES` entries in `speaking-lab-home.tsx` once
   Pre-MVP scope opens up to include them. No other code change needed.
+
+## Premium gamified UX/UI redesign (2026-08-27, plan approved, execution starting)
+
+User briefed this as a Senior Product Designer + Senior Frontend Engineer
+task: transform HanGo from feeling like a traditional educational web app
+into a premium, mobile-first, gamified learning app — onboarding, Learning
+Path, Lesson Player, feedback, gamification, mascot, micro-animations.
+Explicit guardrails: don't touch AI Teacher logic, HSK content system,
+existing APIs, auth, or database architecture beyond small additive
+changes. Don't copy any external app literally — take UX principles only.
+
+**Full private plan (context, current-state audit with file:line
+citations, and the 7-milestone breakdown) lives at
+`C:\Users\arean\.claude\plans\vectorized-jumping-fox.md`** (Claude Code's
+own plan-mode file — not readable by other tools working on this repo,
+hence this summary here). This section is the shared, repo-visible
+reference for anyone (Claude, Codex, a human) picking up this work.
+
+**Audit finding, important**: the codebase was already in better shape
+than the brief assumed — a real working dual-theme system, a real streak
+backend, a real path-shaped Learning Journey, and a real onboarding wizard
+already exist (see `docs/02_academy/informe_academico_hango.md` and the
+component files themselves for what's real vs. what the brief pre-supposed
+was missing). The actual gaps: no XP/achievements concept anywhere in the
+codebase, no reusable Chip/Badge component (~9 hand-rolled duplicates
+found), `Button`/`Card` have no size variants, lesson-step visual quality
+varies widely (Vocabulary richest, Writing is a placeholder stub), zero
+mascot reaction to correct/incorrect answers, and no animation library
+installed (`motion` not yet a dependency).
+
+**Four scope decisions locked with the user (AskUserQuestion, all
+answered)**:
+1. **Learning Path**: keep the existing vertical-line path (the user
+   explicitly moved it away from a Duolingo zigzag board in an earlier
+   session - do not reverse that), but give it real personality: wider,
+   bigger nodes, milestone markers, a more present mascot at the current
+   node.
+2. **XP**: presentation layer only, reusing the existing General Level /
+   Reflection score (`points-system.ts`, `general-level.ts`,
+   `LessonReflectionReport.totalScore`) - no new schema field, no new
+   accumulation logic.
+3. **Achievements**: explicitly deferred past this milestone set - no data
+   model exists today, needs its own careful design pass later.
+4. **Animation**: add `motion` (Framer Motion) as a new dependency for UI
+   micro-animations. Mascot stays static-PNG-posed for now; only prepare a
+   swappable-renderer seam for a future Rive integration - no `.riv`
+   assets exist yet, no real Rive work in this pass.
+
+**Refinements added 2026-08-27 after the user shared reference screenshots
+of another app** (principles only, not literal copy - different mascot,
+different color identity, not reused): the Learning Path should use a
+genuinely curved connector (not straight), lesson-type-specific node icons
+(not generic check/play/lock), inline star ratings under completed nodes,
+and the mascot rendered small and contained near the current node (not a
+large floating overlay). Separately: show XP accumulating live in the
+lesson header as the learner answers, not only on the completion screen
+(computed client-side from already-graded exercises this session - no
+schema change); a client-side-only "correct answers in a row" streak toast
+mid-lesson (resets per session, nothing persisted); and symmetry between
+the lesson-start objectives list (`SituationStep`'s `learningObjectives`,
+already real data) and a checked-off "what you learned" list on the
+Reflection/completion screen, reusing that same data instead of inventing
+new copy.
+
+**Division of labor**: mascot pose illustration (new PNG art assets -
+`thinking`/`celebrating`/a wrong-answer reaction, at minimum) is OpenAI's/
+Codex's task - image generation isn't available in Claude Code's toolset.
+All React/TypeScript/Tailwind implementation, the `motion` animation
+wiring, and component architecture stays with Claude - same split as the
+AI Teacher/voice work elsewhere in this file.
+
+**All 7 milestones complete as of 2026-08-29.** Real deviations from the
+original plan, for anyone picking this up later: the sticky lesson header
+(Milestone 4) was attempted, twice failed to actually stick for the user,
+and was reverted rather than shipped broken - `lesson-header.tsx` is back
+to a plain `border-b`, `app-shell.tsx` back to its pre-redesign `<main>`
+(no `min-h-0`); the mid-lesson correct-streak toast (Milestone 5) was
+explicitly dropped by the user's own call, not just deferred; lesson-type-
+specific Learning Path node icons (Milestone 3) stayed status-based
+(Check/Play/Lock) since a `Lesson` has no type field of its own. Also
+shipped, not in the original 7: onboarding's new "profile" step
+(`displayName`/`nickname`, Milestone 2) - see that section for what's
+still deferred there (Han doesn't use the name yet).
+
+**XP Leaderboard (2026-08-29, post-plan addition)** - the nickname
+reserved back in Milestone 2 finally has a real leaderboard behind it,
+user request: "quiero que exista este leaderboard... para los general
+points que ya tenemos." All-time/cumulative ranking by the same
+`generalLevelPoints` Dashboard/Progress already show - no new points
+concept, no weekly/period window (no time-series data to build one from,
+and the user's own framing matched all-time). Automatic participation for
+every learner with a nickname (confirmed with the user directly - the
+onboarding copy already told them the nickname was "for the leaderboard,"
+so opt-out wasn't added).
+- `src/lib/leaderboard-data.ts` - `getLeaderboardTop(limit)` (TTL-cached
+  60s, `eligibility = nickname set AND generalLevelPoints > 0` - a learner
+  at zero isn't meaningfully "ranked," just tied with everyone else who
+  hasn't started) and `getLearnerRank(userId)` (own position even outside
+  the visible top list, standard leaderboard UX - `null` when ineligible).
+- New `LearnerProfile_generalLevelPoints_idx` index (migration
+  `20260829163601_...`) - supports both the ranked query and the "how many
+  users rank above me" COUNT.
+- New `/leaderboard` page (top 50, "your rank" banner, gold Trophy for
+  #1) plus a 3-entry Dashboard teaser card (`getDashboardData` already
+  fetches this in the same `Promise.all`, zero extra round trips beyond
+  the 2 new queries themselves).
+- `tests/integration/leaderboard.test.ts` (5 tests, real database) -
+  ordering, eligibility filtering (no nickname / zero points excluded),
+  the `displayName ?? nickname` fallback, and rank/`totalRanked`
+  correctness. Each test uses a distinct `getLeaderboardTop` limit as its
+  cache key specifically to avoid the TTL cache serving one test's seeded
+  data to another within the same process - `getLearnerRank` doesn't need
+  this, it's keyed by a fresh per-test `userId` already.
+
+**Real gap found + fixed same day: nobody could actually appear on the
+leaderboard.** User report: "deberían aparecer todos los usuarios con
+puntos. Por qué no aparece nadie?" A direct DB check (5 profiles total)
+found exactly why: onboarding's "profile" step only ever runs *during*
+onboarding, so every account that finished onboarding before that step
+existed - including the user's own real, points-earning account
+(`onboardingCompletedAt: 2026-08-15`, well before this session) - has
+`nickname: null` and no path to ever set one. `eligible: 0`, structurally,
+not a bug in the ranking query itself. Fixed with a second entry point
+into the same field, in Settings.
+
+**Identity model revised the same day, before the first fix even settled**
+(user: "cuando entras debería aparecer el Account Name... el cual ya no
+se puede cambiar... y también debería aparecer el nombre de la persona,
+al que Han lo llamará así, ese sí se puede cambiar"). `nickname` and
+`displayName` split into two genuinely different, separately-governed
+concepts instead of one combined "leaderboard profile" form:
+- **Account Name** (`nickname`) - the permanent, public, leaderboard-only
+  handle. Settable exactly once, ever, for the life of the account -
+  enforced server-side in `updateAccountNameAction` (`actions/settings.ts`,
+  rejects if `nickname` is already non-null, not just hidden client-side),
+  not just by `AccountNameSection` (`components/settings/`) switching from
+  an editable `Input` to plain read-only text once set. The leaderboard
+  itself (`leaderboard-data.ts`'s `LeaderboardEntry`, `/leaderboard`, and
+  the Dashboard teaser) now shows `accountName` (`@handle` style) as the
+  *only* identity - `displayName` was removed from what this module even
+  fetches, not just from what it renders.
+- **Your name** (`displayName`) - what Han calls the learner, freely
+  editable anytime via `updateDisplayNameAction`/`DisplayNameSection`, no
+  uniqueness constraint, never shown on the leaderboard.
+
+Onboarding's "profile" step (`profile-step.tsx`) copy updated to match -
+"Account Name" terminology and an explicit "permanent, choose carefully"
+warning on that field specifically, "Your name" framed as Han's address
+and freely changeable. `tests/integration/settings.test.ts` now has 6
+identity tests (was 3): display name changes freely (twice, asserting the
+second write wins), Account Name set-once-retroactively, Account Name
+change *rejected* once already set (the core new rule), taken-name
+rejection, invalid-format rejection. `tests/integration/leaderboard.test.ts`
+updated to assert `accountName` instead of the now-removed `displayName`
+field, plus one test asserting `displayName` never appears on a
+leaderboard entry even when set.
+
+**Duplicate "Name" field removed the same day** (user: "en settings hay
+Name y Your name, debe quedar solo uno"). The old `User.name` field
+(`ProfileSection`/`updateProfileNameAction`/`profileSchema`, pre-existing
+from before this whole redesign, originally only used once - the
+registration verification email) and the new `displayName` field were
+sitting in Settings as two competing "name" inputs. Checked before
+deleting anything: `session.user.name` has zero readers anywhere in the
+app's UI (grepped for it directly) - `displayName` is the one Dashboard's
+greeting and (eventually) Han actually use, so it's the one kept.
+Deleted: `profile-section.tsx`, `updateProfileNameAction`,
+`profileSchema` (`validation/settings.ts`), and the now-pointless
+`db.user.findUniqueOrThrow` fetch in the Settings page (it existed only
+to feed `ProfileSection`). `DisplayNameSection`'s label changed from
+"Your name" to plain "Name" now that nothing else claims that word.
+Settings' registration-time `User.name` itself is untouched (still
+collected at signup, still emailed) - only its since-redundant Settings
+*editing* UI is gone. Test suite adjusted: the 2 `updateProfileNameAction`
+tests removed, the auth-guard test switched to `updateDisplayNameAction`
+instead (still 14 tests in `settings.test.ts`, net even).
+
+**Milestone order** (each fully verified - `tsc`/`eslint`/`test:unit`/
+`test:component`/manual visual QA in both themes at mobile width - before
+the next one starts):
+1. [x] Design system extensions: `motion` dependency, `Button`/`Card` size
+   variants (additive, zero regression to existing call sites), a shared
+   `Chip` component (`src/components/ui/chip.tsx`) replacing the
+   duplicated pill patterns (streak chip deduped between `top-bar.tsx` and
+   `dashboard/page.tsx`, "Placed by exam"/score badges, competency tags,
+   chapter "you are here" pill - `scenario-mastery-list.tsx`'s gradient
+   "Mastered" badge deliberately left as its own one-off, doesn't fit the
+   tone system). Also added, beyond the original scope: a `motion`-driven
+   idle float/tilt loop on `HanMascot`/`HanAvatar` (real dynamism on the
+   existing static art, respects `prefers-reduced-motion`) - user
+   feedback mid-build: swapping static poses alone doesn't read as
+   "alive", confirmed working after a hard-refresh. New mascot pose art
+   (`thinking`/`wrong`/`celebrating`) delivered by OpenAI/Codex 2026-08-28
+   and wired into `han-mascot.tsx`'s `POSES` map - not consumed by any
+   caller yet (that's Milestone 5/6's job), just available now. A real
+   4-frame hand-wave animation (`han-wave-1..4.png`, also OpenAI/Codex,
+   delivered 2026-08-29 after one rejected batch with a rendering defect -
+   verified pixel-by-pixel via `sharp` before trusting it) replaced the
+   earlier body-sway CSS approximation for `gesture="wave"`.
+2. [x] Onboarding visual redesign: new `src/components/onboarding/
+   option-tile.tsx` (`CheckboxTile`/`RadioTile`, wraps the same Radix
+   Checkbox/RadioGroup primitives the old 20px rows used - a11y unchanged,
+   verified via `tests/component/a11y.test.tsx`) replaces the compact rows
+   in goal/level/skills/daily-target/explanation-language steps, with
+   per-option icons where they add scanability (goal/skills). Two tile
+   layouts now: `"stack"` (icon on top, for level's icon+meter options) and
+   `"row"` (icon left/text right, compact - explanation-language/daily-
+   target/skills/goal/level all ended up using this after 2026-08-28/29
+   iteration). Fixed two real bugs found along the way: a flex item's
+   default `min-width: auto` was letting long labels ("Speaking Like a
+   Professional") push the radio indicator outside the tile's border in
+   the 2-column grid (fixed with `min-w-0`); and `min-h-28` silently did
+   nothing since Tailwind has no numeric `min-h` scale by default (fixed
+   with the arbitrary-value form `min-h-[112px]`) - level-step's 7 tiles
+   are now genuinely uniform height regardless of label line-count.
+   Level-step also got a small 5-segment "strength meter" (`LevelBars`,
+   staircase height, aria-hidden) next to each option. Step headers use
+   `HanMascot` (not `HanAvatar`) at 110px - `HanAvatar`'s circular
+   `object-fit:cover` crop read as visibly blurrier than the Dashboard's
+   uncropped `HanMascot`, confirmed by direct user comparison; a same-
+   session attempt to fix `HanAvatar` via `transform:scale()` made it
+   *worse* (jagged clip edge + compounded blur from a `sizes` hint that
+   didn't account for the transform) and was reverted. Primary CTA buttons
+   across the flow use `Button`'s new `size="lg"`.
+   **Scope addition 2026-08-29** (not in the original 7-milestone plan,
+   added mid-session per explicit user request): a new "profile" onboarding
+   step (right after welcome) collects `displayName` + a `nickname` unique
+   across all learners (`LearnerProfile.displayName`/`.nickname`, additive
+   migration `20260829045209_add_learner_profile_display_name_nickname`) -
+   `nickname` is reserved now for a future XP leaderboard that isn't built
+   yet (explicitly deferred, per user's own "posterior" framing). Dashboard
+   now greets by `displayName` when set. Han does **not** use the name yet
+   - deliberately deferred (user's own answer: touching `ai-context.ts`'s
+   prompt logic, even just to inject a data value, needs its own sign-off
+   later, not bundled into this). `resolveResumeStep`/`STEP_ORDER` updated
+   in both places they're duplicated (`learner-profile.ts` and
+   `components/onboarding/types.ts` - pre-existing duplication, not
+   introduced here). Zero changes to the other steps'
+   `actions/onboarding.ts` handlers or resumability logic.
+3. [x] Learning Path: `lesson-path.tsx` nodes size-10 -> size-12, a
+   checkpoint gradient (reusing the Final Mission node's own
+   `from-accent-500 to-primary-500` treatment, not a new visual language)
+   on every 4th COMPLETED/AVAILABLE lesson (`MILESTONE_EVERY = 4` - LOCKED
+   milestones stay plain muted, a bright gradient on something you can't
+   reach yet would read as a broken affordance). The bare "X/100" chip on
+   completed lessons is now a real star row (`starsForScore()`, new in
+   `points-system.ts` - 90+ = 3, pass-threshold(70)+ = 2, below = 1, pure
+   presentation over the same real `totalScore`) - "Placed by exam"
+   lessons keep their own badge unchanged, never both. Current-lesson
+   `HanAvatar` 26px -> 32px to match the bigger nodes, still inline/
+   contained per the locked decision (not a floating overlay).
+   `scenario-card.tsx` deleted (confirmed genuinely dead - only its
+   `ScenarioCardProps` type had a real consumer, `journey-chapters.tsx`;
+   moved there as `JourneyChapterScenario` instead of keeping a component-
+   less file alive just to export a type). `journey-chapters.tsx` left
+   otherwise untouched - its size-10 nodes were already a deliberate,
+   reasoned, previously-approved choice (own comment: "smaller, more
+   contained... this direction's main visual change"), not something the
+   Milestone 3 "light richness pass" language justified overriding.
+   **Curved connector, resolved 2026-08-29**: initially deferred (see
+   below for the original reasoning), then the user pushed back ("o sea no
+   hiciste casi nada?") and directly reused their original brief's own
+   instruction - present alternatives, don't guess blind. Published an
+   Artifact (4 side-by-side connector styles - straight/gentle wave/bold
+   wave/dashed wave - same example lesson data, real HanGo dark-theme
+   tokens) instead of iterating in the live app. User picked "D" (dashed
+   gentle wave) - directly assimilated from the Bytemigo onboarding
+   screenshot re-reviewed the same turn (dashed = "this is a path,"
+   distinct from a solid progress rail), not copied wholesale (no purple,
+   no ghost). Wired as `strokeDasharray="4 6"` + `strokeLinecap="round"`
+   on the same self-stretching wave path. The original "can't verify
+   without a browser" caution turned out to be solvable by showing
+   alternatives instead of picking one blind - worth remembering for the
+   next visually-uncertain call, rather than defaulting to skipping it.
+   **Still genuinely deferred**: lesson-type-specific node icons (still
+   status-based Check/Play/Lock) - a `Lesson` has no type field of its own
+   (`prisma/schema.prisma`), it contains steps of up to 13 different
+   `LessonStepType`s, so "this lesson's type" isn't real data without a
+   new query into `LessonStep` and a heuristic for picking one: scoped out
+   as a refinement-tier item, not one of the plan's 4 locked decisions.
+
+   **Real bug found + fixed same day**: the dashed connector only rendered
+   ~100px tall regardless of list length ("solo veo una raya entre la
+   primera y la segunda") - an absolutely-positioned `<svg>` with no
+   explicit height is a *replaced element*, so browsers size it from the
+   viewBox's own intrinsic ratio (32:100) instead of stretching between
+   `top`/`bottom` the way an ordinary div would. Fixed by wrapping it in a
+   plain div that does the `top-3 bottom-3` stretch (guaranteed, ordinary
+   abspos behavior for non-replaced elements), then filling that with an
+   `h-full w-full` svg - sidesteps the replaced-element special case
+   instead of fighting it.
+
+   **Node layout, resolved 2026-08-29** (second round of "dame
+   alternativas" after the user pushed back again): a second Artifact (3
+   node-position options - straight column / icon-only sway with text
+   anchored / full-row alternation) presented the real tension explicitly
+   - `journey-optimization.md`'s 2026-08-21 note that this path was
+   straightened *away* from a zigzag board specifically to avoid the
+   left-right eye-jump cost of reading titles. User picked "B" (icon
+   sways `ROW_SHIFT_PX = 28px` on alternating rows via `paddingLeft` on
+   the row, title/badges column stays anchored) - gets real movement
+   without reintroducing the cost the 2026-08-21 decision was about. The
+   connector's viewBox/path widened and re-centered (extremes at 24/52)
+   to roughly track the new icon sway range instead of floating
+   independently of it.
+4. [x] Lesson Player: `lesson-header.tsx` now `sticky top-0` ("progreso
+   siempre visible") - the `-mx-4 px-4` trick cancels then re-applies
+   AppShell's `<main>` padding so the sticky background spans edge to
+   edge instead of leaving scrolled content visible in the side gutters.
+   `StepNavigation`'s own rail (already had type-specific icons, a dashed
+   connector, and a current-node `HanAvatar` from an earlier session) was
+   deliberately left non-sticky - pinning both would eat a lot of
+   permanent vertical space, especially on mobile, for a plan item that
+   only asked about the progress bar. Grammar/Comprehension/Quiz each
+   got a small `HanAvatar` next to their `SectionTitle` (matching every
+   other step, and Vocabulary's own mascot presence) and the same
+   `card-slide-in` entrance animation Vocabulary already used, applied to
+   Grammar's point cards and Comprehension's exercise list - presentation
+   only, zero change to grading/batching/sequencing logic. Investigated
+   the "weaker steps" premise first: Grammar/Comprehension were already
+   functionally rich (audio, AI-ask, batched grading, listen-first UX for
+   Comprehension) - the real gap was narrower than the plan assumed (no
+   mascot, no entrance motion), consistent with this whole plan's pattern
+   of the codebase being in better shape than the original brief guessed.
+   **Deferred**: the live in-header XP counter - belongs closer to
+   Milestone 5 (needs the same "what counts as XP, computed from what"
+   groundwork as the rest of that milestone) rather than bolted onto the
+   header in isolation here. Quiz's own internal `QuizRunner` wasn't
+   audited in depth this pass - flag if it turns out to need its own
+   polish once seen live.
+
+   **Real bug found + fixed same day**: sticky didn't stick at all
+   ("también se traslada abajo") - root cause was in `app-shell.tsx`, not
+   the header. `<main>`'s `flex-1 overflow-y-auto` was never actually
+   height-bounded: a `flex-1` item in a column flex chain defaults to
+   `min-height: auto` ("at least as tall as my content"), so `<main>`
+   just grew to fit everything instead of shrinking to the viewport and
+   scrolling internally - the whole page scrolled at the document level
+   instead. `position: sticky` resolves against the nearest ancestor with
+   *any* overflow value set, even one that isn't practically active, so
+   it was anchoring against a box that never actually scrolled - net
+   effect, never stuck. Fixed with `min-h-0` on `<main>` and its parent
+   row. This was a latent shell-wide bug, not lesson-specific - every
+   authenticated page was already scrolling at the document level instead
+   of within `<main>`; nothing surfaced it before because nothing else
+   needed sticky positioning relative to `<main>`.
+
+   **Reverted same day - the `min-h-0` theory didn't fix it in practice**:
+   user reported the header still scrolled away after the `min-h-0` fix,
+   then that something broke more broadly across Learning Journey. Rolled
+   both the sticky header (`lesson-header.tsx`) and the `app-shell.tsx`
+   `min-h-0` change back to their pre-2026-08-29 state rather than
+   layering another guess on top - the diagnosis was wrong somewhere and
+   guessing again without seeing the actual failure wasn't going to
+   converge. **Sticky header is un-done, back to a plain `border-b` static
+   header, pending a fresh look with an actual screenshot of what's
+   broken.**
+5. [x] Feedback / XP / Streak / Stars:
+   - [x] Mascot reaction on `ExerciseItem`'s existing correct/incorrect
+     result - `celebrating`/`wrong` poses (delivered by OpenAI/Codex,
+     wired into `POSES` back in Milestone 1) next to the existing
+     color/icon/banner feedback, never replacing it - a `motion` pop-in
+     (scale 0.6->1, opacity 0->1), gated by `useReducedMotion()`. No
+     reaction for `isCorrect === null` (SHORT_RESPONSE's "Submitted."
+     case - nothing to react to yet). `InformationBanner` itself untouched
+     (every other call site across the app uses it) - Han sits beside it
+     in a new flex row local to `exercise-item.tsx`.
+   - [x] `totalScore` → 1-3 stars mapping - already built early, in
+     Milestone 3 (`starsForScore`, `points-system.ts`), Learning Path
+     needed it first. Nothing left to do here.
+   - [x] Unified `Chip`-based streak pill - already done in Milestone 1
+     (deduped between `top-bar.tsx`/`dashboard/page.tsx`). Nothing left.
+   - [ ] **"+N" gain micro-animation - not implemented, and not a small
+     gap**: `ExerciseSubmitResult` (`exercise-progress.ts`) carries only
+     `isCorrect`/`explanation`/`correctOptionId` - no point value exists
+     per exercise to animate. Real point totals only exist at the lesson
+     level (`LessonReflectionReport.totalScore`, computed in Reflection),
+     which is Milestone 6 territory (the completion screen's score
+     count-up), not something to fabricate here.
+   - [x] ~~Mid-lesson correct-streak toast~~ - **explicitly dropped by the
+     user (2026-08-29)**, not just deferred: "dejemos de lado el toast de
+     racha." Would have needed `ExerciseItem` to report each result
+     somewhere a lesson-level counter could see it (a new callback prop
+     through every step component, or a shared context) - real plumbing,
+     not a small gap, and the user chose not to spend it. Milestone 5 is
+     done with this scoped out.
+6. [x] Lesson Completion Screen: `ReflectionReport` (`reflection-step.tsx`,
+   shared by both `ReflectionStep` - fresh completion - and
+   `LessonResultsView` - revisiting, per the plan's own "both entry points
+   render identically") got a celebratory entrance layered onto its
+   existing hero block only - every `ScoreCard`, the long-press
+   breakdowns, strengths/improvements, speaking-error panel, and Han's
+   narrative are byte-identical to before. Added: a 0->score count-up
+   (`useCountUp`, a `motion` `useMotionValue`/imperative `animate` over
+   1.1s, skips to the final value under `prefers-reduced-motion`), a real
+   1-3 star row (`starsForScore`, reused from Milestone 3 - same function,
+   no new logic), a real streak chip (new `getReflectionStreakAction`
+   wrapping the same `getStudyStreak` Dashboard/TopBar already use - one
+   source of truth, not a second one), and `HanMascot` at `celebrating`
+   (passed) or `thinking` (didn't pass - "wrong"'s apologetic wink read
+   too harsh for "finished a whole lesson but under 70," `thinking` pairs
+   better with the existing "Keep practicing" copy).
+
+   "What you learned" (`learningObjectives`, mirroring `SituationStep`'s
+   numbered goals, now checked off) is real but **`ReflectionStep`-only**:
+   `LessonResultsView` deliberately never fetches full lesson content when
+   revisiting an already-completed lesson (its whole reason to exist is
+   avoiding that), so `learningObjectives` is an optional prop that's
+   simply absent there rather than adding a query to that fast path - a
+   real, disclosed narrowing of "both entry points render identically,"
+   not a silent one.
+
+   Verified against the real database - `tests/integration/reflection.test.ts`
+   (6 tests, data-layer only, the React component isn't integration-tested)
+   still green; `starsForScore`/`getStudyStreak` are both pre-existing,
+   already-tested functions, reused rather than reimplemented.
+
+   **Real bug found + fixed same day**: "Finish Lesson" rendered
+   unconditionally in `reflection-step.tsx`, including during the
+   "loading" state - user report: "estuve en reflection, salió el
+   resultado, y no me dio tiempo de leer, se salió automáticamente." The
+   report popping in shifts the layout; a tap aimed at anything else while
+   that happens can land on this button right as it shifts underneath the
+   finger, finishing the lesson before the score is even readable. Fixed:
+   the button now only renders once `state.status !== "loading"` (ready or
+   error - error keeps it, per its own "you can still finish below" copy).
+7. [x] Mascot Animation System Architecture: `han-mascot.tsx` now has a
+   real internal seam - `StaticMascotFrame` (`{src, alt, sizes}` in, an
+   `next/image fill` render out) is the swappable implementation behind
+   `HanMascot`/`HanAvatar`'s unchanged pose-based public API; a future
+   `@rive-app/react-canvas` renderer would implement that exact same
+   contract and drop in behind `MascotCrossfade` without either component
+   needing new props - documented in a code comment, no Rive dependency or
+   `.riv` asset added. Pose swaps now cross-fade (`AnimatePresence`,
+   `motion.span` opacity 0->1 over 0.25s, gated by `useReducedMotion()`)
+   instead of cutting instantly - keyed on `pose` specifically, not `src`,
+   so the wave-frame cycling (220ms/frame, unrelated to pose changes)
+   stays an instant crisp cut rather than blurring together.
+
+   Real refactor along the way, not just an add: `HanMascot`'s box used to
+   get its height implicitly from the `<Image>`'s own intrinsic aspect
+   ratio (`width` set, `height: auto`) - switching to `fill` (needed so
+   old/new pose frames can overlap during the cross-fade) meant that
+   height had to become explicit instead (`size * MASCOT_ASPECT_RATIO`,
+   the same 1536:1024 ratio every source PNG shares) - the exact class of
+   bug already found and fixed once this session in `lesson-path.tsx`'s
+   connector line, applied proactively here instead of shipping it again.
+   `HanAvatar` already used `fill` for its circular crop, so it only
+   gained the cross-fade wrapper, no dimension changes.
+
+   Verified across every real usage this session touched `HanMascot`/
+   `HanAvatar` in - Dashboard hero, LessonPath's current-node avatar,
+   onboarding step headers, the auth layout, `ExerciseItem`'s reaction,
+   the Reflection completion screen - `tsc`/`eslint`/545 unit/38 component
+   all green, since this component is shared everywhere.
+
+**Han now knows the learner's name (2026-08-29, post-plan addition,
+explicit user sign-off required and obtained)** - the one deliberate,
+narrow exception to this whole plan's own "never touch `ai-context.ts`
+prompt logic" guardrail below, not a quiet violation of it. User request:
+"que Han sepa mi nombre" - explicitly *not* "use my name" (hence the
+prompt wording: "use it occasionally... not mechanically in every
+reply", never "always greet by name").
+
+Before touching anything, found `ai-context.ts`'s own top-of-file
+comment: "Deliberately excluded (8.2 'Do not send unnecessary personal
+information'): name, email, and any other account-identifying field."
+Traced "8.2" to `project/TASKS_ARCHIVE.md`'s original AI Context spec -
+a genuine, deliberate privacy-by-design decision ("context type has no
+name/email/id fields at all - structurally can't leak them"), not an
+oversight. Surfaced this to the user directly and got explicit
+confirmation before overriding it (`AskUserQuestion` - "sí, agregar el
+nombre") - this reverses a real privacy stance, not just a technical
+default.
+
+Implementation, additive only, zero changes to pacing/parsing logic:
+- `LearnerAiContext` gained one new optional field, `learnerName`.
+- The prompt text itself gained one new conditional line in each of
+  `buildSystemPrompt`/`buildRealtimeSystemPrompt`'s existing "System
+  Context" opening section - not a restructure of either function.
+- Sourced from `LearnerProfile.displayName` specifically (the name the
+  learner set for Han to use, per the Account Name/Name split above) -
+  never `User.name` or email.
+- Gated on `!context.rolePlay` in both builders - a role-play scene has
+  Han playing a different character who has no reason to know the real
+  learner's name unless the scene itself supplies it (consistent with
+  the existing `context.rolePlay`-presence split documented in memory as
+  "Han persona scope").
+- Wired at both real call sites: `ai-teacher-data.ts` (text chat) and
+  `app/api/han/realtime/route.ts` (live voice) - each already had a
+  `db.learnerProfile.findUnique` for the prompt's other fields; this
+  only added `displayName` to that same existing `select`, no new query.
+- 5 new unit tests in `tests/unit/ai-context.test.ts` (now 58, was 53) -
+  name appears outside role-play (both builders), name never appears
+  during role-play even when supplied (both builders, the one most worth
+  guarding against regressing), and the no-name-set baseline is
+  unchanged. `tsc`/`eslint`/550 unit (was 545)/38 component all green.
+
+**Out of scope this whole plan**: `ai-context.ts` prompt logic beyond the
+one exception directly above, `han-realtime.ts`/`realtime-turn-guard.ts`
+pacing/parsing, any `"HSK N"`
+regex-parsed string, `ExerciseItem`'s grading contract, `study-streak.ts`/
+`points-system.ts`/`general-level.ts` formulas, `prisma/schema.prisma`
+beyond small additive fields (flag before adding any), real Writing Lab
+content, achievements, auth, the placement exam engine.

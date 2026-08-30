@@ -93,7 +93,7 @@ export function PlacementOfferStep({ onNext, onBack }: PlacementOfferStepProps) 
           >
             Skip for now
           </Button>
-          <Button onClick={handleStart} loading={starting} type="button">
+          <Button size="lg" onClick={handleStart} loading={starting} type="button">
             Take the placement exam
           </Button>
         </div>

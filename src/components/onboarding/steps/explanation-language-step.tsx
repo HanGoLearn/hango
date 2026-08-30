@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { saveExplanationLanguageStepAction } from "@/lib/actions/onboarding";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup } from "@/components/ui/radio-group";
+import { RadioTile } from "@/components/onboarding/option-tile";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
+import { HanMascot } from "@/components/ui/han-mascot";
 
 const OPTIONS: { value: string; label: string }[] = [
   { value: "EN", label: "English" },
@@ -49,8 +51,9 @@ export function ExplanationLanguageStep({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="text-center">
-        <SectionTitle>Which language should your AI Teacher use?</SectionTitle>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <HanMascot pose="wave" size={110} />
+        <SectionTitle>Which language should your Teacher use?</SectionTitle>
         <Body className="text-text-secondary">
           For explanations — lessons stay in Chinese.
         </Body>
@@ -58,13 +61,9 @@ export function ExplanationLanguageStep({
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      <RadioGroup value={value} onValueChange={setValue}>
+      <RadioGroup value={value} onValueChange={setValue} className="grid grid-cols-2 gap-3">
         {OPTIONS.map((option) => (
-          <RadioGroupItem
-            key={option.value}
-            value={option.value}
-            label={option.label}
-          />
+          <RadioTile key={option.value} value={option.value} label={option.label} />
         ))}
       </RadioGroup>
 
@@ -72,7 +71,7 @@ export function ExplanationLanguageStep({
         <Button variant="tertiary" onClick={onBack} type="button">
           Back
         </Button>
-        <Button onClick={handleContinue} loading={isPending} disabled={!value}>
+        <Button size="lg" onClick={handleContinue} loading={isPending} disabled={!value}>
           Continue
         </Button>
       </div>

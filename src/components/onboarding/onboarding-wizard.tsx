@@ -8,6 +8,8 @@ import {
   type OnboardingValues,
 } from "@/components/onboarding/types";
 import { WelcomeStep } from "@/components/onboarding/steps/welcome-step";
+import { ProfileStep } from "@/components/onboarding/steps/profile-step";
+import { AvatarStep } from "@/components/onboarding/steps/avatar-step";
 import { GoalStep } from "@/components/onboarding/steps/goal-step";
 import { LevelStep } from "@/components/onboarding/steps/level-step";
 import { ExplanationLanguageStep } from "@/components/onboarding/steps/explanation-language-step";
@@ -49,6 +51,23 @@ export function OnboardingWizard({
       )}
 
       {step === "welcome" && <WelcomeStep onNext={() => goNext()} />}
+      {step === "profile" && (
+        <ProfileStep
+          initialDisplayName={values.displayName}
+          initialNickname={values.nickname}
+          onNext={({ displayName, nickname }) =>
+            goNext({ displayName, nickname })
+          }
+          onBack={goBack}
+        />
+      )}
+      {step === "avatar" && (
+        <AvatarStep
+          initialAnimal={values.avatarAnimal}
+          onNext={(avatarAnimal) => goNext({ avatarAnimal })}
+          onBack={goBack}
+        />
+      )}
       {step === "goal" && (
         <GoalStep
           initialValue={values.learningGoals}

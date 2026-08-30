@@ -4,6 +4,7 @@ import {
   Mic,
   PenLine,
   TrendingUp,
+  Store,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -81,6 +82,18 @@ export const primaryNavItems: NavItem[] = [
     href: "/progress",
     icon: TrendingUp,
     badgeClassName: "bg-secondary-300",
+    badgeIconClassName: "text-on-color-dark",
+  },
+  {
+    // 2026-08-30 (user request) - the tienda gets a full primary-nav slot,
+    // same as every other section, not just a Dashboard teaser like
+    // Leaderboard/Achievements. warning-500/on-color-dark is an
+    // already-verified pairing (see Chip's solidClasses), not a new,
+    // unchecked contrast combination.
+    label: "Shop",
+    href: "/tienda",
+    icon: Store,
+    badgeClassName: "bg-warning-500",
     badgeIconClassName: "text-on-color-dark",
   },
   {

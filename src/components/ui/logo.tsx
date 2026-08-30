@@ -26,12 +26,35 @@ export function LogoMark({ className }: { className?: string }) {
  * (Fraunces). Monochrome by default, like the reference (dark ink on
  * porcelain) — the mark isn't red in the source image, only the
  * "PREMIUM / EDITORIAL" label text was.
+ *
+ * `size` (2026-08-29): "lg" doubles both the mark and the wordmark, for the
+ * auth panel's hero placement - "md" (default) is byte-identical to the
+ * original single-size markup, so every other call site is unaffected.
  */
-export function Logo({ className }: { className?: string }) {
+export function Logo({
+  className,
+  size = "md",
+}: {
+  className?: string;
+  size?: "md" | "lg";
+}) {
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
-      <LogoMark className="size-7 text-text-primary" />
-      <span className="font-display text-card-title font-semibold text-text-primary">
+    <span
+      className={cn(
+        "inline-flex items-center",
+        size === "lg" ? "gap-3" : "gap-2",
+        className,
+      )}
+    >
+      <LogoMark
+        className={cn(size === "lg" ? "size-14" : "size-7", "text-text-primary")}
+      />
+      <span
+        className={cn(
+          "font-display font-semibold text-text-primary",
+          size === "lg" ? "text-[2.25rem]" : "text-card-title",
+        )}
+      >
         HanGo
       </span>
     </span>

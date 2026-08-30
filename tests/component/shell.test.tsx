@@ -107,7 +107,14 @@ describe("BottomNav", () => {
 
 describe("TopBar", () => {
   it("derives the title from the current route and shows a user menu button", () => {
-    render(<TopBar streak={{ currentStreak: 5, activeToday: true }} />);
+    render(
+      <TopBar
+        streak={{ currentStreak: 5, activeToday: true }}
+        coinBalance={40}
+        avatarAnimal={null}
+        avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
+      />,
+    );
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "User menu" }),
@@ -117,7 +124,12 @@ describe("TopBar", () => {
 
 describe("UserMenu", () => {
   it("opens to reveal Settings and Log out", async () => {
-    render(<UserMenu />);
+    render(
+      <UserMenu
+        animal={null}
+        equipped={{ HEAD: null, FACE: null, TORSO: null }}
+      />,
+    );
     await userEvent.click(screen.getByRole("button", { name: "User menu" }));
 
     // Radix's DropdownMenu.Item applies role="menuitem" to its child,

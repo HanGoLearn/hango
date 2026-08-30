@@ -1,24 +1,71 @@
 "use client";
 
 import { useState } from "react";
+import {
+  Sprout,
+  MessageCircle,
+  MessagesSquare,
+  Users,
+  Briefcase,
+  GraduationCap,
+  HelpCircle,
+} from "lucide-react";
 import { saveLevelStepAction } from "@/lib/actions/onboarding";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup } from "@/components/ui/radio-group";
+import { RadioTile } from "@/components/onboarding/option-tile";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle } from "@/components/ui/typography";
+import { HanMascot } from "@/components/ui/han-mascot";
 import { tierNameForLevel } from "@/lib/points-system";
+import { cn } from "@/lib/cn";
+
+// Increasing height per bar (2026-08-28: "que crezcan verticalmente ... se
+// ve como progreso para arriba") - a staircase read as growing progress,
+// not just a row of equal-height segments changing color. Shrunk overall
+// twice now ("muy grandes", then "muy altas") - 4px wide, capped at 10px
+// tall so it sits comfortably inside the single-line row layout.
+const LEVEL_BAR_HEIGHTS = ["h-1", "h-1.5", "h-2", "h-2.5", "h-3"];
+
+/** Small filled-segment meter next to each level's label (2026-08-28, "para que sea mas didactico") - purely decorative reinforcement of the label/description, so it's aria-hidden. */
+function LevelBars({ filled }: { filled: number }) {
+  return (
+    <span className="flex shrink-0 items-end gap-0.5" aria-hidden="true">
+      {LEVEL_BAR_HEIGHTS.map((height, i) => (
+        <span
+          key={i}
+          className={cn(
+            "w-1 rounded-full",
+            height,
+            i < filled ? "bg-primary-500" : "bg-border",
+          )}
+        />
+      ))}
+    </span>
+  );
+}
 
 // Labels use the same tier names shown everywhere else in the app
 // (2026-08-27 audit) - the `value`s stay the ChineseLevel enum's real
 // values (HSK_1_2 etc.), an internal/schema concern the learner never sees.
-const OPTIONS: { value: string; label: string }[] = [
-  { value: "HSK_1_2", label: `${tierNameForLevel(1)} (just starting)` },
-  { value: "HSK_3", label: tierNameForLevel(3) },
-  { value: "HSK_4", label: tierNameForLevel(4) },
-  { value: "HSK_5", label: tierNameForLevel(5) },
-  { value: "HSK_6", label: tierNameForLevel(6) },
-  { value: "HSK_7_9", label: tierNameForLevel(7) },
-  { value: "UNSURE", label: "Unsure" },
+// Icons form a rough "growing ability" progression, from just starting
+// out (Sprout) to near-mastery (GraduationCap) - purely visual, no data
+// tie to the real HSK level number. `filled` drives the same progression
+// as a level-strength meter (0 = Getting By, 5 = Nearing Mastery); UNSURE
+// has none since it isn't a real level.
+const OPTIONS: {
+  value: string;
+  label: string;
+  icon: typeof Sprout;
+  filled?: number;
+}[] = [
+  { value: "HSK_1_2", label: tierNameForLevel(1), icon: Sprout, filled: 0 },
+  { value: "HSK_3", label: tierNameForLevel(3), icon: MessageCircle, filled: 1 },
+  { value: "HSK_4", label: tierNameForLevel(4), icon: MessagesSquare, filled: 2 },
+  { value: "HSK_5", label: tierNameForLevel(5), icon: Users, filled: 3 },
+  { value: "HSK_6", label: tierNameForLevel(6), icon: Briefcase, filled: 4 },
+  { value: "HSK_7_9", label: tierNameForLevel(7), icon: GraduationCap, filled: 5 },
+  { value: "UNSURE", label: "Unsure", icon: HelpCircle },
 ];
 
 export interface LevelStepProps {
@@ -50,18 +97,23 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="text-center">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <HanMascot pose="curious" size={110} />
         <SectionTitle>What&apos;s your current Chinese level?</SectionTitle>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      <RadioGroup value={value} onValueChange={setValue}>
+      <RadioGroup value={value} onValueChange={setValue} className="grid grid-cols-2 gap-3">
         {OPTIONS.map((option) => (
-          <RadioGroupItem
+          <RadioTile
             key={option.value}
             value={option.value}
             label={option.label}
+            icon={<option.icon className="size-5" aria-hidden="true" />}
+            layout="row"
+            className="min-h-[112px]"
+            meta={option.filled !== undefined ? <LevelBars filled={option.filled} /> : undefined}
           />
         ))}
       </RadioGroup>
@@ -70,7 +122,12 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
         <Button variant="tertiary" onClick={onBack} type="button">
           Back
         </Button>
-        <Button onClick={handleContinue} loading={isPending} disabled={!value}>
+        <Button
+          size="lg"
+          onClick={handleContinue}
+          loading={isPending}
+          disabled={!value}
+        >
           Continue
         </Button>
       </div>

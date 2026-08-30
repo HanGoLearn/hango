@@ -2,17 +2,37 @@ import Link from "next/link";
 import { Check, Play, Circle } from "lucide-react";
 import { SectionTitle, Caption } from "@/components/ui/typography";
 import { HanAvatar } from "@/components/ui/han-mascot";
-import type { ScenarioCardProps } from "@/components/learning-journey/scenario-card";
+import { Chip } from "@/components/ui/chip";
 import {
   JOURNEY_CHAPTER_ORDER,
   resolveJourneyChapter,
   CHAPTER_CONFIG,
   type JourneyChapter,
+  type ScenarioStatus,
 } from "@/lib/content/learning-journey";
 import { cn } from "@/lib/cn";
 
+/**
+ * Was `ScenarioCardProps` (2026-08-29: `scenario-card.tsx`'s `ScenarioCard`
+ * component was dead - a leftover from before the chapter-node redesign,
+ * never rendered anywhere - only this type survived as a real dependency,
+ * so it moved here instead of leaving a component-less file around just to
+ * export a type).
+ */
+export interface JourneyChapterScenario {
+  slug: string;
+  domainSlug: string;
+  name: string;
+  domainName: string;
+  description: string | null;
+  difficultyLevels: string[];
+  totalLessons: number;
+  completedLessons: number;
+  status: ScenarioStatus;
+}
+
 export interface JourneyChaptersProps {
-  scenarios: (ScenarioCardProps & { domainSlug: string })[];
+  scenarios: JourneyChapterScenario[];
 }
 
 /**
@@ -62,10 +82,7 @@ const ACCENT_CLASSES: Record<
  * organization, not gating.
  */
 export function JourneyChapters({ scenarios }: JourneyChaptersProps) {
-  const chapters = new Map<
-    JourneyChapter,
-    (ScenarioCardProps & { domainSlug: string })[]
-  >();
+  const chapters = new Map<JourneyChapter, JourneyChapterScenario[]>();
   for (const scenario of scenarios) {
     const chapter = resolveJourneyChapter(scenario.difficultyLevels);
     const bucket = chapters.get(chapter) ?? [];
@@ -119,10 +136,10 @@ export function JourneyChapters({ scenarios }: JourneyChaptersProps) {
               </div>
 
               {isCurrentChapter && (
-                <span className="ml-auto flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1 font-interface text-caption font-semibold text-text-secondary">
+                <Chip size="sm" className="ml-auto">
                   <HanAvatar pose="wave" size={20} />
                   You are here
-                </span>
+                </Chip>
               )}
             </div>
 

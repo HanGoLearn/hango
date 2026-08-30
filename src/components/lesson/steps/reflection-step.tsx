@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import {
+  motion,
+  useMotionValue,
+  useTransform,
+  animate as animateValue,
+  useReducedMotion,
+} from "motion/react";
+import { CheckCircle2, Star, Loader2 } from "lucide-react";
 import {
   SectionTitle,
   Body,
@@ -9,11 +16,14 @@ import {
   Display,
 } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { HanMascot } from "@/components/ui/han-mascot";
 import { HanSpeechButton } from "@/components/ai-teacher/han-speech-button";
 import { cn } from "@/lib/cn";
 import {
   getLessonReflectionReportAction,
   getLessonScoreBreakdownAction,
+  getReflectionStreakAction,
 } from "@/lib/actions/reflection";
 import type {
   LessonReflectionReportView,
@@ -21,7 +31,8 @@ import type {
   ScoreCounts,
 } from "@/lib/reflection";
 import type { SpeakingConversationFeedback } from "@/lib/reflection-prompt";
-import { REFLECTION_PASS_SCORE } from "@/lib/points-system";
+import { REFLECTION_PASS_SCORE, starsForScore } from "@/lib/points-system";
+import type { StreakResult } from "@/lib/study-streak";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 
 const DEFAULT_HAN_VOICE = "cedar";
@@ -79,13 +90,27 @@ export function ReflectionStep({
       )}
 
       {state.status === "ready" && (
-        <ReflectionReport report={state.report} lessonId={lesson.id} />
+        <ReflectionReport
+          report={state.report}
+          lessonId={lesson.id}
+          learningObjectives={lesson.learningObjectives}
+        />
       )}
 
-      <Button type="button" onClick={onContinue} className="mt-2 self-start">
-        <CheckCircle2 className="size-4" aria-hidden="true" />
-        Finish Lesson
-      </Button>
+      {/* Only rendered once there's something to read or the report failed
+          (2026-08-29 fix - "no me dio tiempo de leer, se salió
+          automáticamente"): this used to render unconditionally, including
+          during the "loading" state above. The report popping in caused a
+          real layout shift, and a tap aimed at anything else could land on
+          this button right as it shifted into place underneath it -
+          finishing the lesson before the learner had a chance to read
+          their own results. */}
+      {state.status !== "loading" && (
+        <Button type="button" onClick={onContinue} className="mt-2 self-start">
+          <CheckCircle2 className="size-4" aria-hidden="true" />
+          Finish Lesson
+        </Button>
+      )}
     </div>
   );
 }
@@ -246,15 +271,62 @@ function SpeakingScoreExplainer({
 
 type BreakdownCategory = "vocabulary" | "grammar" | "comprehension" | "speaking";
 
+/**
+ * Animated score count-up (2026-08-29, Milestone 6's "celebratory
+ * entrance") - 0 -> `target` on mount, via `motion`'s imperative `animate`
+ * over a plain `useMotionValue` rather than CSS, so it can be rounded to a
+ * whole number per frame. Skips straight to the final value when the
+ * learner prefers reduced motion, same gating pattern as `HanMascot`.
+ */
+function useCountUp(target: number, reduceMotion: boolean): number {
+  const motionValue = useMotionValue(0);
+  const rounded = useTransform(motionValue, (value) => Math.round(value));
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = rounded.on("change", setDisplay);
+    if (reduceMotion) {
+      motionValue.set(target);
+      return unsubscribe;
+    }
+    const controls = animateValue(motionValue, target, {
+      duration: 1.1,
+      ease: "easeOut",
+    });
+    return () => {
+      controls.stop();
+      unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, reduceMotion]);
+
+  return display;
+}
+
 export function ReflectionReport({
   report,
   lessonId,
+  learningObjectives,
 }: {
   report: LessonReflectionReportView;
   lessonId?: string;
+  /** Only `ReflectionStep` (a fresh completion) has this for free from the
+   * lesson it already loaded - `LessonResultsView` (revisiting an already-
+   * completed lesson) intentionally never fetches full lesson content, so
+   * the "what you learned" section below just doesn't render there rather
+   * than adding a query to that fast path for it. */
+  learningObjectives?: { id: string; description: string }[];
 }) {
   const overall = report.totalScore ?? 0;
   const passed = overall >= REFLECTION_PASS_SCORE;
+  const stars = starsForScore(overall);
+  const reduceMotion = useReducedMotion();
+  const animatedScore = useCountUp(overall, !!reduceMotion);
+
+  const [streak, setStreak] = useState<StreakResult | null>(null);
+  useEffect(() => {
+    void getReflectionStreakAction().then(setStreak);
+  }, []);
 
   const [breakdown, setBreakdown] = useState<LessonScoreBreakdown | null>(
     null,
@@ -287,20 +359,100 @@ export function ReflectionReport({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Celebratory entrance (2026-08-29, Milestone 6) - score count-up,
+          stars, streak, and a mascot pose layered onto this same hero,
+          nothing below it (ScoreCards, breakdowns, Han narrative, speaking
+          errors) touched.
+
+          `pr-20` on the content column (not `max-w` on the bar alone,
+          which was tried first and made the bar's own track look
+          truncated/incomplete instead of just shorter) - reserves Han's
+          column consistently for every row (caption, score, bar, chips),
+          so the bar still fills 100% of its own track and nothing
+          overlaps Han's corner. */}
       <div className="relative overflow-hidden rounded-panel bg-linear-to-br from-secondary-900 via-secondary-700 to-accent-700 px-5 pt-5 pb-6">
-        <Caption className="text-accent-100">
-          {passed ? "Nice work today" : "Keep practicing"}
-        </Caption>
-        <div className="mt-1 flex items-baseline gap-2">
-          <Display className="text-[2.6rem] text-on-color-light">{overall}</Display>
-          <Caption className="text-on-color-light/75">
-            / 100 — {REFLECTION_PASS_SCORE}+ to pass
+        <motion.div
+          className="relative z-10 pr-20"
+          initial={reduceMotion ? undefined : { opacity: 0, y: 12 }}
+          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
+          <Caption className="text-accent-100">
+            {passed ? "Nice work today" : "Keep practicing"}
           </Caption>
-        </div>
-        <div className="mt-2">
-          <ScoreBar percent={overall} />
-        </div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <Display className="text-[2.6rem] text-on-color-light">
+              {animatedScore}
+            </Display>
+            <Caption className="text-on-color-light/75">
+              / 100 — {REFLECTION_PASS_SCORE}+ to pass
+            </Caption>
+          </div>
+          <div className="mt-2">
+            <ScoreBar percent={overall} />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-0.5" aria-hidden="true">
+              {[1, 2, 3].map((n) => (
+                <Star
+                  key={n}
+                  className={cn(
+                    "size-4",
+                    n <= stars
+                      ? "fill-accent-300 text-accent-300"
+                      : "fill-none text-on-color-light/30",
+                  )}
+                />
+              ))}
+            </span>
+            {streak && streak.currentStreak > 0 && (
+              <Chip
+                tone="accent"
+                size="sm"
+                className="bg-on-color-light/15 text-on-color-light"
+              >
+                {streak.currentStreak}-day streak
+              </Chip>
+            )}
+          </div>
+        </motion.div>
+
+        {/* bottom-2 (inset), not -bottom-4 (overhang) - 2026-08-29 fix,
+            "quiero que subas un poco a Han, ahora esta tan abajo que al
+            moverse se sale de la barra": the idle float only ever moves
+            Han *up* from rest ([0,-8,0]), so a resting position that
+            already overhangs the card's own overflow-hidden edge got
+            clipped by different amounts as it floated, reading as Han
+            popping in and out at the bottom. Sized down slightly (104 ->
+            84) too, so the smaller card has more breathing room. */}
+        <HanMascot
+          pose={passed ? "celebrating" : "thinking"}
+          size={84}
+          className="pointer-events-none absolute -right-2 bottom-2 drop-shadow-[0_12px_18px_rgba(0,0,0,0.25)]"
+        />
       </div>
+
+      {learningObjectives && learningObjectives.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-panel border border-border bg-surface p-4">
+          <Caption className="font-semibold text-accent-300">
+            What you learned
+          </Caption>
+          <ul className="flex flex-col gap-1.5">
+            {learningObjectives.map((objective) => (
+              <li
+                key={objective.id}
+                className="flex items-start gap-2 text-body text-text-secondary"
+              >
+                <CheckCircle2
+                  className="mt-0.5 size-4 shrink-0 text-secondary-500"
+                  aria-hidden="true"
+                />
+                {objective.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2.5">
         <ScoreCard

@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-export const profileSchema = z.object({
-  name: z.string().trim().min(1, "Name can't be empty").max(100),
-});
-
 export const learningPreferencesSchema = z.object({
   interfaceLanguage: z.enum(["EN", "ES"]),
   explanationLanguage: z.enum(["EN", "ES", "ZH"]),

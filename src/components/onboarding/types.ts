@@ -1,5 +1,7 @@
 export type OnboardingStep =
   | "welcome"
+  | "profile"
+  | "avatar"
   | "goal"
   | "level"
   | "explanation-language"
@@ -9,6 +11,9 @@ export type OnboardingStep =
   | "recommendation";
 
 export interface OnboardingValues {
+  displayName: string | null;
+  nickname: string | null;
+  avatarAnimal: string | null;
   learningGoals: string[];
   currentLevel: string | null;
   explanationLanguage: string | null;
@@ -18,6 +23,8 @@ export interface OnboardingValues {
 
 export const STEP_ORDER: OnboardingStep[] = [
   "welcome",
+  "profile",
+  "avatar",
   "goal",
   "level",
   "explanation-language",

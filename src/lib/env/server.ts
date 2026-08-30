@@ -18,6 +18,13 @@ const serverSchema = z.object({
   // https://console.anthropic.com (API Keys).
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Optional: the weekly leaderboard payout endpoint (2026-08-30) returns
+  // 503 when unset - see app/api/cron/weekly-leaderboard-payout/route.ts.
+  // Whatever schedules the weekly call (Vercel Cron, an external cron
+  // service, etc.) must send this same value as `Authorization: Bearer
+  // <value>` - Vercel Cron does this automatically for a var named exactly
+  // CRON_SECRET.
+  CRON_SECRET: z.string().optional(),
 });
 
 const parsed = serverSchema.safeParse({
@@ -28,6 +35,7 @@ const parsed = serverSchema.safeParse({
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  CRON_SECRET: process.env.CRON_SECRET,
 });
 
 if (!parsed.success) {

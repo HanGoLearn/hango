@@ -14,8 +14,18 @@ import { getScenariosWithProgress } from "@/lib/content/learning-journey-data";
 import { getReviewQueue } from "@/lib/review-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
 import { hskLevelForPoints } from "@/lib/points-system";
+import { getLeaderboardTop, getLearnerRank } from "@/lib/leaderboard-data";
+import { getAchievementSummary } from "@/lib/achievements";
+import { getAvatarPageData } from "@/lib/avatar-data";
 
-const STREAK_LOOKBACK_DAYS = 60;
+// 120, not 60 (2026-08-30) - achievements-catalog.ts now has a streak_100
+// achievement ("studied 100 days in a row"), and computeStreak can never
+// count past however far back this query actually looks: with a 60-day
+// window, a streak silently caps at ~60 no matter how long the learner's
+// real run is, making streak_100 mathematically unreachable. 120 gives a
+// 20-day buffer past the highest tier so the displayed streak doesn't
+// visibly cap the day after someone unlocks it.
+const STREAK_LOOKBACK_DAYS = 120;
 
 /**
  * Distinct activity dates across every graded activity type, bounded to a
@@ -88,6 +98,10 @@ export async function getDashboardData(userId: string) {
     reviewQueue,
     profile,
     activityDates,
+    leaderboardTop,
+    leaderboardRank,
+    achievementSummary,
+    avatar,
   ] = await Promise.all([
     getContinueLearningTarget(userId),
     getStudyStreak(userId),
@@ -99,6 +113,17 @@ export async function getDashboardData(userId: string) {
     // additional queries, just reused for the weekly strip's per-day detail
     // that computeStreak's own {currentStreak, activeToday} doesn't expose.
     getRecentActivityDates(userId),
+    // Top 3 only - this is a teaser linking to the full /leaderboard page,
+    // not the ranked list itself (getLeaderboardTop(50) there is a
+    // separate, TTL-cached call, not duplicated here).
+    getLeaderboardTop(3),
+    getLearnerRank(userId),
+    // Teaser for the /achievements page (2026-08-29) - same "small taste,
+    // not the full catalog" shape as the leaderboard teaser above.
+    getAchievementSummary(userId),
+    // Teaser for /tienda (2026-08-30) - reused wholesale (React.cache'd),
+    // not a separate summary shape, since it's already this compact.
+    getAvatarPageData(userId),
   ]);
 
   return {
@@ -107,6 +132,11 @@ export async function getDashboardData(userId: string) {
     scenarios,
     competencies,
     reviewQueue: reviewQueue.slice(0, 3),
+    displayName: profile.displayName,
+    leaderboardTop,
+    leaderboardRank,
+    achievementSummary,
+    avatar,
     dailyStudyTargetMinutes: profile.dailyStudyTargetMinutes,
     // Rule-based, not AI-generated (consistent with FASE 3's recommendation
     // engine) - the top review-queue item's own reason, reused here so the

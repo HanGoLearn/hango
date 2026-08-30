@@ -12,6 +12,7 @@ const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
 const {
+  saveProfileStepAction,
   saveGoalStepAction,
   saveLevelStepAction,
   saveExplanationLanguageStepAction,
@@ -20,6 +21,7 @@ const {
   acknowledgePlacementOfferAction,
   completeOnboardingAction,
 } = await import("@/lib/actions/onboarding");
+const { saveAvatarAnimalAction } = await import("@/lib/actions/avatar");
 
 function formDataOf(entries: [string, string][]): FormData {
   const formData = new FormData();
@@ -44,13 +46,22 @@ async function createTestUser(email: string) {
   return user;
 }
 
+/** avatarAnimal lives on the separate LearnerAvatar table (2026-08-30) - resolveResumeStep needs it merged in, same as app/onboarding/page.tsx does for real. */
+async function resumeStepFor(userId: string) {
+  const [profile, avatar] = await Promise.all([
+    db.learnerProfile.findUniqueOrThrow({ where: { userId } }),
+    db.learnerAvatar.findUnique({ where: { userId }, select: { animal: true } }),
+  ]);
+  return resolveResumeStep({ ...profile, avatarAnimal: avatar?.animal ?? null });
+}
+
 describe("onboarding (integration, real database)", () => {
   it("resolves to 'welcome' for a brand-new profile", async () => {
     const user = await createTestUser(
       `onboarding-fresh-${Date.now()}@hango.dev`,
     );
-    const profile = await getOrCreateLearnerProfile(user.id);
-    expect(resolveResumeStep(profile)).toBe("welcome");
+    await getOrCreateLearnerProfile(user.id);
+    expect(await resumeStepFor(user.id)).toBe("welcome");
   });
 
   it("advances the resume step as each step is saved", async () => {
@@ -59,23 +70,29 @@ describe("onboarding (integration, real database)", () => {
     );
     await getOrCreateLearnerProfile(user.id);
 
+    await saveProfileStepAction(
+      { status: "idle" },
+      formDataOf([
+        ["displayName", "Test Learner"],
+        ["nickname", `tester${Date.now()}`],
+      ]),
+    );
+    expect(await resumeStepFor(user.id)).toBe("avatar");
+
+    await saveAvatarAnimalAction("RABBIT");
+    expect(await resumeStepFor(user.id)).toBe("goal");
+
     await saveGoalStepAction(
       { status: "idle" },
       formDataOf([["learningGoals", "TRAVEL"]]),
     );
-    let profile = await db.learnerProfile.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
-    expect(resolveResumeStep(profile)).toBe("level");
+    expect(await resumeStepFor(user.id)).toBe("level");
 
     await saveLevelStepAction(
       { status: "idle" },
       formDataOf([["currentLevel", "HSK_4"]]),
     );
-    profile = await db.learnerProfile.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
-    expect(resolveResumeStep(profile)).toBe("explanation-language");
+    expect(await resumeStepFor(user.id)).toBe("explanation-language");
 
     await saveExplanationLanguageStepAction(
       { status: "idle" },
@@ -89,18 +106,50 @@ describe("onboarding (integration, real database)", () => {
       { status: "idle" },
       formDataOf([["dailyStudyTargetMinutes", "20"]]),
     );
-    profile = await db.learnerProfile.findUniqueOrThrow({
-      where: { userId: user.id },
-    });
-    expect(resolveResumeStep(profile)).toBe("placement-offer");
+    expect(await resumeStepFor(user.id)).toBe("placement-offer");
 
     await acknowledgePlacementOfferAction();
 
-    profile = await db.learnerProfile.findUniqueOrThrow({
+    expect(await resumeStepFor(user.id)).toBe("recommendation");
+    const profile = await db.learnerProfile.findUniqueOrThrow({
       where: { userId: user.id },
     });
-    expect(resolveResumeStep(profile)).toBe("recommendation");
     expect(profile.onboardingCompletedAt).toBeNull();
+  });
+
+  it("rejects a nickname already taken by another user", async () => {
+    const nickname = `taken${Date.now()}`;
+
+    const firstUser = await createTestUser(
+      `onboarding-nick-a-${Date.now()}@hango.dev`,
+    );
+    await getOrCreateLearnerProfile(firstUser.id);
+    const firstResult = await saveProfileStepAction(
+      { status: "idle" },
+      formDataOf([
+        ["displayName", "First Learner"],
+        ["nickname", nickname],
+      ]),
+    );
+    expect(firstResult.status).toBe("idle");
+
+    const secondUser = await createTestUser(
+      `onboarding-nick-b-${Date.now()}@hango.dev`,
+    );
+    await getOrCreateLearnerProfile(secondUser.id);
+    const secondResult = await saveProfileStepAction(
+      { status: "idle" },
+      formDataOf([
+        ["displayName", "Second Learner"],
+        ["nickname", nickname],
+      ]),
+    );
+    expect(secondResult.status).toBe("error");
+
+    const secondProfile = await db.learnerProfile.findUniqueOrThrow({
+      where: { userId: secondUser.id },
+    });
+    expect(secondProfile.nickname).toBeNull();
   });
 
   it("rejects invalid step input without writing to the database", async () => {

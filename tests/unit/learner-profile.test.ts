@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { resolveResumeStep } from "@/lib/learner-profile";
 
 const emptyProfile = {
+  displayName: null as string | null,
+  avatarAnimal: null as string | null,
   learningGoals: [] as string[],
   currentLevel: null,
   explanationLanguage: null,
@@ -15,9 +17,30 @@ describe("resolveResumeStep", () => {
     expect(resolveResumeStep(emptyProfile)).toBe("welcome");
   });
 
+  it("resumes at 'avatar' once the profile (name/nickname) is set", () => {
+    expect(
+      resolveResumeStep({ ...emptyProfile, displayName: "Ana" }),
+    ).toBe("avatar");
+  });
+
+  it("resumes at 'goal' once an avatar animal is chosen", () => {
+    expect(
+      resolveResumeStep({
+        ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
+      }),
+    ).toBe("goal");
+  });
+
   it("resumes at 'level' once a goal is set", () => {
     expect(
-      resolveResumeStep({ ...emptyProfile, learningGoals: ["TRAVEL"] }),
+      resolveResumeStep({
+        ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
+        learningGoals: ["TRAVEL"],
+      }),
     ).toBe("level");
   });
 
@@ -25,6 +48,8 @@ describe("resolveResumeStep", () => {
     expect(
       resolveResumeStep({
         ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
         learningGoals: ["TRAVEL"],
         currentLevel: "HSK_4",
       }),
@@ -35,6 +60,8 @@ describe("resolveResumeStep", () => {
     expect(
       resolveResumeStep({
         ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
         learningGoals: ["TRAVEL"],
         currentLevel: "HSK_4",
         explanationLanguage: "EN",
@@ -46,6 +73,8 @@ describe("resolveResumeStep", () => {
     expect(
       resolveResumeStep({
         ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
         learningGoals: ["TRAVEL"],
         currentLevel: "HSK_4",
         explanationLanguage: "EN",
@@ -58,6 +87,8 @@ describe("resolveResumeStep", () => {
     expect(
       resolveResumeStep({
         ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
         learningGoals: ["TRAVEL"],
         currentLevel: "HSK_4",
         explanationLanguage: "EN",
@@ -71,6 +102,8 @@ describe("resolveResumeStep", () => {
     expect(
       resolveResumeStep({
         ...emptyProfile,
+        displayName: "Ana",
+        avatarAnimal: "RABBIT",
         learningGoals: ["TRAVEL"],
         currentLevel: "HSK_4",
         explanationLanguage: "EN",

@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { computeLabPoints } from "@/lib/lab-points";
+import { checkLevelAchievements } from "@/lib/achievements";
 
 /**
  * The single place LearnerProfile.generalLevelPoints gets recomputed
@@ -26,4 +27,5 @@ export async function recomputeGeneralLevelPoints(userId: string): Promise<void>
     where: { userId },
     data: { generalLevelPoints },
   });
+  await checkLevelAchievements(userId, generalLevelPoints);
 }

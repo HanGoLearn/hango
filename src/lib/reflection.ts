@@ -20,11 +20,14 @@ import {
   vocabularyQuestionsPerWord,
   computeReflectionTotal,
   computeSpeakingConversationScore,
+  starsForScore,
 } from "@/lib/points-system";
 import {
   sanitizeSpeakingTurnEvidence,
   type SpeakingTurnEvidence,
 } from "@/lib/speech/speaking-pronunciation-evidence";
+import { checkReflectionAchievements } from "@/lib/achievements";
+import { grantCoins } from "@/lib/coins";
 
 export class ReflectionNotFoundError extends Error {}
 
@@ -562,6 +565,17 @@ export async function getOrGenerateLessonReflectionReport(
   });
 
   await syncLessonSpeakingEvidence(userId, lessonId, created.speakingScore);
+  await checkReflectionAchievements(userId, totalScore);
+  // HanCoins (2026-08-30): 1/2/3 coins by star band, once per lesson ever -
+  // placement-credited completions never reach this branch at all
+  // (applyPlacementCredit inserts LessonReflectionReport rows directly, see
+  // placement-credit.ts), so no separate source-guard is needed here.
+  await grantCoins(
+    userId,
+    starsForScore(totalScore),
+    "lesson_completed",
+    `lesson:${lessonId}`,
+  );
 
   return {
     vocabularyCovered: created.vocabularyCovered,

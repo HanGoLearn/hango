@@ -449,6 +449,78 @@ describe("buildSystemPrompt", () => {
   });
 });
 
+/**
+ * `learnerName` (2026-08-29) - a deliberate exception to this file's own
+ * "no PII" rule, added after the user explicitly confirmed they want Han
+ * to know their name ("no que use mi nombre, pero que Han sepa mi
+ * nombre" - hence "use it occasionally... not mechanically", not "always
+ * greet by name"). Covers both builders since the rule is symmetric
+ * across them, and specifically covers the role-play exclusion - a
+ * role-play scene has Han playing a different character who shouldn't
+ * know the real-world learner's name unless the scene itself supplies it.
+ */
+describe("learnerName", () => {
+  it("tells Han the learner's name outside role-play (text)", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN", learnerName: "Ana" },
+      {},
+      "TUTOR",
+    );
+    expect(prompt).toContain("The learner's name is Ana");
+    expect(prompt).toContain("not mechanically in every reply");
+  });
+
+  it("tells Han the learner's name outside role-play (voice)", () => {
+    const prompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN", learnerName: "Ana" },
+      {},
+      "TUTOR",
+    );
+    expect(prompt).toContain("The learner's name is Ana");
+  });
+
+  it("never mentions the name during role-play, even when supplied (text)", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN", learnerName: "Ana" },
+      {
+        rolePlay: {
+          aiRole: "a waiter",
+          learnerRole: "a customer",
+          scenarioContext: "A restaurant",
+          objective: "Order food",
+        },
+      },
+      "TUTOR",
+    );
+    expect(prompt).not.toContain("Ana");
+  });
+
+  it("never mentions the name during role-play, even when supplied (voice)", () => {
+    const prompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN", learnerName: "Ana" },
+      {
+        rolePlay: {
+          aiRole: "a waiter",
+          learnerRole: "a customer",
+          scenarioContext: "A restaurant",
+          objective: "Order food",
+        },
+      },
+      "TUTOR",
+    );
+    expect(prompt).not.toContain("Ana");
+  });
+
+  it("says nothing about a name when none is set", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN" },
+      {},
+      "TUTOR",
+    );
+    expect(prompt).not.toContain("The learner's name is");
+  });
+});
+
 describe("buildRealtimeSystemPrompt", () => {
   it("keeps side-panel voice app knowledge compact until a relevant turn adds ephemeral context", () => {
     const prompt = buildRealtimeSystemPrompt(

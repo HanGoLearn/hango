@@ -1,5 +1,6 @@
 import { SectionTitle } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/states";
+import { HanAvatar } from "@/components/ui/han-mascot";
 import { QuizRunner } from "@/components/quiz/quiz-runner";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 
@@ -20,7 +21,10 @@ export function QuizStep({
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Quiz</SectionTitle>
+      <div className="flex items-center gap-2">
+        <HanAvatar pose="curious" size={32} />
+        <SectionTitle>Quiz</SectionTitle>
+      </div>
       {quiz ? (
         <QuizRunner quiz={quiz} onFinish={onContinue} />
       ) : (

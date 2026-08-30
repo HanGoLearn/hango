@@ -9,6 +9,9 @@ import {
   type LessonScoreBreakdown,
 } from "@/lib/reflection";
 import { AiProviderError } from "@/lib/ai";
+import { getStudyStreak } from "@/lib/dashboard-data";
+import type { StreakResult } from "@/lib/study-streak";
+import { checkStreakAchievements } from "@/lib/achievements";
 
 export type LessonReflectionReportActionResult =
   | { ok: true; report: LessonReflectionReportView }
@@ -63,4 +66,20 @@ export async function getLessonScoreBreakdownAction(
     }
     return { ok: false, error: "Couldn't load the breakdown right now." };
   }
+}
+
+/**
+ * Milestone 6 (2026-08-29) - the completion screen's streak callout needs
+ * the same real streak Dashboard/TopBar already show, not a second source
+ * of truth. `getStudyStreak` is already React-`cache()`'d per request, so
+ * this costs nothing extra on pages (Dashboard) that already call it in
+ * the same request; on the standalone lesson page it's one cheap query
+ * (same 5-query shape getStudyStreak always runs, see dashboard-data.ts).
+ */
+export async function getReflectionStreakAction(): Promise<StreakResult | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  const streak = await getStudyStreak(session.user.id);
+  await checkStreakAchievements(session.user.id, streak.currentStreak);
+  return streak;
 }

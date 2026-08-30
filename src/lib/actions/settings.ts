@@ -3,11 +3,11 @@
 import { auth, signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  profileSchema,
   learningPreferencesSchema,
   defaultAiModeSchema,
   recordingRetentionSchema,
 } from "@/lib/validation/settings";
+import { profileStepSchema } from "@/lib/validation/onboarding";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -32,18 +32,81 @@ export async function setAiConversationStorageEnabledAction(
   });
 }
 
-export async function updateProfileNameAction(
+/**
+ * The name Han uses to address the learner (2026-08-29) - unlike the
+ * Account Name below, this was never meant to be permanent (user: "el
+ * nombre de la persona, al que Han lo llamará así, ese sí se puede
+ * cambiar"). Always allowed, no uniqueness constraint - this is the same
+ * `displayName` field the onboarding "profile" step first sets, just a
+ * second, ongoing entry point into it.
+ */
+export async function updateDisplayNameAction(
   _prevState: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
-  const parsed = profileSchema.safeParse({ name: formData.get("name") });
+  const parsed = profileStepSchema.shape.displayName.safeParse(
+    formData.get("displayName"),
+  );
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message };
   }
   const userId = await requireUserId();
-  await db.user.update({
-    where: { id: userId },
-    data: { name: parsed.data.name },
+  await db.learnerProfile.update({
+    where: { userId },
+    data: { displayName: parsed.data },
+  });
+  return idleState;
+}
+
+/**
+ * The permanent leaderboard handle (2026-08-29, user: "el Account Name...
+ * el cual ya no se puede cambiar y se va a mantener así por el resto de
+ * la vida de la cuenta"). Settable exactly once - the onboarding
+ * "profile" step is the normal path (nickname is always null there,
+ * since `resolveResumeStep` never shows that step again once it's set);
+ * this is the retroactive path for every account that finished
+ * onboarding before that step existed. Enforced server-side, not just by
+ * hiding the input once set (`leaderboard-profile-section.tsx`'s
+ * predecessor only did the latter) - a direct POST after the field is
+ * already set must still be rejected.
+ */
+export async function updateAccountNameAction(
+  _prevState: SettingsActionState,
+  formData: FormData,
+): Promise<SettingsActionState> {
+  const parsed = profileStepSchema.shape.nickname.safeParse(
+    formData.get("nickname"),
+  );
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message };
+  }
+  const userId = await requireUserId();
+
+  const current = await db.learnerProfile.findUnique({
+    where: { userId },
+    select: { nickname: true },
+  });
+  if (current?.nickname) {
+    return {
+      status: "error",
+      message: "Your Account Name is already set and can't be changed.",
+    };
+  }
+
+  const existing = await db.learnerProfile.findUnique({
+    where: { nickname: parsed.data },
+    select: { userId: true },
+  });
+  if (existing) {
+    return {
+      status: "error",
+      message: "That Account Name is taken. Try another one.",
+    };
+  }
+
+  await db.learnerProfile.update({
+    where: { userId },
+    data: { nickname: parsed.data },
   });
   return idleState;
 }

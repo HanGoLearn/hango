@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { saveDailyTargetStepAction } from "@/lib/actions/onboarding";
 import { DAILY_TARGET_OPTIONS } from "@/lib/validation/onboarding";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup } from "@/components/ui/radio-group";
+import { RadioTile } from "@/components/onboarding/option-tile";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle } from "@/components/ui/typography";
+import { HanMascot } from "@/components/ui/han-mascot";
 
 export interface DailyTargetStepProps {
   initialValue: number | null;
@@ -44,18 +46,23 @@ export function DailyTargetStep({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="text-center">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <HanMascot pose="idle" size={110} />
         <SectionTitle>How much time can you study each day?</SectionTitle>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      <RadioGroup value={value} onValueChange={setValue}>
+      <RadioGroup
+        value={value}
+        onValueChange={setValue}
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+      >
         {DAILY_TARGET_OPTIONS.map((minutes) => (
-          <RadioGroupItem
+          <RadioTile
             key={minutes}
             value={String(minutes)}
-            label={`${minutes} minutes`}
+            label={`${minutes} min`}
           />
         ))}
       </RadioGroup>
@@ -64,7 +71,7 @@ export function DailyTargetStep({
         <Button variant="tertiary" onClick={onBack} type="button">
           Back
         </Button>
-        <Button onClick={handleContinue} loading={isPending} disabled={!value}>
+        <Button size="lg" onClick={handleContinue} loading={isPending} disabled={!value}>
           Continue
         </Button>
       </div>

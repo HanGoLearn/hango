@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  profileStepSchema,
   goalStepSchema,
   levelStepSchema,
   explanationLanguageStepSchema,
@@ -30,6 +31,42 @@ async function requireUserId(): Promise<string> {
 }
 
 const idleState: OnboardingStepState = { status: "idle" };
+
+export async function saveProfileStepAction(
+  _prevState: OnboardingStepState,
+  formData: FormData,
+): Promise<OnboardingStepState> {
+  const parsed = profileStepSchema.safeParse({
+    displayName: formData.get("displayName"),
+    nickname: formData.get("nickname"),
+  });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message };
+  }
+  const userId = await requireUserId();
+
+  // Same "who else has this" check as registerAction's email uniqueness -
+  // nicknames need to be distinguishable on the future leaderboard.
+  const existing = await db.learnerProfile.findUnique({
+    where: { nickname: parsed.data.nickname },
+    select: { userId: true },
+  });
+  if (existing && existing.userId !== userId) {
+    return {
+      status: "error",
+      message: "That nickname is taken. Try another one.",
+    };
+  }
+
+  await db.learnerProfile.update({
+    where: { userId },
+    data: {
+      displayName: parsed.data.displayName,
+      nickname: parsed.data.nickname,
+    },
+  });
+  return idleState;
+}
 
 export async function saveGoalStepAction(
   _prevState: OnboardingStepState,

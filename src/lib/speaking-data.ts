@@ -18,6 +18,7 @@ import {
   getLessonCompetencyIds,
 } from "@/lib/progress-evidence";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
+import { checkSpeakingLabAchievements } from "@/lib/achievements";
 
 /** Only lesson-scoped sessions produce evidence - Competency has no scenario-level link (see progress-evidence.ts). */
 async function recordSpeakingEvidence(
@@ -247,6 +248,7 @@ export async function completeSpeakingSession(
   // Points & Leveling System (2026-08-16): a newly-completed session can
   // change Speaking Lab's contribution to the General Level.
   await recomputeGeneralLevelPoints(userId);
+  await checkSpeakingLabAchievements(userId);
   return session;
 }
 

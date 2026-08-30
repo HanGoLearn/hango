@@ -106,6 +106,28 @@ describe("Accessibility (axe)", () => {
       <OnboardingWizard
         initialStep="goal"
         initialValues={{
+          displayName: "Ana",
+          nickname: "ana123",
+          avatarAnimal: "RABBIT",
+          learningGoals: [],
+          currentLevel: null,
+          explanationLanguage: null,
+          skillPriorities: [],
+          dailyStudyTargetMinutes: null,
+        }}
+      />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("OnboardingWizard (avatar step — grid of selectable/locked buttons) has no violations", async () => {
+    const { container } = render(
+      <OnboardingWizard
+        initialStep="avatar"
+        initialValues={{
+          displayName: "Ana",
+          nickname: "ana123",
+          avatarAnimal: null,
           learningGoals: [],
           currentLevel: null,
           explanationLanguage: null,

@@ -5,14 +5,33 @@ import { User, LogOut, Settings as SettingsIcon } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/actions/logout";
 import { IconButton } from "@/components/ui/icon-button";
+import { AvatarDisplay } from "@/components/avatar/avatar-display";
+import type { AccessorySlot } from "@/lib/avatar-catalog";
 import { cn } from "@/lib/cn";
 
-export function UserMenu() {
+export interface UserMenuProps {
+  animal: string | null;
+  equipped: Record<AccessorySlot, string | null>;
+}
+
+/**
+ * The account-corner avatar (2026-08-30, user request) - the conventional
+ * "this is you" slot every serious app has (Slack, Notion, Gmail). Falls
+ * back to the generic `User` icon this always showed before, for learners
+ * who haven't picked an animal yet.
+ */
+export function UserMenu({ animal, equipped }: UserMenuProps) {
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
         <IconButton
-          icon={<User className="size-5" aria-hidden="true" />}
+          icon={
+            animal ? (
+              <AvatarDisplay animal={animal} equipped={equipped} size={28} />
+            ) : (
+              <User className="size-5" aria-hidden="true" />
+            )
+          }
           aria-label="User menu"
         />
       </DropdownMenuPrimitive.Trigger>

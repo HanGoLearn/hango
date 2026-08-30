@@ -9,6 +9,12 @@ import {
 } from "@/lib/points-system";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
 import { createTtlCache } from "@/lib/ttl-cache";
+import {
+  checkScenarioCompletionAchievements,
+  checkChapterCompletionAchievements,
+  checkGraduateAchievement,
+} from "@/lib/achievements";
+import { grantCoins } from "@/lib/coins";
 
 export class ScenarioCompletionNotFoundError extends Error {}
 
@@ -134,6 +140,16 @@ export async function getOrGenerateScenarioCompletion(
       update: { earnedPoints, weightedReflectionAverage },
     });
     await recomputeGeneralLevelPoints(userId);
+    await checkScenarioCompletionAchievements(userId);
+    await checkChapterCompletionAchievements(userId, chapter);
+    // Graduate (2026-08-30) can only newly unlock the moment the last of the
+    // 3 chapter achievements above does, so it's checked right after them.
+    await checkGraduateAchievement(userId);
+    // HanCoins (2026-08-30): 5 coins, once per scenario ever - the
+    // `scenario:{scenarioId}` sourceKey means this is safe to call again on
+    // a later rescoring update (e.g. a lesson inside got redone), it just
+    // no-ops after the first real grant.
+    await grantCoins(userId, 5, "scenario_completed", `scenario:${scenarioId}`);
   }
 
   return { earnedPoints, weightedReflectionAverage, scenarioPointsBudget, chapter };

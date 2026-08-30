@@ -289,6 +289,7 @@ export async function sendAiTeacherMessage(
           explanationLanguage: true,
           aiConversationStorageEnabled: true,
           generalLevelPoints: true,
+          displayName: true,
         },
       }),
       getCompetencyProgress(userId),
@@ -335,6 +336,7 @@ export async function sendAiTeacherMessage(
       level: profile?.currentLevel ?? null,
       explanationLanguage: profile?.explanationLanguage ?? null,
       generalLevelPoints: profile?.generalLevelPoints,
+      learnerName: profile?.displayName,
       ...adaptiveSummary,
     },
     context.rolePlay

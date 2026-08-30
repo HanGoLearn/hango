@@ -42,6 +42,20 @@ export const REFLECTION_WEIGHTS = {
 export const REFLECTION_PASS_SCORE = 70;
 
 /**
+ * Presentation-only 1-3 star band over a lesson's real Reflection
+ * `totalScore` (2026-08-29, Learning Path Milestone 3's "inline stars") -
+ * no new data, just a friendlier read of the same number the numeric score
+ * chip already showed. Tied to REFLECTION_PASS_SCORE so "2 stars" always
+ * means "passed": below it is 1 star (completed but didn't pass), up to a
+ * near-perfect band is 2, 90+ is 3.
+ */
+export function starsForScore(score: number): 1 | 2 | 3 {
+  if (score >= 90) return 3;
+  if (score >= REFLECTION_PASS_SCORE) return 2;
+  return 1;
+}
+
+/**
  * Combines the four 0-100 sub-scores into the weighted 0-100 session total.
  * A sub-score of null contributes 0, not "excluded from the average" - an
  * ungraded dimension (e.g. no grammar exercises in this lesson) should not

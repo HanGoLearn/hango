@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
+import { checkWritingLabAchievements } from "@/lib/achievements";
 import {
   HANDWRITTEN_LEVEL_CONFIG,
   HANDWRITTEN_TOPIC_CONFIG,
@@ -92,6 +93,7 @@ async function evaluateAndPersist(
       },
     });
     await recomputeGeneralLevelPoints(userId);
+    await checkWritingLabAchievements(userId);
   }
 
   return result;

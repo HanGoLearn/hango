@@ -6,10 +6,16 @@ import { primaryNavItems } from "@/lib/navigation";
 import { UserMenu } from "@/components/shell/user-menu";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { HanAvatar } from "@/components/ui/han-mascot";
-import { cn } from "@/lib/cn";
+import { Chip } from "@/components/ui/chip";
+import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
+import { HanCoinsInfoTrigger } from "@/components/avatar/hancoins-info";
+import type { AccessorySlot } from "@/lib/avatar-catalog";
 
 export interface TopBarProps {
   streak: { currentStreak: number; activeToday: boolean };
+  coinBalance: number;
+  avatarAnimal: string | null;
+  avatarEquipped: Record<AccessorySlot, string | null>;
 }
 
 /**
@@ -17,7 +23,12 @@ export interface TopBarProps {
  * persistent stats strip (streak, today's goal) lives here instead of only
  * on the Dashboard — the Duolingo reference's "always visible" stats row.
  */
-export function TopBar({ streak }: TopBarProps) {
+export function TopBar({
+  streak,
+  coinBalance,
+  avatarAnimal,
+  avatarEquipped,
+}: TopBarProps) {
   const pathname = usePathname();
   const activeItem = primaryNavItems.find((item) =>
     pathname?.startsWith(item.href),
@@ -31,24 +42,23 @@ export function TopBar({ streak }: TopBarProps) {
       </span>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-accent-500/15 py-1 pr-3 pl-1 font-interface text-supporting font-semibold text-accent-300">
+          <Chip tone="accent" className="py-1 pr-3 pl-1">
             <HanAvatar pose={streak.activeToday ? "heart" : "wave"} size={20} />
             {streak.currentStreak}
-          </span>
-          <span
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1 font-interface text-supporting font-semibold",
-              streak.activeToday
-                ? "bg-secondary-500/15 text-secondary-300"
-                : "bg-elevated text-text-muted",
-            )}
-          >
+          </Chip>
+          <HanCoinsInfoTrigger balance={coinBalance}>
+            <Chip tone="accent">
+              <HanCoinsIcon size={16} />
+              {coinBalance}
+            </Chip>
+          </HanCoinsInfoTrigger>
+          <Chip tone={streak.activeToday ? "secondary" : "neutral"}>
             <CircleCheck className="size-4" aria-hidden="true" />
             Today&apos;s goal
-          </span>
+          </Chip>
         </div>
         <ThemeToggle />
-        <UserMenu />
+        <UserMenu animal={avatarAnimal} equipped={avatarEquipped} />
       </div>
     </header>
   );

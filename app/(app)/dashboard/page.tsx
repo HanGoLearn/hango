@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, CircleCheck, Mic, PenLine, Sparkles } from "lucide-react";
+import { ChevronRight, CircleCheck, Mic, PenLine, Sparkles, Trophy } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,10 @@ import { CompetencyList } from "@/components/progress/competency-list";
 import { ReviewQueueList } from "@/components/progress/review-queue-list";
 import { LevelUpBanner } from "@/components/progress/level-up-banner";
 import { HanMascot, HanAvatar } from "@/components/ui/han-mascot";
+import { Chip } from "@/components/ui/chip";
+import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
+import { AchievementIcon } from "@/components/achievements/achievement-icon";
+import { AvatarDisplay } from "@/components/avatar/avatar-display";
 import { CURRENT_MAX_GENERAL_LEVEL_POINTS } from "@/lib/points-system";
 import { getDailyHanTip } from "@/lib/han-tips";
 import { cn } from "@/lib/cn";
@@ -53,7 +57,9 @@ export default async function DashboardPage() {
     return (
       <div className="flex flex-col items-center gap-4 py-8 text-center">
         <HanMascot pose="curious" size={140} />
-        <PageTitle>Welcome to HanGo</PageTitle>
+        <PageTitle>
+          {data.displayName ? `Welcome, ${data.displayName}` : "Welcome to HanGo"}
+        </PageTitle>
         <Body className="max-w-sm text-text-secondary">
           Start your first lesson to begin building your Chinese skills.
         </Body>
@@ -99,7 +105,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageTitle>Dashboard</PageTitle>
+      <PageTitle>
+        {data.displayName ? `Welcome back, ${data.displayName}` : "Dashboard"}
+      </PageTitle>
 
       {/* Renders nothing except right after a real tier level-up (client-
           only comparison, src/components/progress/level-up-banner.tsx) -
@@ -137,13 +145,13 @@ export default async function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-            <span className="flex items-center gap-1.5 rounded-full bg-accent-500/15 py-1 pr-3 pl-1 font-interface text-supporting font-semibold text-accent-300">
+            <Chip tone="accent" className="py-1 pr-3 pl-1">
               <HanAvatar
                 pose={data.streak.activeToday ? "heart" : "wave"}
                 size={20}
               />
               {streakLine}
-            </span>
+            </Chip>
             {/* Binary, not proportional (2026-08-21) - activeToday is a
                 boolean, and no field anywhere tracks actual minutes studied
                 today, so a true progress ring isn't possible without a new
@@ -151,19 +159,12 @@ export default async function DashboardPage() {
                 (CircleCheck + the same color swap) for consistency instead
                 of inventing a second style for the same signal. */}
             {data.dailyStudyTargetMinutes && (
-              <span
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1 font-interface text-supporting font-semibold",
-                  data.streak.activeToday
-                    ? "bg-secondary-500/15 text-secondary-300"
-                    : "bg-elevated text-text-muted",
-                )}
-              >
+              <Chip tone={data.streak.activeToday ? "secondary" : "neutral"}>
                 <CircleCheck className="size-4" aria-hidden="true" />
                 {data.streak.activeToday
                   ? `Today's ${data.dailyStudyTargetMinutes}-min goal met`
                   : `Today's goal: ${data.dailyStudyTargetMinutes} min`}
-              </span>
+              </Chip>
             )}
           </div>
 
@@ -348,6 +349,152 @@ export default async function DashboardPage() {
               </Body>
             </div>
             <ProgressBar value={generalLevelPercent} />
+          </Link>
+
+          {/* Leaderboard teaser (2026-08-29) - top 3 + "your rank" only;
+              the full ranked list lives on its own page (getLeaderboardTop
+              is called separately, differently-sized, there - not shared
+              data). Renders even with an empty top 3 (encourages being
+              first) since generalLevelPoints/nickname eligibility is the
+              same real data every learner already has. */}
+          <Link
+            href="/leaderboard"
+            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
+                Leaderboard
+              </Caption>
+              <ChevronRight
+                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
+                aria-hidden="true"
+              />
+            </div>
+            {data.leaderboardTop.length > 0 ? (
+              <ul className="flex flex-col gap-1.5">
+                {data.leaderboardTop.map((entry) => (
+                  <li
+                    key={entry.userId}
+                    className="flex items-center gap-2 text-supporting"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
+                        entry.rank === 1
+                          ? "bg-accent-500 text-on-color-dark"
+                          : "bg-surface text-text-muted",
+                      )}
+                      aria-hidden="true"
+                    >
+                      {entry.rank === 1 ? (
+                        <Trophy className="size-3" />
+                      ) : (
+                        entry.rank
+                      )}
+                    </span>
+                    {entry.animal && (
+                      <AvatarDisplay
+                        animal={entry.animal}
+                        equipped={entry.equipped}
+                        size={20}
+                      />
+                    )}
+                    <span className="flex-1 truncate text-text-primary">
+                      @{entry.accountName}
+                    </span>
+                    <span className="text-text-muted">{entry.points}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Body className="text-text-secondary">
+                No one has earned points yet — be the first.
+              </Body>
+            )}
+            {data.leaderboardRank && (
+              <Caption className="text-accent-300">
+                You&apos;re #{data.leaderboardRank.rank} of{" "}
+                {data.leaderboardRank.totalRanked}
+              </Caption>
+            )}
+          </Link>
+
+          {/* Achievements teaser (2026-08-29) - same "small taste, full
+              catalog lives on its own page" shape as the Leaderboard teaser
+              above. */}
+          <Link
+            href="/achievements"
+            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
+                Achievements
+              </Caption>
+              <ChevronRight
+                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
+                aria-hidden="true"
+              />
+            </div>
+            <Body className="text-text-primary">
+              {data.achievementSummary.unlockedCount} of{" "}
+              {data.achievementSummary.totalCount} unlocked
+            </Body>
+            {data.achievementSummary.recent.length > 0 && (
+              <div className="flex items-center gap-2">
+                {data.achievementSummary.recent.map((achievement) => (
+                  <span
+                    key={achievement.key}
+                    className="flex size-8 items-center justify-center rounded-full bg-accent-500 text-on-color-dark"
+                    title={achievement.title}
+                  >
+                    <AchievementIcon
+                      name={achievement.iconName}
+                      className="size-4"
+                    />
+                  </span>
+                ))}
+              </div>
+            )}
+          </Link>
+
+          {/* Avatar/HanCoins teaser (2026-08-30) - same teaser shape as
+              Leaderboard/Achievements above. Works before the learner has
+              picked an animal too (the tienda page itself is the
+              retroactive entry point for that, same as Account Name). */}
+          <Link
+            href="/tienda"
+            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
+                Your Avatar
+              </Caption>
+              <ChevronRight
+                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
+                aria-hidden="true"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              {data.avatar.animal ? (
+                <AvatarDisplay
+                  animal={data.avatar.animal}
+                  equipped={data.avatar.equipped}
+                  size={40}
+                />
+              ) : (
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-text-muted">
+                  ?
+                </span>
+              )}
+              {data.avatar.animal ? (
+                <Body className="flex items-center gap-1.5 text-text-primary">
+                  <HanCoinsIcon size={16} />
+                  {data.avatar.coinBalance}
+                </Body>
+              ) : (
+                <Body className="text-text-primary">Choose your avatar</Body>
+              )}
+            </div>
           </Link>
 
           {data.competencies.length > 0 && (
