@@ -1,10 +1,20 @@
 # HanGo Component System
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (nav item lists corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the App Sidebar and Mobile Bottom Navigation
+> required-item lists below omit "Han" and "Shop," both real
+> `primaryNavItems` (`src/lib/navigation.ts`) added since this document
+> was written. Corrected below. The rest of this document's MVP-era
+> component catalog (no avatar customization, HanCoins/shop UI,
+> leaderboard, achievements, or admin components) reflects an early MVP
+> scope that's since grown - not wrong, just incomplete; see
+> `docs/01_product/dashboard.md` and `docs/01_product/navigation.md` for
+> the real current feature set.
 
 ---
 
@@ -56,13 +66,15 @@ The MVP requires components in the following categories:
 
 Used on desktop to access the primary sections.
 
-Required items:
+Required items (corrected 2026-09-05 - eight items, not six):
 
 - Dashboard.
 - Learning Journey.
 - Speaking Lab.
 - Writing Lab.
+- Han.
 - Progress.
+- Shop.
 - Settings.
 
 Behavior:
@@ -79,13 +91,16 @@ Behavior:
 
 Used on mobile devices.
 
-Required items:
+Required items (corrected 2026-09-05 - the same eight sidebar items minus
+Settings, not five):
 
 - Home.
 - Journey.
 - Speaking.
 - Writing.
+- Han.
 - Progress.
+- Shop.
 
 Behavior:
 

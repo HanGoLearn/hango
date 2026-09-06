@@ -1,6 +1,7 @@
 "use client";
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { AiTeacherChat } from "@/components/ai-teacher/ai-teacher-chat";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
@@ -23,6 +24,13 @@ import { cn } from "@/lib/cn";
  */
 export function AiTeacherBubble() {
   const { open, setOpen, openTeacher } = useAiTeacher();
+  const pathname = usePathname();
+
+  // The /han page (2026-08-31) already gives Han Tutor and Han Companion
+  // their own full-page surfaces, both driven by this same shared
+  // `open`/`mode`/`context` state - showing the floating trigger there too
+  // would pop a second, redundant Han panel over the first.
+  if (pathname?.startsWith("/han")) return null;
 
   return (
     <DialogPrimitive.Root

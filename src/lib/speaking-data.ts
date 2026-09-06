@@ -7,6 +7,13 @@ import {
   HAN_STT_REPEAT_MESSAGE,
 } from "@/lib/speech/transcript-quality";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateSttCostUsd,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import {
   buildSpeakingFeedbackPrompt,
   parseSpeakingFeedback,
@@ -19,6 +26,12 @@ import {
 } from "@/lib/progress-evidence";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
 import { checkSpeakingLabAchievements } from "@/lib/achievements";
+import { hskLevelForPoints } from "@/lib/points-system";
+import {
+  buildCustomScenarioPrompt,
+  parseCustomScenario,
+  type CustomScenario,
+} from "@/lib/custom-scenario-prompt";
 
 /** Only lesson-scoped sessions produce evidence - Competency has no scenario-level link (see progress-evidence.ts). */
 async function recordSpeakingEvidence(
@@ -104,11 +117,13 @@ async function assertOwnedSession(userId: string, sessionId: string) {
 
 /** Never throws for AI failure (10/8.6 pattern) - falls back to DEFAULT_SPEAKING_FEEDBACK. */
 async function generateFeedback(
+  userId: string,
   activityType: string,
   prompt: string,
   transcript: string,
 ): Promise<SpeakingFeedback> {
   try {
+    await checkDailyUsageCap(userId, "speaking-feedback");
     const provider = getAiProvider();
     const result = await provider.complete({
       systemPrompt: buildSpeakingFeedbackPrompt(
@@ -121,9 +136,27 @@ async function generateFeedback(
       ],
       maxOutputTokens: 300,
     });
+    await recordAiUsage({
+      userId,
+      feature: "speaking-feedback",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     return parseSpeakingFeedback(result.content);
   } catch (error) {
-    if (error instanceof AiProviderError) return DEFAULT_SPEAKING_FEEDBACK;
+    if (
+      error instanceof AiProviderError ||
+      error instanceof DailyUsageCapExceededError
+    ) {
+      return DEFAULT_SPEAKING_FEEDBACK;
+    }
     throw error;
   }
 }
@@ -154,8 +187,18 @@ export async function submitRecording(
   let transcript = "";
   let confidence: number | null = null;
   try {
+    await checkDailyUsageCap(userId, "speaking-transcribe");
     const stt = getSttProvider();
     const result = await stt.transcribe(audio, mimeType, "mandarin");
+    await recordAiUsage({
+      userId,
+      feature: "speaking-transcribe",
+      provider: result.provider,
+      model: result.model,
+      estimatedCostUsd: estimateSttCostUsd(durationSeconds),
+      durationSeconds,
+      durationSource: "CLIENT_RECORDED",
+    });
     const assessment = assessHanTranscript(
       result.transcript,
       result.confidence,
@@ -172,11 +215,17 @@ export async function submitRecording(
     transcript = assessment.transcript;
     confidence = result.confidence;
   } catch (error) {
-    if (!(error instanceof SttProviderError)) throw error;
+    if (
+      !(error instanceof SttProviderError) &&
+      !(error instanceof DailyUsageCapExceededError)
+    ) {
+      throw error;
+    }
   }
 
   const feedback: SpeakingFeedback = {
     ...(await generateFeedback(
+      userId,
       session.activityType,
       session.prompt,
       transcript,
@@ -217,6 +266,7 @@ export async function submitTextFallback(
   checkRateLimit(userId);
   const session = await assertOwnedSession(userId, sessionId);
   const feedback = await generateFeedback(
+    userId,
     session.activityType,
     session.prompt,
     text,
@@ -276,4 +326,101 @@ export async function deleteSpeakingAttempt(userId: string, attemptId: string) {
     await getStorageProvider().delete(attempt.audioFilePath);
   }
   await db.speakingAttempt.delete({ where: { id: attemptId } });
+}
+
+// Its own limiter, same copy-paste convention as this file's own
+// checkRateLimit and ai-teacher-data.ts's - rate limiting isn't shared
+// infrastructure in this codebase. Stricter and longer-windowed than a
+// plain attempt submission: this is a full AI generation call, not a
+// feedback pass on an already-recorded attempt, and the one real "no DB
+// row" TTS precedent (welcome-audio.ts) exists only for a fixed, closed
+// phrase list specifically because unrestricted generation is an
+// abusable, costly surface (2026-08-31, Fase 4 plan review finding).
+const SCENARIO_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const SCENARIO_RATE_LIMIT_MAX = 10;
+const recentScenarioGenerations = new Map<string, number[]>();
+
+export class SpeakingScenarioRateLimitError extends Error {}
+
+function checkScenarioRateLimit(userId: string): void {
+  const now = Date.now();
+  const timestamps = (recentScenarioGenerations.get(userId) ?? []).filter(
+    (t) => now - t < SCENARIO_RATE_LIMIT_WINDOW_MS,
+  );
+  if (timestamps.length >= SCENARIO_RATE_LIMIT_MAX) {
+    throw new SpeakingScenarioRateLimitError(
+      "You've generated a lot of practice scenarios recently. Please wait a bit before generating another.",
+    );
+  }
+  timestamps.push(now);
+  recentScenarioGenerations.set(userId, timestamps);
+}
+
+const MAX_SCENARIO_REQUEST_LENGTH = 300;
+
+/**
+ * Han Companion's "what do you want to practice today?" (2026-08-31,
+ * Fase 4) - generates a one-off scenario from the learner's own request
+ * instead of a pre-authored Mission row (missions are 100% seeded content -
+ * see mission-data.ts). Deliberately never creates a SpeakingSession or
+ * touches points/achievements (user decision, 2026-08-31): Han Companion is
+ * pure practice, same no-pressure spirit as its whole Practice-mode
+ * personality (ai-context.ts) - the generated scenario only ever becomes a
+ * RolePlayContext fed straight into a live conversation. Never throws for
+ * AI failure (same 8.6 pattern as generateFeedback above) - returns null so
+ * the caller can show a plain "couldn't generate that, try again" message
+ * instead of crashing the page.
+ */
+export async function generateCustomScenario(
+  userId: string,
+  learnerRequest: string,
+  learnerLevel: number | null | undefined,
+  knownFacts: string[],
+): Promise<CustomScenario | null> {
+  const trimmed = learnerRequest.trim();
+  if (trimmed.length === 0) {
+    throw new SpeakingInputError("Tell Han what you'd like to practice.");
+  }
+  if (trimmed.length > MAX_SCENARIO_REQUEST_LENGTH) {
+    throw new SpeakingInputError(
+      `That's too long (max ${MAX_SCENARIO_REQUEST_LENGTH} characters).`,
+    );
+  }
+  checkScenarioRateLimit(userId);
+
+  try {
+    await checkDailyUsageCap(userId, "speaking-scenario");
+    const provider = getAiProvider();
+    const result = await provider.complete({
+      systemPrompt: buildCustomScenarioPrompt(
+        trimmed,
+        hskLevelForPoints(learnerLevel ?? 0),
+        knownFacts,
+      ),
+      messages: [{ role: "user", content: trimmed }],
+      maxOutputTokens: 400,
+    });
+    await recordAiUsage({
+      userId,
+      feature: "speaking-scenario",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
+    return parseCustomScenario(result.content);
+  } catch (error) {
+    if (
+      error instanceof AiProviderError ||
+      error instanceof DailyUsageCapExceededError
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }

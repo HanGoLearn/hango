@@ -2,9 +2,20 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (partially real - see audit note)
 
 Last Updated: August 2026
+
+> **2026-09-05 audit note:** unlike its sibling pipeline docs (01-03, 05 -
+> see their audit notes), this one is **partially implemented**.
+> `src/lib/content/validation.ts`'s `validateLessonForPublish()` explicitly
+> cites this document by name and genuinely implements its "Structural
+> Validation" checks (does the lesson have dialogue/vocabulary/grammar/
+> exercises/quiz/mission, do exercises have a correct answer) before a
+> seeded lesson is published. The remaining stages described below
+> (Educational/Linguistic/Experience Validation) are not implemented - no
+> automated linguistic-accuracy check, hallucination detection, or
+> human-review workflow exists anywhere in the app.
 
 ---
 

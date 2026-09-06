@@ -7,18 +7,21 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const adapter = new PrismaPg({ connectionString: serverEnv.DATABASE_URL });
+// max: 20, not the pg.Pool default of 10 (2026-08-30, Prisma audit) - a
+// single page load routinely bursts 10+ concurrent queries (AppShell's
+// daily-login check + profile + 5-query streak lookup + 4-query avatar
+// data), so the default pool was queuing requests for a free connection
+// mid-burst - confirmed live via server logs showing the same action
+// (saveAvatarAnimalAction) alternate between ~140ms and ~950ms+ across
+// consecutive calls in the same process, the signature of pool contention
+// rather than one-time cold-start cost.
+const adapter = new PrismaPg({
+  connectionString: serverEnv.DATABASE_URL,
+  max: 20,
+});
 
 export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    // Diagnostic only (2026-08-19, investigating the real vs. estimated
-    // Prisma Postgres Operations gap for the Grammar batch) - gated behind
-    // an env var so normal dev/prod behavior is unaffected. Remove once
-    // that investigation is closed.
-    ...(process.env.DEBUG_PRISMA_QUERIES ? { log: ["query"] as const } : {}),
-  });
+  globalForPrisma.prisma ?? new PrismaClient({ adapter });
 
 if (serverEnv.NODE_ENV !== "production") {
   globalForPrisma.prisma = db;

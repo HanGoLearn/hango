@@ -2,9 +2,21 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (frozen since [0.0.4] - see audit note)
 
 Last Updated: August 2026
+
+> **2026-09-05 audit note:** every real entry stops at `[0.0.4]`
+> (2026-08-07/08) and is about documentation/project-file reorganization,
+> not a shipped product feature - despite substantial feature work since
+> (the zodiac avatar + HanCoins economy, Welcome to Chinese, the placement
+> exam, handwritten writing, the 2026-09-05 AI-usage-cost-tracking system
+> and CI pipeline), none of it was ever logged here. This document's own
+> "Documentation Synchronization" guidance (below, in the "should update"
+> checklists) still names `tasks.md` (`docs/05_development/tasks.md`) as a
+> file to keep in sync - that file was deleted 2026-09-05 as a stale
+> duplicate of the real live status doc, root-level `project/TASKS.md`.
+> Any future entry should reference `project/TASKS.md` instead.
 
 ---
 
@@ -431,7 +443,7 @@ Update:
 - `mvp.md`
 - `roadmap.md`
 - `milestones.md`
-- `tasks.md`
+- `project/TASKS.md` (corrected 2026-09-05 - the docs/05_development/tasks.md this used to say was deleted as a stale duplicate)
 - `testing.md`
 - Relevant product or engineering document
 - `changelog.md`
@@ -443,7 +455,7 @@ Update:
 - Relevant `03_engineering` document.
 - `deployment.md` when necessary.
 - `testing.md` when necessary.
-- `tasks.md`.
+- `project/TASKS.md` (corrected 2026-09-05 - see the note above).
 - `changelog.md`.
 
 ## Curriculum Change

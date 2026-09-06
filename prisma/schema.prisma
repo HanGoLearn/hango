@@ -64,6 +64,14 @@ model User {
   coinLedgerEntries      CoinLedgerEntry[]
   accessoryOwnerships    LearnerAccessoryOwnership[]
   equippedAccessories    LearnerEquippedAccessory[]
+  learnerFacts           LearnerFact[]
+
+  announcementsCreated    Announcement[]        @relation("AnnouncementCreator")
+  announcementReceipts    AnnouncementReceipt[]
+  adminCoinGrantsReceived AdminCoinGrant[]      @relation("AdminCoinGrantRecipient")
+  adminCoinGrantsCreated  AdminCoinGrant[]      @relation("AdminCoinGrantCreator")
+
+  @@index([createdAt])
 }
 
 model Account {
@@ -706,6 +714,10 @@ model VocabularyItem {
   quizAttempts VocabularyQuizAttempt[]
 
   @@index([chineseForm])
+  /// Added 2026-09-05 (cost/performance audit) - getVocabularyItemsForLevel
+  /// (words-of-the-day.ts) filters by exactly these two fields, and this
+  /// table had no index backing that query (3,000+ rows and growing).
+  @@index([hskLevel, status])
 }
 
 /// Lesson Interactivity Upgrade Phase B (2026-08-08): example sentences
@@ -1084,6 +1096,7 @@ model LearnerLessonCompletion {
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
+  @@index([completedAt])
 }
 
 /// Points & Leveling System (docs/02_academy/points_system.md, added
@@ -1097,13 +1110,23 @@ model LearnerLessonCompletion {
 /// old one entirely, never stacks or averages with it (explicit user
 /// requirement: redo must not let a learner farm points by repeating).
 model ScenarioCompletion {
-  id                        String   @id @default(cuid())
+  id                        String    @id @default(cuid())
   userId                    String
   scenarioId                String
   earnedPoints              Float
   weightedReflectionAverage Float
-  completedAt               DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  completedAt               DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  /// Set only after the full reward chain (recomputeGeneralLevelPoints +
+  /// achievement checks + grantCoins) finishes without throwing (2026-09-05
+  /// cost/DB audit fix). Before this field existed, the row above committing
+  /// was itself the re-entry guard in scenario-completion.ts - so if any
+  /// reward step failed partway through, a retry saw "values already match"
+  /// and skipped the whole chain forever, permanently losing whatever
+  /// hadn't run yet (a chapter/graduate achievement, the one-time coin
+  /// grant). Null here means "rewards not confirmed yet, retry the chain" -
+  /// every step in that chain is independently idempotent/safe to repeat.
+  rewardsGrantedAt          DateTime?
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
@@ -1182,21 +1205,182 @@ model AiMessage {
   @@index([conversationId, createdAt])
 }
 
+enum LearnerFactCategory {
+  JOB
+  GOAL
+  TRIP
+  FAMILY
+  HOBBY
+  OTHER
+}
+
+/// Han Companion's personal memory (2026-08-31) - genuinely personal facts
+/// a learner has shared in conversation (their job, why they're learning
+/// Chinese, an upcoming trip, family, hobbies), extracted from a real
+/// conversation (8+ messages, see learner-facts-prompt.ts) when the text
+/// chat resets, never from role-play. Deliberately not deduplicated in v1
+/// (project/db-operations-optimization.md-style accepted trade-off, not an
+/// oversight) - only the most recent facts are read back per request, which
+/// already bounds the practical impact of a repeated fact.
+model LearnerFact {
+  id                   String              @id @default(cuid())
+  userId               String
+  category             LearnerFactCategory
+  fact                 String
+  sourceConversationId String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
 /// FASE 8.1 "Record usage and cost metadata" - one row per completed AI
 /// request, independent of whether the conversation itself gets persisted.
+/// Extended 2026-09-05 (cost audit): originally only ai-teacher-data.ts
+/// wrote here - `feature` lets every other paid AI/TTS/STT surface log to
+/// the same table, and the admin AI-usage dashboard query and per-user daily
+/// caps (ai-usage.ts) both key off it.
 model AiUsageLog {
-  id               String   @id @default(cuid())
-  userId           String
-  provider         String
-  model            String
-  inputTokens      Int
-  outputTokens     Int
-  estimatedCostUsd Float
-  createdAt        DateTime @default(now())
+  id                            String                   @id @default(cuid())
+  userId                        String
+  /// Which app feature made the call, e.g. "ai-teacher-chat",
+  /// "welcome-audio", "handwritten-writing".
+  feature                       String
+  provider                      String
+  model                         String
+  /// Only meaningful for token-billed calls (text/vision). Null for
+  /// per-character/per-minute billing (TTS/STT), where cost is estimated
+  /// from duration instead - see ai-usage.ts.
+  inputTokens                   Int?
+  outputTokens                  Int?
+  estimatedCostUsd              Float
+  /// How estimatedCostUsd was calculated. Existing rows are deliberately
+  /// marked as legacy because their rate/duration snapshot was not stored.
+  calculationMethod             AiUsageCalculationMethod @default(LEGACY_ESTIMATE)
+  /// Historical rate snapshot used for token-billed calls.
+  inputRateUsdPerMillionTokens  Float?
+  outputRateUsdPerMillionTokens Float?
+  /// Historical blended rate used for minute-billed/estimated audio.
+  audioRateUsdPerMinute         Float?
+  /// Audio duration used in the calculation and how trustworthy it is.
+  durationSeconds               Float?
+  durationSource                AiUsageDurationSource?
+  createdAt                     DateTime                 @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([feature, createdAt])
+  @@index([userId, feature, createdAt])
+}
+
+enum AiUsageCalculationMethod {
+  TOKEN_RATES
+  PER_MINUTE
+  LEGACY_ESTIMATE
+}
+
+enum AiUsageDurationSource {
+  CLIENT_RECORDED
+  PROVIDER_REPORTED
+  BYTE_SIZE_ESTIMATE
+  TEXT_LENGTH_ESTIMATE
+}
+
+/// Configurable daily spend cap per feature (2026-09-05 cost audit), read by
+/// checkDailyUsageCap() before a paid call and edited from the admin AI-usage
+/// dashboard. A feature with no row here falls back to DEFAULT_DAILY_CAP_USD
+/// (ai-usage.ts).
+model AiUsageCap {
+  feature       String   @id
+  dailyLimitUsd Float
+  updatedAt     DateTime @updatedAt
+}
+
+enum AnnouncementType {
+  INFO
+  UPDATE
+  MAINTENANCE
+  CELEBRATION
+  IMPORTANT
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AnnouncementPriority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
+enum AnnouncementAudience {
+  ALL_LEARNERS
+}
+
+/// Administrator-authored message shown to learners when they enter HanGo.
+/// Delivery is tracked per user so an announcement is never repeatedly forced
+/// after the learner acknowledges it.
+model Announcement {
+  id              String               @id @default(cuid())
+  title           String
+  message         String               @db.Text
+  type            AnnouncementType     @default(INFO)
+  status          AnnouncementStatus   @default(DRAFT)
+  priority        AnnouncementPriority @default(NORMAL)
+  audience        AnnouncementAudience @default(ALL_LEARNERS)
+  startsAt        DateTime
+  endsAt          DateTime?
+  ctaLabel        String?
+  ctaHref         String?
+  createdByUserId String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  createdBy User?                 @relation("AnnouncementCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  receipts  AnnouncementReceipt[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([createdAt])
+}
+
+model AnnouncementReceipt {
+  id             String    @id @default(cuid())
+  announcementId String
+  userId         String
+  shownAt        DateTime  @default(now())
+  acknowledgedAt DateTime?
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId, acknowledgedAt])
+}
+
+/// Immutable audit trail for HanCoins granted manually from the back-office.
+/// The linked ledger entry remains the accounting source of truth.
+model AdminCoinGrant {
+  id                String   @id @default(cuid())
+  recipientUserId   String
+  grantedByUserId   String?
+  coinLedgerEntryId String   @unique
+  amount            Int
+  message           String   @db.Text
+  internalNote      String?  @db.Text
+  createdAt         DateTime @default(now())
+
+  recipient       User            @relation("AdminCoinGrantRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  grantedBy       User?           @relation("AdminCoinGrantCreator", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  coinLedgerEntry CoinLedgerEntry @relation(fields: [coinLedgerEntryId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId, createdAt])
+  @@index([grantedByUserId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -1629,10 +1813,18 @@ model CoinLedgerEntry {
   seenAt    DateTime?
   createdAt DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminCoinGrant AdminCoinGrant?
 
+  // No separate @@index([userId]) (2026-08-30, Prisma audit) - the
+  // @@unique([userId, sourceKey]) index already covers a bare `WHERE userId
+  // = ?` lookup via its leftmost column, same as any composite B-tree index.
+  // A standalone duplicate would only add write overhead on this table,
+  // which is the most-written one in the whole economy (every lesson,
+  // scenario, achievement, login, and purchase inserts here).
   @@unique([userId, sourceKey])
-  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 /// What a learner has purchased. `accessoryKey` refers to the code-defined

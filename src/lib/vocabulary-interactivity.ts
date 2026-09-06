@@ -4,6 +4,12 @@ import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
 import { contentAudioKey } from "@/lib/audio-content-key";
 import { recordVocabularyInteraction } from "@/lib/reflection";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateTtsCostUsd,
+  estimateTtsDurationSeconds,
+} from "@/lib/ai-usage";
 
 // Shared by both audio generation (TTS) and example generation (AI text) -
 // both are paid, on-demand calls that only run on a cache miss, but still
@@ -33,9 +39,23 @@ function checkRateLimit(userId: string): void {
 // scene with multiple characters, just the word/example being pronounced.
 const VOICE = "alloy";
 
-async function synthesizeAndStore(key: string, text: string): Promise<string> {
+async function synthesizeAndStore(
+  userId: string,
+  key: string,
+  text: string,
+): Promise<string> {
+  await checkDailyUsageCap(userId, "vocabulary-audio");
   const tts = getTtsProvider();
   const result = await tts.synthesize(text, VOICE);
+  await recordAiUsage({
+    userId,
+    feature: "vocabulary-audio",
+    provider: result.provider,
+    model: result.model,
+    estimatedCostUsd: estimateTtsCostUsd(text),
+    durationSeconds: estimateTtsDurationSeconds(text),
+    durationSource: "TEXT_LENGTH_ESTIMATE",
+  });
   await getStorageProvider().upload(key, result.audio, result.contentType);
   return key;
 }
@@ -72,7 +92,7 @@ export async function getOrGenerateVocabularyItemAudioUrl(
   }
 
   checkRateLimit(userId);
-  await synthesizeAndStore(key, item.chineseForm);
+  await synthesizeAndStore(userId, key, item.chineseForm);
   await db.vocabularyItem.update({
     where: { id: item.id },
     data: { audioFilePath: key },
@@ -108,7 +128,7 @@ export async function getOrGenerateVocabularyExampleAudioUrl(
   }
 
   checkRateLimit(userId);
-  await synthesizeAndStore(key, example.chineseText);
+  await synthesizeAndStore(userId, key, example.chineseText);
   await db.vocabularyExample.update({
     where: { id: example.id },
     data: { audioFilePath: key },

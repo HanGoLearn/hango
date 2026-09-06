@@ -11,6 +11,13 @@ import {
   AiTeacherRateLimitError,
   AiProviderError,
 } from "@/lib/ai-teacher-data";
+import {
+  DailyUsageCapExceededError,
+  checkDailyUsageCap,
+  recordAiUsage,
+  estimateSttCostUsd,
+  estimateAudioDurationSecondsFromBytes,
+} from "@/lib/ai-usage";
 import type { AiTeacherContext, AiTeacherMode } from "@/lib/ai-context";
 import { getSttProvider, SttProviderError } from "@/lib/speech";
 import {
@@ -63,6 +70,9 @@ export async function sendAiTeacherMessageAction(
     if (error instanceof AiTeacherRateLimitError) {
       return { ok: false, error: error.message };
     }
+    if (error instanceof DailyUsageCapExceededError) {
+      return { ok: false, error: error.message };
+    }
     if (error instanceof AiProviderError) {
       return { ok: false, error: error.message };
     }
@@ -73,11 +83,20 @@ export async function sendAiTeacherMessageAction(
   }
 }
 
-export async function resetAiTeacherConversationAction(): Promise<void> {
+/**
+ * `extractFacts` (2026-08-31) - only Han Companion should ever pass `true`.
+ * Defaults to `false` so every other caller (Han Tutor, the floating
+ * bubble, any future "Ask AI" entry point) never extracts personal-memory
+ * facts, matching the already-agreed rule that Tutor never remembers
+ * across sessions.
+ */
+export async function resetAiTeacherConversationAction(
+  extractFacts = false,
+): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
 
-  await resetConversation(session.user.id);
+  await resetConversation(session.user.id, extractFacts);
 }
 
 /**
@@ -160,11 +179,24 @@ export async function transcribeHanMessageAction(
   }
 
   try {
+    await checkDailyUsageCap(session.user.id, "han-teacher-transcribe");
     const result = await getSttProvider().transcribe(
       Buffer.from(await audio.arrayBuffer()),
       audio.type,
       "han-multilingual",
     );
+    const estimatedDurationSeconds = estimateAudioDurationSecondsFromBytes(
+      audio.size,
+    );
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: "han-teacher-transcribe",
+      provider: result.provider,
+      model: result.model,
+      estimatedCostUsd: estimateSttCostUsd(estimatedDurationSeconds),
+      durationSeconds: estimatedDurationSeconds,
+      durationSource: "BYTE_SIZE_ESTIMATE",
+    });
     const assessment = assessHanTranscript(
       result.transcript,
       result.confidence,
@@ -173,6 +205,9 @@ export async function transcribeHanMessageAction(
       ? { ok: true, transcript: assessment.transcript }
       : { ok: false, error: HAN_STT_REPEAT_MESSAGE };
   } catch (error) {
+    if (error instanceof DailyUsageCapExceededError) {
+      return { ok: false, error: error.message };
+    }
     return {
       ok: false,
       error:

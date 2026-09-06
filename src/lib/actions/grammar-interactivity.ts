@@ -11,6 +11,7 @@ import {
 } from "@/lib/grammar-interactivity";
 import { toClientExercise, type ClientExercise } from "@/lib/exercise-progress";
 import { TtsProviderError } from "@/lib/tts";
+import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 
 export type GrammarAudioActionResult =
   { ok: true; url: string } | { ok: false; error: string };
@@ -24,6 +25,7 @@ export type GrammarExercisesActionResult =
 function toErrorMessage(error: unknown): string {
   if (
     error instanceof GrammarInteractivityRateLimitError ||
+    error instanceof DailyUsageCapExceededError ||
     error instanceof TtsProviderError
   ) {
     return error.message;

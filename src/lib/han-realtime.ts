@@ -1180,8 +1180,10 @@ export function buildRealtimeTurnInstructions(
     mode === "PRACTICE" ? "Chinese" : requiredLanguage;
 
   return [
-    `For this turn, the required explanation language is ${effectiveRequiredLanguage}.`,
-    `Use ${effectiveRequiredLanguage} for the explanation and conversation.`,
+    `For this turn, the required explanation language is ${effectiveRequiredLanguage}${mode === "PRACTICE" ? " by default" : ""}.`,
+    mode === "PRACTICE"
+      ? `Use Chinese for the conversation by default. Only use ${requiredLanguage} if the learner just explicitly asked for an explanation in their own language - treat that as a rare, special exception for this one turn only, then return to Chinese.`
+      : `Use ${effectiveRequiredLanguage} for the explanation and conversation.`,
     buildSessionLevelInstruction(sessionLevelOverride),
     mode !== "PRACTICE"
       ? buildTranslationTargetInstruction(learnerTranscript)
@@ -1191,14 +1193,14 @@ export function buildRealtimeTurnInstructions(
       : null,
     mode === "TUTOR"
       ? "This is Tutor mode. If the learner asks to learn or practice a Mandarin word, grammar pattern, or expression, teach meaning and context, the simplest usage pattern, two natural examples, and one accurate China or native-usage note. Do not answer with pronunciation alone and do not turn it into a repetition drill unless pronunciation was explicitly requested."
-      : "This is Han Practice: pure adaptive Mandarin conversation. Output Simplified Chinese only. Do not explain, translate, teach examples, correct, praise, score, evaluate, or mention mistakes. Infer intended meaning from audio plus topic, prior turns, and learned language; when imperfect pronunciation is contextually understandable, respond to that meaning and continue naturally. Ask one short Mandarin clarification only when materially different meanings remain plausible.",
+      : "This is Han Practice: a real, warm conversation with Han as a companion, not a lesson, test, or drill. Output Simplified Chinese only by default. Talk like a real friend - react genuinely to what the learner shares, and offer warmth, encouragement, or a piece of advice when it's genuinely called for, proactively bringing up something from their real recent performance when relevant. Correct mistakes gently, mostly by modeling the correct form inside your own next line (a recast) instead of stopping to explain - give a short, explicit correction, in the learner's language if needed, only if the same kind of mistake clearly keeps repeating. Infer intended meaning from audio plus topic, prior turns, and learned language; when imperfect pronunciation is contextually understandable, respond to that meaning and continue naturally. Ask one short Mandarin clarification only when materially different meanings remain plausible.",
     "This is free conversation: never reproduce the lesson's reference dialogue.",
     "Allow a short detour, then naturally guide the learner back to the role-play objective.",
     sessionLevelOverride
       ? `Keep this turn genuinely at ${sessionLevelOverride}. Do not fall back to beginner material merely because the learner answered with a short acknowledgement.`
       : "Keep this turn appropriate for the learner level in the session instructions: use common vocabulary, one short idea, and one clear response opportunity. Simplify after hesitation; never jump to advanced Chinese.",
     "Treat short Mandarin or pinyin as practice, keep understandable attempts moving, and write Mandarin with Chinese characters, never pinyin.",
-    mode !== "PRACTICE" ? pronunciationProgress : null,
+    pronunciationProgress,
   ]
     .filter(Boolean)
     .join(" ");

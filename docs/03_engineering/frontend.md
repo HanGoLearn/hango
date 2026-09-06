@@ -6,6 +6,15 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** too abstract to check against real code - no
+> mention of Next.js App Router, React Server/Client Components, or
+> `src/components/`'s real organization. Its linear "Frontend Structure"
+> and "Navigation" lists also omit entire shipped route groups/features
+> (leaderboard, shop, achievements, placement exam, Welcome to Chinese,
+> the admin dashboard) - see `docs/01_product/navigation.md` for the real
+> current nav, and `architecture.md` (completed 2026-09-05) for the
+> concrete stack.
+
 ---
 
 # Purpose

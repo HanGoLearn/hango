@@ -5,6 +5,7 @@ import {
   buildSentenceOrderQuestion,
   pickOrderExampleIndex,
   seededRandom,
+  planVocabularyQuestions,
 } from "@/lib/content/vocabulary-quiz";
 
 const items = [
@@ -231,5 +232,73 @@ describe("seededRandom (2026-08-19 hydration-mismatch fix)", () => {
       seededRandom("1:meaning"),
     );
     expect(optionsA.map((o) => o.id)).toEqual(optionsB.map((o) => o.id));
+  });
+});
+
+describe("planVocabularyQuestions (2026-08-31, vocabulary rhythm variation)", () => {
+  it("is fully deterministic given the same 4 inputs - the property both the walkthrough render and reflection.ts's scoring depend on", () => {
+    const a = planVocabularyQuestions("1", "lesson-1", "INTERMEDIATE", 3);
+    const b = planVocabularyQuestions("1", "lesson-1", "INTERMEDIATE", 3);
+    expect(a).toEqual(b);
+  });
+
+  it("produces a different plan for a different lessonId, same word", () => {
+    const a = planVocabularyQuestions("1", "lesson-1", "INTERMEDIATE", 3);
+    const b = planVocabularyQuestions("1", "lesson-2", "INTERMEDIATE", 3);
+    expect(a).not.toEqual(b);
+  });
+
+  it("never plans more questions than vocabularyQuestionsPerWord(difficulty) allows", () => {
+    for (const difficulty of ["BEGINNER", "INTERMEDIATE", "ADVANCED"]) {
+      for (const lessonId of ["a", "b", "c", "d", "e"]) {
+        const plan = planVocabularyQuestions("1", lessonId, difficulty, 3);
+        // 4/5/6 ceiling by difficulty (points-system.ts's own numbers).
+        const ceiling =
+          difficulty === "BEGINNER" ? 4 : difficulty === "ADVANCED" ? 6 : 5;
+        expect(plan.length).toBeLessThanOrEqual(ceiling);
+        expect(plan.length).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it("clamps to the real candidate count for a sparse-example word instead of the difficulty ceiling", () => {
+    // 0 examples: only meaning + chineseForm are ever viable (no fill-blank,
+    // no order) - ADVANCED's nominal ceiling of 6 must never be reached.
+    for (const lessonId of ["a", "b", "c", "d", "e", "f", "g", "h"]) {
+      const plan = planVocabularyQuestions("1", lessonId, "ADVANCED", 0);
+      expect(plan.length).toBeLessThanOrEqual(2);
+      expect(plan.every((q) => q.type === "meaning" || q.type === "chineseForm")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("never emits a pinyin-type question - retired from the walkthrough on 2026-08-16", () => {
+    for (const lessonId of ["a", "b", "c", "d", "e"]) {
+      const plan = planVocabularyQuestions("1", lessonId, "ADVANCED", 3);
+      expect(plan.every((q) => (q.type as string) !== "pinyin")).toBe(true);
+    }
+  });
+
+  it("keys match the exact convention the app already records attempts under", () => {
+    const plan = planVocabularyQuestions("word-1", "lesson-1", "ADVANCED", 3);
+    for (const entry of plan) {
+      if (entry.type === "meaning") expect(entry.key).toBe("word-1:meaning");
+      if (entry.type === "chineseForm")
+        expect(entry.key).toBe("word-1:chineseForm");
+      if (entry.type === "blank")
+        expect(entry.key).toBe(`word-1:blank:${entry.exampleIndex}`);
+      if (entry.type === "order") expect(entry.key).toBe("word-1:order");
+    }
+  });
+
+  it("always has at least meaning + chineseForm to draw from, even with zero examples", () => {
+    // Fill-blank and order both require examples; meaning/chineseForm never
+    // do, so a word's candidate pool - and therefore its plan - can never
+    // actually be empty through the real code path.
+    for (const lessonId of ["a", "b", "c"]) {
+      const plan = planVocabularyQuestions("1", lessonId, "BEGINNER", 0);
+      expect(plan.length).toBeGreaterThanOrEqual(1);
+    }
   });
 });

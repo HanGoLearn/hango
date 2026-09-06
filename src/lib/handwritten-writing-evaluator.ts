@@ -12,7 +12,7 @@ import {
 } from "@/lib/handwritten-writing";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const MODEL = "gpt-5-mini";
+export const HANDWRITTEN_EVALUATION_MODEL = "gpt-5-mini";
 const REQUEST_TIMEOUT_MS = 60_000;
 
 export class HandwrittenEvaluationError extends Error {}
@@ -157,6 +157,23 @@ ${rubric}
 Do not calculate an overall score; the application calculates the weighted total. Be strict but level-appropriate.`;
 }
 
+interface UsageTokens {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** The Responses API returns real token usage alongside `output`/`output_text` - reused for cost tracking instead of estimating a vision call's tokens some other way. */
+function extractUsage(payload: unknown): UsageTokens | null {
+  if (!payload || typeof payload !== "object") return null;
+  const usage = (payload as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== "object") return null;
+  const inputTokens = (usage as { input_tokens?: unknown }).input_tokens;
+  const outputTokens = (usage as { output_tokens?: unknown }).output_tokens;
+  if (typeof inputTokens !== "number" || typeof outputTokens !== "number")
+    return null;
+  return { inputTokens, outputTokens };
+}
+
 function extractOutputText(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const direct = (payload as { output_text?: unknown }).output_text;
@@ -238,6 +255,7 @@ function toPublicEvaluation(
 export interface EvaluatedHandwriting {
   result: HandwrittenSubmissionResult;
   transcription: string | null;
+  usage: UsageTokens | null;
 }
 
 export async function evaluateHandwrittenWriting(
@@ -278,7 +296,7 @@ export async function evaluateHandwrittenWriting(
           .digest("hex"),
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: HANDWRITTEN_EVALUATION_MODEL,
         store: false,
         reasoning: { effort: "low" },
         max_output_tokens: level === "ADVANCED" ? 2_000 : 1_400,
@@ -328,5 +346,6 @@ export async function evaluateHandwrittenWriting(
   return {
     result: toPublicEvaluation(raw, level),
     transcription: raw.readable ? raw.transcription : null,
+    usage: extractUsage(payload),
   };
 }

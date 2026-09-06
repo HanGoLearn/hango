@@ -9,6 +9,7 @@ import {
   MissionRateLimitError,
 } from "@/lib/mission-data";
 import { AiProviderError } from "@/lib/ai";
+import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 import type { MissionReport } from "@/lib/mission-evaluation";
 
 async function requireUserId(): Promise<string> {
@@ -42,6 +43,9 @@ export async function sendMissionMessageAction(
       return { ok: false, error: error.message };
     }
     if (error instanceof MissionRateLimitError) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof DailyUsageCapExceededError) {
       return { ok: false, error: error.message };
     }
     if (error instanceof AiProviderError) {

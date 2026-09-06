@@ -4,6 +4,12 @@ import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
 import { contentAudioKey } from "@/lib/audio-content-key";
 import { getExercisesForGrammarPoint } from "@/lib/content/exercise";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateTtsCostUsd,
+  estimateTtsDurationSeconds,
+} from "@/lib/ai-usage";
 
 // Shared across every generation path here (audio, explanation, examples,
 // exercises) - all are paid, on-demand calls that only run on a cache miss.
@@ -30,9 +36,23 @@ function checkRateLimit(userId: string): void {
 
 const VOICE = "alloy";
 
-async function synthesizeAndStore(key: string, text: string): Promise<string> {
+async function synthesizeAndStore(
+  userId: string,
+  key: string,
+  text: string,
+): Promise<string> {
+  await checkDailyUsageCap(userId, "grammar-audio");
   const tts = getTtsProvider();
   const result = await tts.synthesize(text, VOICE);
+  await recordAiUsage({
+    userId,
+    feature: "grammar-audio",
+    provider: result.provider,
+    model: result.model,
+    estimatedCostUsd: estimateTtsCostUsd(text),
+    durationSeconds: estimateTtsDurationSeconds(text),
+    durationSource: "TEXT_LENGTH_ESTIMATE",
+  });
   await getStorageProvider().upload(key, result.audio, result.contentType);
   return key;
 }
@@ -64,7 +84,7 @@ export async function getOrGenerateGrammarExampleAudioUrl(
   }
 
   checkRateLimit(userId);
-  await synthesizeAndStore(key, example.chineseText);
+  await synthesizeAndStore(userId, key, example.chineseText);
   await db.grammarExample.update({
     where: { id: example.id },
     data: { audioFilePath: key },

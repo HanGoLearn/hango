@@ -1,10 +1,20 @@
 # HanGo Settings
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (rewritten 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** almost every field this document described
+> was either wrong in specifics or entirely invented (a bilingual
+> explanation-language toggle, an editable post-onboarding Chinese level,
+> playback speed/audio difficulty controls, AI conversation-style personas,
+> adaptive/manual difficulty, password/subscription/notification settings
+> - none of these exist), and it omitted two real sections outright
+> (Avatar, Appearance). The sections below have been rewritten against the
+> real page, `app/(app)/settings/page.tsx` (7 sections: Profile, Avatar,
+> Learning, Han, Appearance, Privacy, Account).
 
 ---
 
@@ -26,227 +36,77 @@ The system should provide enough personalization to make learning effective whil
 
 ---
 
-# User Profile Settings
+# Real Settings Sections
 
-The learner profile contains information used by HanGo to personalize the experience.
-
----
-
-# 1. Learning Goal
-
-## Purpose
-
-Understand why the learner is studying Chinese.
-
-Possible goals:
-
-- Conversational fluency.
-- HSK preparation.
-- Travel.
-- Professional communication.
-- Academic purposes.
-- Personal interest.
-
-The AI Teacher uses this information to recommend activities.
+The Settings page has exactly seven sections, in this order:
 
 ---
 
-# 2. Current Chinese Level
+# 1. Profile
 
-## Purpose
-
-Determine the learner's starting point.
-
-The learner can select:
-
-- Beginner.
-- Intermediate.
-- Advanced.
-
-Optional:
-
-HSK level estimate.
-
-Example:
-
-HSK 3.
-
-HSK 4.
-
-HSK 5.
+Display name (used in-app) and account nickname (reserved for a future
+leaderboard handle, editable independently of display name).
 
 ---
 
-# 3. Native Language
+# 2. Avatar
 
-## Purpose
-
-Adapt explanations.
-
-Supported examples:
-
-- Spanish.
-- English.
-- Other languages.
-
-The AI Teacher uses this preference when explaining concepts.
+The learner's chosen zodiac-animal avatar and equipped accessories
+(2026-08-30). Not a settings toggle so much as a shortcut into the same
+customization the Shop page offers.
 
 ---
 
-# 4. Explanation Language
+# 3. Learning
 
-## Purpose
+One combined form covering:
 
-Control how the AI Teacher explains concepts.
+- Interface language (EN/ES - the UI chrome language).
+- Explanation language (EN/ES/ZH - a single mutually-exclusive choice for
+  how Han explains concepts, not a bilingual "Chinese + X" toggle).
+- Learning goals and skill priorities (set during onboarding, editable
+  here).
+- Daily study target (minutes).
+- Correction style: `IMMEDIATE` / `AFTER_CONVERSATION` / `ONLY_IMPORTANT`
+  - the real three options; there is no separate "explanation style" or
+  "conversation style" (friendly/professional/strict) setting.
 
-Options:
-
-- Chinese only.
-- Chinese + English.
-- Chinese + Spanish.
-
-Advanced learners may prefer more Chinese exposure.
-
----
-
-# 5. Learning Preferences
-
-The learner can customize their experience.
-
-Examples:
-
-Preferred focus:
-
-- Speaking.
-- Listening.
-- Reading.
-- Writing.
-- Grammar.
-- Vocabulary.
+Current Chinese level is set once during onboarding (via the optional
+placement exam or a self-assessment) and is not editable from Settings.
 
 ---
 
-# 6. Study Schedule
+# 4. Han
 
-## Purpose
+- Response mode: `TEXT_ONLY` / `TEXT_AND_AUDIO` / `AUDIO_ONLY`.
+- Voice: fixed to "cedar" - there is no voice-selection control.
+- Conversation-memory toggle (whether AI Teacher chat history is stored
+  and reused as context).
 
-Support consistency.
-
-Settings:
-
-- Daily study goal.
-- Preferred study time.
-- Weekly frequency.
-
-Examples:
-
-15 minutes daily.
-
-30 minutes daily.
-
-1 hour daily.
+There is no playback-speed, audio-difficulty, or AI-personality control
+anywhere in the app.
 
 ---
 
-# 7. Audio Settings
+# 5. Appearance
 
-The learner can customize listening experience.
-
-Options:
-
-- Playback speed.
-- Audio difficulty.
-- Voice preference.
-
-Examples:
-
-Slow.
-
-Normal.
-
-Native speed.
+Theme: light, dark, or match system - the same control as the toggle in
+the top bar on every page.
 
 ---
 
-# 8. AI Teacher Preferences
+# 6. Privacy
 
-The learner can customize interaction style.
-
-Options:
-
-Correction style:
-
-- Immediate correction.
-- Correction after conversation.
-- Only important mistakes.
-
-Explanation style:
-
-- Short explanations.
-- Detailed explanations.
-
-Conversation style:
-
-- Friendly.
-- Professional.
-- Strict teacher.
+Recording-retention period (days) for Speaking Lab voice recordings. That
+is the only privacy control on this page today.
 
 ---
 
-# 9. Learning Difficulty
+# 7. Account
 
-The learner can choose the challenge level.
-
-Options:
-
-Adaptive:
-
-AI automatically adjusts difficulty.
-
-Manual:
-
-User selects difficulty.
-
----
-
-# 10. Review Preferences
-
-Controls how HanGo reinforces previous knowledge.
-
-Options:
-
-Review frequency.
-
-Vocabulary repetition.
-
-Grammar review.
-
-Speaking repetition.
-
----
-
-# Privacy Settings
-
-Users control:
-
-- Data storage.
-- Learning history.
-- AI memory.
-- Voice recordings.
-
-The learner should always understand what information is used.
-
----
-
-# Account Settings
-
-Includes:
-
-- Profile information.
-- Password.
-- Subscription.
-- Notifications.
-- Language preferences.
+A single delete-account action. There is no password, subscription, or
+notification-preferences control here - HanGo has no subscription tiers
+or notification system today.
 
 ---
 

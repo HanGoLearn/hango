@@ -4969,3 +4969,244 @@ regex-parsed string, `ExerciseItem`'s grading contract, `study-streak.ts`/
 `points-system.ts`/`general-level.ts` formulas, `prisma/schema.prisma`
 beyond small additive fields (flag before adding any), real Writing Lab
 content, achievements, auth, the placement exam engine.
+
+## Han Companion voice orb (2026-08-31) — ✅ Complete
+
+- [x] Added an isolated `variant="orb"` to `HanVoiceConversation`; Han's
+  existing remote-output RMS drives its scale/glow without a second audio
+  pipeline or React re-renders per animation frame.
+- [x] Han Companion alone uses the orb. One control starts/ends audio; no
+  transcript, caption, text input, mute row, or chat UI was added. Speaking
+  Lab's `immersive` variant and Learning Journey Speaking remain unchanged.
+- [x] Removed Companion's optional typed scenario builder entirely. Added two
+  independent live-audio borders: jade follows the learner mic RMS; red/gold
+  follows Han's remote-output RMS. Both reuse the existing analysers.
+- [x] Stabilized Han Companion's `onActiveChange` callback after real-server
+  testing exposed a pre-existing maximum-update-depth loop on `/han`.
+- [x] Prisma Client regenerated; typecheck, scoped ESLint, diff check, CSS/
+  Next compilation, and authenticated `/han` HTTP render pass. In-app visual
+  inspection remained unavailable because its webview would not attach.
+- [x] Realtime STT prompt-leak regression fixed (2026-09-01): a false VAD
+  turn on silence returned the recognizer's own multilingual instruction as
+  learner speech. Both multilingual/Mandarin prompt signatures are now
+  rejected silently before display, persistence, or sending to Han; 17/17
+  focused transcript-quality tests pass.
+- [x] Han name repetition fixed (2026-09-01): knowing `displayName` no longer
+  licenses routine address-by-name. Text and voice may use it only in the
+  first greeting, final farewell, or on explicit learner request. Generic
+  `Claro`/`Entiendo`/`Perfecto` openings are now prohibited; 58/58 prompt
+  tests pass.
+
+## Han Tutor progressive pedagogy (2026-09-02) — ✅ Complete
+
+- [x] Approved plan captured in `project/han-tutor-progressive-pedagogy.md`.
+  Tutor now silently chooses among quick answer, focused contrast,
+  correction, broad teaching, and explicit practice on each turn.
+- [x] The five-part lesson is conditional on a broad request; quick answers
+  default to one useful example, and second examples, cultural notes,
+  practice, questions, praise, and invitations must earn their place.
+- [x] Written characters + accurate pinyin + translation remain mandatory
+  for every Mandarin example. Voice still pronounces Mandarin naturally and
+  never reads pinyin aloud. Companion and both Speaking systems unchanged.
+- [x] 61/61 `ai-context` tests, typecheck, scoped ESLint, Prettier, and diff
+  check pass.
+- [x] Tutor dictation regression fixed (2026-09-02): when the active learning
+  context explicitly expects `从来 / cónglái`, the isolated STT mishearing
+  `y el Zhou Enlai` is rendered as `从来`. Real references to Zhou Enlai in a
+  sentence and transcripts without that vocabulary hint remain unchanged.
+
+## Public marketing landing (2026-09-02) — ✅ Complete
+
+- [x] Replaced `/`'s database-health placeholder with a Spanish-first landing
+  for learners from absolute beginner through advanced refinement, centered on
+  progressing toward real communication at every level.
+- [x] Added the Restaurant learning loop, distinct descriptions of Learning
+  Journey, AI Teacher, Speaking Lab, Writing Lab, Missions, and progress, plus
+  direct registration/login actions. Han Companion and both Speaking systems
+  remain untouched.
+- [x] Reused the existing brand tokens, UI primitives, logo, and Han artwork;
+  added responsive/light-dark-safe presentation without new dependencies.
+- [x] Added production metadata and a 1200×630 branded social preview at
+  `public/og.png`; no invented testimonials, usage figures, prices, or claims.
+- [x] Broadened the public promise after the user's current product-direction
+  correction: zero prior knowledge is required. Added honest product evidence
+  for avatar creation, HanCoins customization, Han Vocabulary, and the weekly
+  leaderboard without changing those systems.
+- [x] Hero collision follow-up (2026-09-02): Han now has a smaller, reserved
+  responsive area instead of overlapping the conversation card; the next-step
+  callout sits fully below the card in normal flow with no negative offset.
+- [x] 3/3 focused component/a11y tests, typecheck, scoped ESLint, Prettier,
+  production build, and real local `/` HTTP render pass.
+
+## Interactive hero demo card (2026-09-04/05) — ✅ Complete
+
+- [x] Took over from OpenAI mid-build: the static Contexto/Práctica/Misión row
+  in the hero is now a real interactive demo (`hero-demo-card.tsx`) with tab
+  switching, dialogue bubbles, and a mission CTA to `/register`.
+- [x] Several rounds of visual fixes after real-browser screenshots: Han's
+  position per tab, the "Han note" made full-width and centered instead of
+  `w-max`, mission button single-line/full-width. Kept every fix minimal and
+  scoped after two regressions (an oversized centering box that clipped
+  Han's hand, and an unrequested card-width change) — both reverted to the
+  prior known-good layout rather than iterated on further.
+
+## Stale-session hardening + full project audit (2026-09-05) — In progress
+
+- [x] Real bug found via manual testing: a JWT session for a deleted user
+  crashed every authenticated page with a raw Prisma `P2003` on
+  `getOrCreateLearnerProfile` (JWT sessions can't be server-invalidated).
+  Fixed in `app/(app)/layout.tsx` — catches the FK violation and redirects to
+  a new `app/api/auth/invalid-session/route.ts` Route Handler that signs out
+  and sends the learner back to `/login` (cookies can only be mutated from a
+  Server Action/Route Handler, not the layout itself). 5/5 unit tests pass.
+- [x] Full part-by-part audit approved and structured in 7 parts (Parte
+  0-6); plan lives in `vectorized-jumping-fox.md`. **Parte 0** (dead
+  scripts/docs cleanup) and **Parte 3** (dead component sweep — removed
+  `drawer.tsx` and `lesson-availability-badge.tsx`, zero real importers)
+  done.
+- [x] **Parte 4** (tests + CI): added `.github/workflows/ci.yml` — first CI
+  this project has ever had, runs the full suite (typecheck/lint/unit/
+  component/integration/smoke) on every push/PR against a real Postgres
+  service container. Needs no paid API key (`OPENAI_API_KEY` unset →
+  `MockAiProvider` automatically, per `src/lib/env/server.ts`). Not yet
+  validated on real GitHub infra — first real push is the real test.
+  Fixed the smoke test's cross-platform process-tree kill (was
+  Windows-only `taskkill`) and its stale "Application foundation running."
+  assertion (checks for `HanGo` + `href="/register"` now).
+  Added tests for the 4 zero-coverage cost-sensitive files found by the
+  audit: `welcome-audio.ts`, `free-topic-practice.ts`,
+  `handwritten-writing-data.ts`, `placement-listening-audio.ts` — all AI/TTS
+  calls mocked, real database, 21/21 passing.
+- [x] **Parte 1** (costo de IA): auditoría de las ~18-20 superficies reales de
+  IA/TTS/STT/voz vía 3 agentes en paralelo. Hallazgos aplicados:
+  - `app/api/han/speech/route.ts` (el más riesgoso: sin caché ni rate limit)
+    ahora tiene caché por contenido + límite de 30/5min, igual que el resto
+    de audios TTS del proyecto.
+  - Bug real encontrado de paso: `landing-page.test.tsx` estaba roto desde la
+    reescritura de la tarjeta interactiva del hero (perdió los atributos
+    `lang` en chino/pinyin) — restaurado sin tocar el diseño ya aprobado.
+- [x] **Sistema de costo de IA + tope diario + panel de administrador**
+  (2026-09-05, a pedido del usuario, más allá del audit original): extendida
+  la tabla `AiUsageLog` (ya existía pero solo la usaba el chat de Han) con un
+  campo `feature` + nueva tabla `AiUsageCap` (límite diario configurable por
+  función). Nuevo módulo `src/lib/ai-usage.ts`: `recordAiUsage` +
+  `checkDailyUsageCap` (tope de $1/día por usuario y función por defecto,
+  configurable) + estimadores de costo reales para TTS ($0.015/min,
+  gpt-4o-mini-tts) y STT ($0.006/min, whisper-1) verificados por WebSearch.
+  Conectado en las 20 superficies reales (texto, audio, voz, visión de
+  escritura a mano) — antes solo 1 de 20 registraba algo.
+  Nuevo panel `/admin/ai-usage` (protegido por `requireRole(["ADMINISTRATOR"])`,
+  ya existía la infraestructura de roles sin usar): tabla con gasto real
+  hoy/este mes por función (todos los usuarios) + tope diario editable por
+  función. Acceso vía el ícono de usuario (esquina superior derecha) →
+  "Administrador", visible solo si `role === ADMINISTRATOR`. Cuenta real del
+  usuario (`arean.mendoza@unmsm.edu.pe`) subida a ese rol con su confirmación
+  explícita. 32/32 tests nuevos (unitarios + integración) pasando.
+- [x] **Parte 6** (rutas/currículo): sin código muerto en las 22 rutas
+  reales; `/speaking-test` confirmada como herramienta de QA legítima
+  (dev-only, ahora documentada). `prisma/seed.ts` sin contenido huérfano —
+  todo lo sembrado se publica en la misma operación.
+- [x] **Parte 5** (documentación): auditoría completa de los 61 archivos de
+  `docs/`; 50 corregidos o anotados (17 críticos que describían sistemas
+  nunca construidos — "Simulation Engine", pipeline de generación de
+  contenido con IA, `api.md` con una API REST ficticia, `architecture.md`
+  literalmente cortado a la mitad, etc. — 15 moderados en `01_product`/
+  `04_design`/`06_marketing`, 18 menores). 14 confirmados ya precisos, sin
+  tocar.
+- [ ] **Parte 2** (DB/Prisma) en pausa — encontró 2 bugs reales del mismo
+  tipo que el ya arreglado en `scenario-completion.ts` (guardas de
+  idempotencia mal ubicadas en `mission-data.ts` y `reflection.ts` que
+  pueden perder evidencia de progreso para siempre tras un fallo parcial),
+  más 6 índices de base de datos faltantes y el hallazgo de que la DB usa
+  el endpoint directo de Prisma Postgres en vez del pooled. Pausada a
+  propósito hasta que termine el trabajo de Codex en el panel de admin
+  (ambas partes tocarían `prisma/schema.prisma`).
+- [ ] Codex está construyendo la versión completa del panel de
+  administrador (resumen general, vista por usuario, límites por función
+  con minutos/costo reales) a partir de la arquitectura acordada — en
+  progreso, ya extendió `AiUsageLog` con seguimiento real de duración.
+- [ ] El CI (`.github/workflows/ci.yml`) nunca corrió en GitHub real — el
+  primer push real es la prueba real.
+- [ ] Nada de esta sesión se ha subido a git todavía (ni la auditoría, ni
+  el sistema de costo de IA, ni el panel).
+
+## Private admin back-office — Entrega 1 (2026-09-05) — ✅ Complete
+
+- [x] Consolidated scope and future roadmap captured in
+  `project/admin-backoffice-plan.md`; Han Tutor, Han Companion, Learning
+  Journey Speaking, and Speaking Lab remain separate and unchanged.
+- [x] New `/admin` shell outside the learner app layout, protected by a
+  database-backed `ADMINISTRATOR` check plus the exact owner email. Includes
+  executive overview, searchable/paginated users, learner detail, AI limits,
+  and direct links from the existing account menu.
+- [x] Admin announcements: drafts/publishing, priority/type, active dates,
+  optional internal CTA, delivery/acknowledgement counts, archive action, and
+  learner entry modal.
+- [x] Manual HanCoin grants: positive bounded amount, required learner-facing
+  message, optional internal note, idempotent ledger transaction, immutable
+  audit record, and a persistent learner acknowledgement modal.
+- [x] Prisma schema/migration/client generation, database-backed DTO queries,
+  validation and scoped security checks implemented. 639/639 unit tests,
+  12/12 shell component tests, 2/2 real-database admin integration tests,
+  typecheck, scoped ESLint, Prisma format/validation, and diff check pass.
+- [x] `20260906030000_add_admin_backoffice` applied to the configured remote
+  PostgreSQL database after explicit user authorization; Prisma confirms all
+  48 migrations are current. Integration-created users, announcements, and
+  grants are removed by test cleanup.
+- [x] Runtime access control verified: an unauthenticated visit to `/admin`
+  redirects to `/login`. Full authenticated visual QA requires the owner to
+  sign into the browser; no password or session bypass was attempted.
+- [x] Admin overview overflow follow-up (2026-09-06): “Registros recientes”
+  now constrains every row to the card, truncates long account names inside a
+  flexible column, and keeps the date in a fixed non-wrapping column.
+- [ ] Full production build is currently blocked by pre-existing unrelated
+  `placement-exam.ts` Server Action exports and unavailable Google Fonts; the
+  new admin files themselves pass typecheck and scoped lint.
+
+## Admin product intelligence — Entrega 2 (2026-09-06) — ✅ Complete
+
+- [x] Added `/admin/analytics` and an “Analítica” entry to the isolated admin
+  shell, with selectable 7/30/90-day periods and no learner-shell side effects.
+- [x] Activation funnel for the selected registration cohort: registration,
+  verified email, completed onboarding, first lesson started/completed, and
+  first scenario completed. Counts are sequential intersections so the funnel
+  cannot report an impossible increase between stages.
+- [x] D1/D7/D30 retention, daily active/completion trend, returning and
+  high-frequency learners, 14-day reactivation opportunity, avatar adoption,
+  accessory participation, achievements, and leaderboard participation.
+- [x] Separate product signals for Learning Journey, Han Tutor, Han Companion,
+  Speaking Lab, Writing Lab, Missions, HanVocabulary, and Placement, including
+  actions, unique users, and attributable AI cost.
+- [x] HanCoin inflow/outflow/admin grants, total AI cost/calls, cost per active
+  user/completion, provider/model/function detail, near-cap alerts, onboarding
+  conversion alert, and period-over-period learning activity alert.
+- [x] Methodology is visible in the UI: `daily_login` is a proxy for access,
+  not study time; retention uses exact Bogotá calendar days; shared
+  `han-speech` is not falsely assigned to Tutor or Companion; Learning Journey
+  Speaking is not counted as Speaking Lab without an independent origin marker.
+- [x] Reprioritized Entrega 2 documented in
+  `project/admin-backoffice-plan.md`; historical cost metadata remains Entrega
+  2B and true visible/interacted session duration remains Entrega 3.
+- [x] Typecheck, scoped ESLint/Prettier, real-database analytics invariants, and
+  admin-shell component navigation tests pass (2/2 focused tests).
+
+## Admin AI cost traceability — Entrega 2B (2026-09-06) — ✅ Complete
+
+- [x] Extended `AiUsageLog` additively with calculation method, historical
+  token/minute rates, audio duration, and duration source. Existing rows are
+  honestly preserved as `LEGACY_ESTIMATE` instead of backfilling invented
+  precision.
+- [x] Token-priced calls snapshot the exact internal model rates used at write
+  time. TTS stores text-length-estimated duration; Han transcription stores a
+  byte-size estimate; Speaking Lab stores the client-recorded duration.
+- [x] `/admin/analytics` now separates legacy, token, and per-minute estimates
+  and shows the historical rate plus audio-evidence source for every grouped
+  cost row. Han Tutor, Han Companion, Learning Journey Speaking, and Speaking
+  Lab attribution rules remain unchanged.
+- [x] Migration `20260906090000_add_ai_usage_cost_metadata` applied to the
+  configured PostgreSQL database; Prisma reported all 49 migrations applied.
+- [x] Prisma format/validation/client generation, typecheck, scoped ESLint,
+  4/4 pure estimator/metadata tests, and the read-only real-database analytics
+  invariant test pass. The separate mutable AI-usage integration suite remains
+  prepared but was not rerun against the shared database because it creates
+  temporary users and modifies global feature-cap rows.

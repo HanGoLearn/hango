@@ -2,6 +2,12 @@ import "server-only";
 import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
 import { contentAudioKey } from "@/lib/audio-content-key";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateTtsCostUsd,
+  estimateTtsDurationSeconds,
+} from "@/lib/ai-usage";
 
 /**
  * Real, content-addressed TTS for Welcome to Chinese - same mechanism as
@@ -97,8 +103,18 @@ export async function getOrGenerateWelcomeAudioUrl(
   }
 
   checkRateLimit(userId);
+  await checkDailyUsageCap(userId, "welcome-audio");
   const tts = getTtsProvider();
   const result = await tts.synthesize(text, VOICE);
+  await recordAiUsage({
+    userId,
+    feature: "welcome-audio",
+    provider: result.provider,
+    model: result.model,
+    estimatedCostUsd: estimateTtsCostUsd(text),
+    durationSeconds: estimateTtsDurationSeconds(text),
+    durationSource: "TEXT_LENGTH_ESTIMATE",
+  });
   await storage.upload(key, result.audio, result.contentType);
 
   return storage.getUrl(key);

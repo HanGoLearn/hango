@@ -2,9 +2,24 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (audit note added 2026-09-05)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** real providers (`src/lib/auth.ts`) are
+> **Credentials + Google OAuth only** - Apple Sign-In and Microsoft Login
+> below are not implemented (`mvp.md` explicitly excludes both; this
+> document should mark them "(future)" the way `api.md` correctly does).
+> Sessions use NextAuth's **JWT strategy** (`session: { strategy: "jwt" }`,
+> `src/lib/auth.config.ts`) - one signed, stateless token, not the
+> separate Access/Refresh Token pair described below. A related, real
+> gotcha: a role change in the database does not take effect for an
+> already-issued session until logout/login, since the JWT callback only
+> reads the role at sign-in. New since this doc was written:
+> `requireRole()` (`src/lib/auth-role.ts`) is now a real, tested
+> authorization layer, first used 2026-09-05 to gate the admin AI-usage
+> dashboard - this document doesn't mention role-based route
+> authorization at all.
 
 ---
 

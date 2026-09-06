@@ -2,6 +2,12 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import {
   getLessonCompetencyIds,
   replaceProgressEvidence,
@@ -17,11 +23,11 @@ import {
   type SpeakingTranscriptMessage,
 } from "@/lib/reflection-prompt";
 import {
-  vocabularyQuestionsPerWord,
   computeReflectionTotal,
   computeSpeakingConversationScore,
   starsForScore,
 } from "@/lib/points-system";
+import { planVocabularyQuestions } from "@/lib/content/vocabulary-quiz";
 import {
   sanitizeSpeakingTurnEvidence,
   type SpeakingTurnEvidence,
@@ -132,23 +138,40 @@ async function computeExerciseScore(
   return Math.round((correct / total) * 100);
 }
 
+interface VocabularyWordForScoring {
+  vocabularyItemId: string;
+  exampleCount: number;
+}
+
 /**
- * Points & Leveling System (2026-08-16): real quiz accuracy, replacing
- * coverage as the Vocabulary score's basis. `expectedQuestionCount` is
- * derived, not queried - VocabularyQuizAttempt only has rows for questions
- * the learner actually answered, so an unanswered question must still count
- * against the total (same "first attempt, unanswered = not correct"
- * convention as computeExerciseScore).
+ * Points & Leveling System (2026-08-16, revised 2026-08-31 for rhythm
+ * variation): real quiz accuracy, replacing coverage as the Vocabulary
+ * score's basis. The expected question set per word is no longer a flat
+ * count - it's recomputed here via `planVocabularyQuestions`, the exact
+ * same deterministic function vocabulary-step.tsx calls to decide what to
+ * render, seeded only off (lessonId, vocabularyItemId, difficulty,
+ * exampleCount). Neither side trusts the other's report of what was asked;
+ * both independently arrive at the same answer from the same real inputs.
+ *
+ * Per-word rule: a word answered via the quick-test mode (questionKey
+ * `{itemId}:quicktest`) and answered correctly there scores 1/1 on its own
+ * - it was never asked the fuller walkthrough questions, so it can't be
+ * scored against them. Anything else (no quick-test attempt, or a wrong
+ * one - which routes the learner into remediation for that word) falls
+ * back to the full per-word plan, scored against whichever of *those*
+ * specific keys have a matching first attempt with isCorrect: true. A
+ * fabricated or stray questionKey the app never actually planned can't
+ * inflate a score, since only recomputed, real plan keys are ever looked
+ * up - "first attempt, unanswered = not correct" still applies, same
+ * convention as computeExerciseScore.
  */
 async function computeVocabularyCounts(
   userId: string,
   lessonId: string,
-  wordCount: number,
+  words: VocabularyWordForScoring[],
   difficulty: string,
 ): Promise<ScoreCounts> {
-  if (wordCount === 0) return { correct: 0, total: 0 };
-  const expectedQuestionCount =
-    wordCount * vocabularyQuestionsPerWord(difficulty);
+  if (words.length === 0) return { correct: 0, total: 0 };
 
   const attempts = await db.vocabularyQuizAttempt.findMany({
     where: { userId, lessonId },
@@ -163,23 +186,47 @@ async function computeVocabularyCounts(
     }
   }
 
-  const correct = [...firstByQuestion.values()].filter(Boolean).length;
-  return { correct, total: expectedQuestionCount };
+  let correct = 0;
+  let total = 0;
+  for (const word of words) {
+    if (firstByQuestion.get(`${word.vocabularyItemId}:quicktest`) === true) {
+      correct += 1;
+      total += 1;
+      continue;
+    }
+    const plan = planVocabularyQuestions(
+      word.vocabularyItemId,
+      lessonId,
+      difficulty,
+      word.exampleCount,
+    );
+    total += plan.length;
+    for (const entry of plan) {
+      if (firstByQuestion.get(entry.key) === true) correct += 1;
+    }
+  }
+
+  // A degenerate word (no examples, no viable distractors) can legitimately
+  // plan to zero questions - the old flat formula could never hit 0/0 once
+  // wordCount > 0, this per-word sum can. Guard before it becomes NaN.
+  if (total === 0) return { correct: 0, total: 0 };
+  return { correct, total };
 }
 
 async function computeVocabularyScore(
   userId: string,
   lessonId: string,
-  wordCount: number,
+  words: VocabularyWordForScoring[],
   difficulty: string,
 ): Promise<number | null> {
-  if (wordCount === 0) return null;
+  if (words.length === 0) return null;
   const { correct, total } = await computeVocabularyCounts(
     userId,
     lessonId,
-    wordCount,
+    words,
     difficulty,
   );
+  if (total === 0) return null;
   return Math.round((correct / total) * 100);
 }
 
@@ -276,6 +323,7 @@ async function computeSpeakingScore(
     return { score: null, feedback: null };
 
   try {
+    await checkDailyUsageCap(userId, "lesson-reflection");
     const result = await getAiProvider().complete({
       systemPrompt: buildSpeakingConversationFeedbackPrompt(
         {
@@ -304,13 +352,31 @@ async function computeSpeakingScore(
       // chat turn, so allow it to finish without slowing Han elsewhere.
       timeoutMs: 45_000,
     });
+    await recordAiUsage({
+      userId,
+      feature: "lesson-reflection",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     const feedback = parseSpeakingConversationFeedback(result.content);
     // Points & Leveling System (2026-08-15): multiplicative, not an
     // average - a weak vocabulary/objective ratio caps the score.
     const score = computeSpeakingConversationScore(feedback);
     return { score, feedback };
   } catch (error) {
-    if (!(error instanceof AiProviderError)) throw error;
+    if (
+      !(error instanceof AiProviderError) &&
+      !(error instanceof DailyUsageCapExceededError)
+    ) {
+      throw error;
+    }
     return {
       score: null,
       feedback: {
@@ -348,7 +414,11 @@ function fetchLessonForReflection(lessonId: string) {
     where: { id: lessonId },
     include: {
       vocabulary: {
-        include: { vocabularyItem: { select: { chineseForm: true } } },
+        include: {
+          vocabularyItem: {
+            select: { chineseForm: true, examples: { select: { id: true } } },
+          },
+        },
       },
       grammarPoints: {
         include: { grammarPoint: { select: { name: true, structure: true } } },
@@ -408,7 +478,10 @@ export async function getOrGenerateLessonReflectionReport(
           ? computeVocabularyScore(
               userId,
               lessonId,
-              lesson.vocabulary.length,
+              lesson.vocabulary.map((v) => ({
+                vocabularyItemId: v.vocabularyItemId,
+                exampleCount: v.vocabularyItem.examples.length,
+              })),
               lesson.scenarioLevel.difficulty,
             )
           : null,
@@ -505,7 +578,10 @@ export async function getOrGenerateLessonReflectionReport(
         : computeVocabularyScore(
             userId,
             lessonId,
-            vocabularyItemIds.length,
+            lesson.vocabulary.map((v) => ({
+              vocabularyItemId: v.vocabularyItemId,
+              exampleCount: v.vocabularyItem.examples.length,
+            })),
             lesson.scenarioLevel.difficulty,
           ),
       computeSpeakingScore(
@@ -527,6 +603,7 @@ export async function getOrGenerateLessonReflectionReport(
 
   let narrative = parseHanReflectionNarrative("");
   try {
+    await checkDailyUsageCap(userId, "lesson-reflection");
     const result = await getAiProvider().complete({
       systemPrompt: buildHanReflectionNarrativePrompt(lesson.title, {
         vocabularyCovered,
@@ -539,9 +616,27 @@ export async function getOrGenerateLessonReflectionReport(
       messages: [{ role: "user", content: "Write the note." }],
       maxOutputTokens: 500,
     });
+    await recordAiUsage({
+      userId,
+      feature: "lesson-reflection",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     narrative = parseHanReflectionNarrative(result.content);
   } catch (error) {
-    if (!(error instanceof AiProviderError)) throw error;
+    if (
+      !(error instanceof AiProviderError) &&
+      !(error instanceof DailyUsageCapExceededError)
+    ) {
+      throw error;
+    }
   }
 
   const created = await db.lessonReflectionReport.create({
@@ -619,7 +714,12 @@ export async function getLessonScoreBreakdown(
     db.lesson.findUnique({
       where: { id: lessonId },
       select: {
-        vocabulary: { select: { vocabularyItemId: true } },
+        vocabulary: {
+          select: {
+            vocabularyItemId: true,
+            vocabularyItem: { select: { examples: { select: { id: true } } } },
+          },
+        },
         scenarioLevel: { select: { difficulty: true } },
       },
     }),
@@ -647,7 +747,10 @@ export async function getLessonScoreBreakdown(
     computeVocabularyCounts(
       userId,
       lessonId,
-      lesson.vocabulary.length,
+      lesson.vocabulary.map((v) => ({
+        vocabularyItemId: v.vocabularyItemId,
+        exampleCount: v.vocabularyItem.examples.length,
+      })),
       lesson.scenarioLevel.difficulty,
     ),
   ]);

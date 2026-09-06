@@ -1,10 +1,22 @@
 # HanGo Launch Plan
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (audit note added 2026-09-05 - see below)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** "Initial Launch Audience" recommends HSK
+> 3-early 5 learners and explicitly says the first users should *not*
+> primarily be complete beginners; "Risk 6 - Users Expect Beginner
+> Content" mitigation says to avoid beginner-oriented marketing. The
+> shipped homepage already markets to complete beginners - see
+> `docs/00_company/06_target_users.md`'s matching audit note for the real,
+> live evidence. This isn't unexecuted strategy; the product has already
+> gone the other way. Flagging for a product decision, not silently
+> resolving it. The staged internal → alpha → beta → public rollout
+> mechanics themselves are left untouched - this audit found no evidence
+> either way on whether those stages happened on schedule.
 
 ---
 

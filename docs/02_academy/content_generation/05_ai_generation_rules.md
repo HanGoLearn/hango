@@ -2,9 +2,17 @@
 
 Version: 1.0
 
-Status: Official
+Status: Aspirational — not implemented (2026-09-05 audit)
 
 Last Updated: August 2026
+
+> **There is no live AI content-generation system these rules govern.** All
+> curriculum content is hand-authored (see `01_content_principles.md`'s
+> audit note). The one real AI-generation fallback this project ever ran in
+> production (vocabulary examples, grammar explanations) was removed
+> 2026-08-14. Keep this document as a design reference for a possible
+> future system, not as a description of rules any real generation process
+> follows today.
 
 ---
 

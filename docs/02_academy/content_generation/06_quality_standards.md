@@ -2,9 +2,18 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (partially real - see audit note)
 
 Last Updated: August 2026
+
+> **2026-09-05 audit note:** `src/lib/content/validation.ts`'s
+> `validateLessonForPublish()` cites this document by name alongside
+> `04_content_validation.md` for its structural checklist, and genuinely
+> implements the subset of it that the schema actually models (required
+> relations present, exercises have a correct answer). The "Validation
+> Scores"/"Content Scoring System" (Educational Score, Language Score,
+> Engagement Score) described elsewhere in this document is pure
+> aspiration - no automated scoring pipeline exists.
 
 ---
 

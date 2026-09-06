@@ -1,10 +1,23 @@
 # HanGo Target Users
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (audit note added 2026-09-05 - see below)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the "Primary Audience" section below says the
+> platform "currently focuses" on HSK 3-9 learners and "is not intended to
+> replace beginner courses." The shipped marketing homepage
+> (`src/components/marketing/home-hero.tsx`) already does the opposite -
+> its real headline is "Mandarín desde cero hasta nivel avanzado" (Mandarin
+> from scratch to advanced) and it markets an explicit "no prior knowledge
+> needed" promise, backed by real product surfaces for true beginners: an
+> `HSK_1_2` tier in `src/lib/ai-context.ts`, the Welcome to Chinese page,
+> and a placement exam that starts at HSK 1. This document's "currently"
+> framing is out of date - flagging for a product decision (update this
+> doc to reflect the beginner-inclusive pivot, or treat the current
+> marketing as the mistake), not silently resolving it either way.
 
 ---
 

@@ -53,6 +53,24 @@ describe("Han STT language constraints", () => {
     );
   });
 
+  it("repairs the reported 从来 proper-name mishearing only in its learning context", () => {
+    const hints = transcriptHintsFromContext({
+      selectedVocabulary: {
+        chineseForm: "从来",
+        pinyin: "cónglái",
+        meaning: "always; ever",
+      },
+    });
+
+    expect(normalizeHanTranscript("y el Zhou Enlai.", hints)).toBe("从来");
+    expect(normalizeHanTranscript("Zhou Enlai fue primer ministro.")).toBe(
+      "Zhou Enlai fue primer ministro.",
+    );
+    expect(
+      normalizeHanTranscript("Estoy leyendo sobre Zhou Enlai.", hints),
+    ).toBe("Estoy leyendo sobre Zhou Enlai.");
+  });
+
   it("uses current-lesson vocabulary inside a Spanish carrier sentence", () => {
     const hints = transcriptHintsFromContext({
       lessonVocabulary: [
@@ -132,6 +150,24 @@ describe("Han STT language constraints", () => {
     expect(assessHanTranscript("unreliable words", 0.05)).toEqual({
       ok: false,
       reason: "low_confidence",
+    });
+  });
+
+  it("rejects the Realtime STT prompt when silence leaks it as a transcript", () => {
+    const leakedPrompt = buildHanSttPrompt("han-multilingual");
+
+    expect(assessHanTranscript(leakedPrompt, 0.99)).toEqual({
+      ok: false,
+      reason: "prompt_leak",
+    });
+  });
+
+  it("rejects the Mandarin STT prompt when silence leaks it as a transcript", () => {
+    const leakedPrompt = buildHanSttPrompt("mandarin");
+
+    expect(assessHanTranscript(leakedPrompt, 0.99)).toEqual({
+      ok: false,
+      reason: "prompt_leak",
     });
   });
 

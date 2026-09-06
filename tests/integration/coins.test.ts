@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   getCoinBalance,
   grantCoins,
+  grantDailyLoginCoins,
   purchaseAccessory,
   equipAccessory,
   InsufficientCoinsError,
@@ -72,6 +73,55 @@ describe("HanCoins (integration, real database)", () => {
       where: { userId: user.id, key: "streak_3" },
     });
     expect(achievementRows).toBe(1);
+  });
+
+  describe("grantDailyLoginCoins (2026-08-31, coins operations audit)", () => {
+    it("grants the daily bonus once", async () => {
+      const user = await createTestUser(`coins-daily-${Date.now()}@hango.dev`);
+      const today = new Date("2026-08-31T12:00:00Z");
+
+      await grantDailyLoginCoins(user.id, today);
+      expect(await getCoinBalance(user.id)).toBe(5);
+
+      const entries = await db.coinLedgerEntry.findMany({
+        where: { userId: user.id },
+      });
+      expect(entries).toHaveLength(1);
+    });
+
+    it("a repeat call the same day is a no-op, without even reaching the database (TTL-cached, not just sourceKey-deduped)", async () => {
+      const user = await createTestUser(
+        `coins-daily-repeat-${Date.now()}@hango.dev`,
+      );
+      const today = new Date("2026-08-31T08:00:00Z");
+      const laterToday = new Date("2026-08-31T22:00:00Z");
+
+      await grantDailyLoginCoins(user.id, today);
+      await grantDailyLoginCoins(user.id, laterToday);
+      expect(await getCoinBalance(user.id)).toBe(5);
+
+      const entries = await db.coinLedgerEntry.findMany({
+        where: { userId: user.id },
+      });
+      expect(entries).toHaveLength(1);
+    });
+
+    it("grants again on a new calendar day", async () => {
+      const user = await createTestUser(
+        `coins-daily-newday-${Date.now()}@hango.dev`,
+      );
+      const day1 = new Date("2026-08-31T12:00:00Z");
+      const day2 = new Date("2026-09-01T00:05:00Z");
+
+      await grantDailyLoginCoins(user.id, day1);
+      await grantDailyLoginCoins(user.id, day2);
+      expect(await getCoinBalance(user.id)).toBe(10);
+
+      const entries = await db.coinLedgerEntry.findMany({
+        where: { userId: user.id },
+      });
+      expect(entries).toHaveLength(2);
+    });
   });
 
   describe("purchaseAccessory", () => {

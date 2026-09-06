@@ -6,6 +6,20 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** the "files outside the database, metadata
+> inside" principle holds up. What's understated: today there is exactly
+> **one** real provider, `LocalStorageProvider`
+> (`src/lib/storage/providers/local.ts`), writing to a gitignored
+> `.storage/` folder on local disk - no cloud object storage (S3, Blob, or
+> otherwise) is configured, and the code's own comment calls this
+> explicitly a "dev-only stand-in." The suggested nested directory layout
+> below (`users/`, `images/`, `lessons/`, `simulations/`, `ai/`, `system/`)
+> doesn't match reality either - real storage keys are flat, content-
+> addressed feature prefixes (`speaking/`, `dialogue-audio/`,
+> `vocabulary-audio/`, `grammar-audio/`, `placement-audio/`,
+> `welcome-audio/`, `han-speech/`), hashed from the exact text being
+> spoken so identical content is never regenerated or stored twice.
+
 ---
 
 # Purpose

@@ -3,6 +3,15 @@ import { SpeakingTestHarness } from "@/components/speaking/speaking-test-harness
 import { getLessonWithContent } from "@/lib/content/lesson-data";
 import { getSpeakingLessonOptions } from "@/lib/content/speaking-prompts";
 
+/**
+ * Internal QA harness (2026-09-05 audit note) - lets a developer open any
+ * lesson's Speaking step directly, via a lesson picker, without touching a
+ * real learner's Learning Journey progress. Dev-only by design, not a
+ * learner feature: 404s outright in production (the check below), and its
+ * only in-app entry point (a "Speaking test mode" card in
+ * speaking-lab-home.tsx) is itself only rendered when NODE_ENV is
+ * development, so there's no path to it in a real deployment either way.
+ */
 export default async function SpeakingTestPage({
   searchParams,
 }: {

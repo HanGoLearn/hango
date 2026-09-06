@@ -2,9 +2,23 @@
 
 Version: 1.0
 
-Status: Official
+Status: Aspirational — not implemented (2026-09-05 audit)
 
 Last Updated: August 2026
+
+> **This system was never built.** No `SimulationEngine`, route, component, or
+> Prisma model exists anywhere in the codebase for it — confirmed by a
+> repo-wide search finding zero references. What plays an overlapping role
+> today is the combination of `Scenario` + `Mission` + Speaking Lab's
+> role-play (`SpeakingSession`/`SpeakingAttempt`), which is a materially
+> simpler, less unified system than what this document describes (no
+> "Unexpected Events" injection, no "Simulation History" review screen, no
+> dedicated adaptive-difficulty engine spanning missions). Six other docs
+> (`grammar_system.md`, `vocabulary_system.md`, `dialogue_system.md`,
+> `missions_system.md`, `assessment_system.md`, `review_system.md`) cite this
+> as a real dependency — those citations have been corrected to point here
+> instead. Keep this document as a design reference for a possible future
+> system, not as a description of anything currently running.
 
 ---
 

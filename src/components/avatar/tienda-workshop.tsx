@@ -56,7 +56,10 @@ export interface TiendaWorkshopProps {
  * locally previews on the character (no server call) until Buy is pressed,
  * which purchases AND equips it in one action - this answers the original
  * "quiero ver cómo me queda antes de comprarlo" request more directly than
- * the earlier global-preview-plus-Accept-button design it replaces.
+ * the earlier global-preview-plus-Accept-button design it replaces, while
+ * still keeping that design's one real strength (2026-08-31 restore): the
+ * preview is per-slot, so trying on an unowned hat doesn't clear an unowned
+ * pair of glasses you were already previewing in another slot.
  */
 export function TiendaWorkshop({
   animal,
@@ -67,16 +70,25 @@ export function TiendaWorkshop({
 }: TiendaWorkshopProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("HEAD");
-  const [preview, setPreview] = useState<{ slot: AccessorySlot; key: string } | null>(
-    null,
-  );
+  // One preview per slot, not a single global one (2026-08-31, "por que
+  // ahora ya no?" - the earlier single-preview design lost the ability to
+  // try on an unowned item in each slot at once, which the pre-Atelier
+  // Change Animal/Shop/Inventory/Accept flow could do). Only ever holds
+  // *unowned* keys - an owned item equips for real via equipAccessoryAction
+  // instead, never through this map.
+  const [preview, setPreview] = useState<Record<AccessorySlot, string | null>>({
+    HEAD: null,
+    FACE: null,
+    TORSO: null,
+  });
   const [error, setError] = useState<string>();
   const [isPending, startTransition] = useTransition();
   const owned = new Set(ownedAccessoryKeys);
 
   const displayEquipped: Record<AccessorySlot, string | null> = {
-    ...equipped,
-    ...(preview ? { [preview.slot]: preview.key } : {}),
+    HEAD: preview.HEAD ?? equipped.HEAD,
+    FACE: preview.FACE ?? equipped.FACE,
+    TORSO: preview.TORSO ?? equipped.TORSO,
   };
 
   const outfitNames = SLOT_ORDER.map((slot) => displayEquipped[slot])
@@ -100,7 +112,7 @@ export function TiendaWorkshop({
   const handleItemClick = (slot: AccessorySlot, accessoryKey: string) => {
     setError(undefined);
     if (owned.has(accessoryKey)) {
-      setPreview(null);
+      setPreview((current) => ({ ...current, [slot]: null }));
       startTransition(async () => {
         const isEquipped = equipped[slot] === accessoryKey;
         const result = await equipAccessoryAction(
@@ -114,11 +126,10 @@ export function TiendaWorkshop({
         router.refresh();
       });
     } else {
-      setPreview((current) =>
-        current?.slot === slot && current.key === accessoryKey
-          ? null
-          : { slot, key: accessoryKey },
-      );
+      setPreview((current) => ({
+        ...current,
+        [slot]: current[slot] === accessoryKey ? null : accessoryKey,
+      }));
     }
   };
 
@@ -135,7 +146,7 @@ export function TiendaWorkshop({
         setError(equip.message);
         return;
       }
-      setPreview(null);
+      setPreview((current) => ({ ...current, [slot]: null }));
       router.refresh();
     });
   };
@@ -201,11 +212,10 @@ export function TiendaWorkshop({
         )}
         {tab !== "ANIMAL" && animal && (
           <AccessoryPanel
-            animal={animal}
             slot={tab}
             ownedAccessoryKeys={ownedAccessoryKeys}
             equippedKey={equipped[tab]}
-            previewKey={preview?.slot === tab ? preview.key : null}
+            previewKey={preview[tab]}
             coinBalance={coinBalance}
             onItemClick={(key) => handleItemClick(tab, key)}
             onBuy={(key) => handleBuy(tab, key)}

@@ -6,6 +6,12 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** this document's "Simulation Integration"
+> section references the Simulation Engine as a real dependency — that
+> system was never built (see `simulation_engine.md`). In practice, grammar
+> usage is evaluated inside Mission conversations and the lesson's Speaking
+> step, not a separate simulation system.
+
 ---
 
 # Purpose

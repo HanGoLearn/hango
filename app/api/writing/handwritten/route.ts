@@ -8,6 +8,7 @@ import {
   submitHandwrittenWriting,
 } from "@/lib/handwritten-writing-data";
 import { HandwrittenEvaluationError } from "@/lib/handwritten-writing-evaluator";
+import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_COUNT = 3;
@@ -112,6 +113,9 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof HandwrittenRateLimitError) {
+      return Response.json({ error: error.message }, { status: 429 });
+    }
+    if (error instanceof DailyUsageCapExceededError) {
       return Response.json({ error: error.message }, { status: 429 });
     }
     if (error instanceof HandwrittenEvaluationError) {

@@ -8,18 +8,37 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Textarea } from "@/components/ui/textarea";
 import { Body, Caption, Supporting } from "@/components/ui/typography";
 import { InformationBanner } from "@/components/ui/banner";
-import { HanAvatar } from "@/components/ui/han-mascot";
+import { HanAvatar, type HanPose } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
 import { HanVoiceInput } from "@/components/ai-teacher/han-voice-input";
 import { HanVoiceConversation } from "@/components/ai-teacher/han-voice-conversation";
 import { HanSpeechButton } from "@/components/ai-teacher/han-speech-button";
-import type { AiTeacherContext, AiTeacherMode } from "@/lib/ai-context";
+import type { AiTeacherContext } from "@/lib/ai-context";
 
-const MODES: { value: AiTeacherMode; label: string }[] = [
-  { value: "TUTOR", label: "Tutor" },
-  { value: "PRACTICE", label: "Practice" },
-];
+/**
+ * Reactive avatar (2026-08-31, Han Companion) - a lightweight, always-
+ * reliable visual complement to Practice mode's spoken warmth, which
+ * depends on the realtime model actually executing tone instructions well.
+ * Keyword-based, best-effort - not a claim of real sentiment analysis, just
+ * enough to make Han's face feel alive instead of permanently neutral.
+ */
+function inferHanPose(content: string): HanPose {
+  if (
+    /[!！]|太好了|加油|做得好|genial|excelente|great job|nice one|awesome|well done/iu.test(
+      content,
+    )
+  ) {
+    return "celebrating";
+  }
+  if (/lo siento|perdón|抱歉|不好意思|\bsorry\b|my (?:mistake|bad)/iu.test(content)) {
+    return "wrong";
+  }
+  if (/[?？]/u.test(content)) {
+    return "curious";
+  }
+  return "idle";
+}
 
 function suggestedPromptsFor(context: AiTeacherContext): string[] {
   const prompts: string[] = [];
@@ -45,19 +64,28 @@ function suggestedPromptsFor(context: AiTeacherContext): string[] {
   return prompts.slice(0, 3);
 }
 
-/** The chat body shared by the desktop panel (expanded) and the mobile drawer (8.3). */
+/** The chat body shared by the desktop panel (expanded), the mobile drawer (8.3), and Han Tutor's full-page view (/han). */
 export function AiTeacherChat({
   voiceEnabled = true,
   rolePlayEnabled = true,
+  spacious = false,
 }: {
   voiceEnabled?: boolean;
   /** The floating Han tutor must never inherit Speaking's Mandarin-only persona. */
   rolePlayEnabled?: boolean;
+  /**
+   * A taller, larger-text input (2026-08-31, user report) - the default
+   * sizing was tuned for the small floating bubble/mobile drawer, where a
+   * single compact line makes sense. Han Tutor's full-page view (/han) has
+   * a whole empty page around it, and the same tiny input looked
+   * disproportionate there. Bubble/drawer callers stay at the original
+   * size; only the /han page opts in.
+   */
+  spacious?: boolean;
 }) {
   const {
     context,
     mode,
-    setMode,
     messages,
     sending,
     resetting,
@@ -116,25 +144,6 @@ export function AiTeacherChat({
     <div className="flex h-full flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         <Caption>{contextLabel}</Caption>
-        <div className="flex gap-1" role="tablist" aria-label="Han mode">
-          {MODES.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="tab"
-              aria-selected={mode === option.value}
-              onClick={() => setMode(option.value)}
-              className={cn(
-                "rounded-full px-3 py-1 font-interface text-caption font-semibold",
-                mode === option.value
-                  ? "bg-primary-500 text-on-color-light"
-                  : "bg-elevated text-text-secondary",
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div
@@ -156,7 +165,11 @@ export function AiTeacherChat({
             )}
           >
             {message.role === "assistant" && (
-              <HanAvatar pose="idle" size={26} className="mb-0.5" />
+              <HanAvatar
+                pose={inferHanPose(message.content)}
+                size={26}
+                className="mb-0.5"
+              />
             )}
             <div className="min-w-0">
               {/* Han always writes a reply internally regardless of mode -
@@ -236,15 +249,29 @@ export function AiTeacherChat({
       </div>
 
       <div className="flex items-end gap-2">
-        <Textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask Han..."
-          aria-label="Message Han"
-          className="min-h-11 flex-1"
-          rows={1}
-        />
+        {/* Textarea's own root element is a wrapper <div> (label/error/
+            character-count row), not the <textarea> itself - a className
+            of just "flex-1" lands on the inner <textarea> and never
+            reaches that outer wrapper, so it never actually grew to fill
+            this row (2026-08-31, real bug found verifying the user's "still
+            looks the same" report - not just a re-apply-the-same-fix case).
+            Wrapping it here is what actually makes it take the row's
+            width, matching the full-width "Start live conversation"
+            button below it. */}
+        <div className="min-w-0 flex-1">
+          <Textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask Han..."
+            aria-label="Message Han"
+            className={cn(
+              "w-full",
+              spacious ? "min-h-24 text-body sm:min-h-28" : "min-h-11",
+            )}
+            rows={spacious ? 3 : 1}
+          />
+        </div>
         <HanVoiceInput
           disabled={sending || resetting || voiceConversationActive}
           context={activeContext}

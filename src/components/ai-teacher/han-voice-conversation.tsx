@@ -153,7 +153,7 @@ export function HanVoiceConversation({
   open: boolean;
   appendMessage: (message: Omit<AiChatMessage, "id">) => void;
   onActiveChange: (active: boolean) => void;
-  variant?: "compact" | "immersive";
+  variant?: "compact" | "immersive" | "orb";
   roleLabel?: string;
   maxSessionMs?: number;
   naturalCloseAfterMs?: number;
@@ -189,6 +189,7 @@ export function HanVoiceConversation({
   const remoteAudioAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteAudioGainRef = useRef<GainNode | null>(null);
   const remoteAudioAnalysisFrameRef = useRef<number | null>(null);
+  const orbRef = useRef<HTMLButtonElement | null>(null);
   const ambientNoiseFloorRef = useRef(INITIAL_AMBIENT_NOISE_FLOOR_RMS);
   const activeVoiceTurnRef = useRef<{
     startedAt: number;
@@ -262,6 +263,11 @@ export function HanVoiceConversation({
     audioAnalyserRef.current = null;
     if (audioContextRef.current) void audioContextRef.current.close();
     audioContextRef.current = null;
+    orbRef.current?.style.removeProperty("--learner-level");
+    orbRef.current?.style.removeProperty("--learner-scale");
+    orbRef.current?.style.removeProperty("--learner-glow");
+    orbRef.current?.style.removeProperty("--learner-blur");
+    orbRef.current?.style.removeProperty("--learner-spread");
     activeVoiceTurnRef.current = null;
     activeVoiceTurnItemIdRef.current = null;
     discardedVoiceTurnItemIdsRef.current.clear();
@@ -303,6 +309,42 @@ export function HanVoiceConversation({
               ?.getAudioTracks()
               .some((track) => track.enabled) ?? false;
           const activeTurn = activeVoiceTurnRef.current;
+
+          // Companion's outer jade ring follows the learner's existing mic
+          // analyser. CSS variables keep this 60fps path outside React.
+          const learnerVisualLevel = audioEnabled
+            ? Math.sqrt(
+                Math.min(
+                  1,
+                  Math.max(
+                    0,
+                    (rms - ambientNoiseFloorRef.current * 1.15) / 0.09,
+                  ),
+                ),
+              )
+            : 0;
+          if (orbRef.current) {
+            orbRef.current.style.setProperty(
+              "--learner-level",
+              learnerVisualLevel.toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--learner-scale",
+              (1 + learnerVisualLevel * 0.13).toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--learner-glow",
+              (0.12 + learnerVisualLevel * 0.78).toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--learner-blur",
+              `${22 + learnerVisualLevel * 48}px`,
+            );
+            orbRef.current.style.setProperty(
+              "--learner-spread",
+              `${2 + learnerVisualLevel * 12}px`,
+            );
+          }
 
           if (audioEnabled && activeTurn) {
             const elapsedSinceSample = Math.max(
@@ -357,6 +399,13 @@ export function HanVoiceConversation({
     if (remoteAudioContextRef.current)
       void remoteAudioContextRef.current.close();
     remoteAudioContextRef.current = null;
+    orbRef.current?.style.removeProperty("--han-level");
+    orbRef.current?.style.removeProperty("--han-scale");
+    orbRef.current?.style.removeProperty("--han-glow");
+    orbRef.current?.style.removeProperty("--han-core-scale");
+    orbRef.current?.style.removeProperty("--han-brightness");
+    orbRef.current?.style.removeProperty("--han-blur");
+    orbRef.current?.style.removeProperty("--han-spread");
   }, []);
 
   const startRemoteAudioAnalysis = useCallback(
@@ -391,6 +440,43 @@ export function HanVoiceConversation({
           if (!currentAnalyser) return;
           currentAnalyser.getFloatTimeDomainData(samples);
           const rms = rmsFromTimeDomainSamples(samples);
+          // The orb consumes Han's already-measured output signal directly.
+          // CSS variables keep the 60fps visual path outside React's render
+          // cycle; the conversation state machine and audio pipeline remain
+          // exactly the same for every variant.
+          const visualLevel = Math.sqrt(
+            Math.min(1, Math.max(0, (rms - 0.004) / 0.11)),
+          );
+          if (orbRef.current) {
+            orbRef.current.style.setProperty(
+              "--han-level",
+              visualLevel.toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--han-scale",
+              (1 + visualLevel * 0.105).toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--han-glow",
+              (0.2 + visualLevel * 0.62).toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--han-core-scale",
+              (1 + visualLevel * 0.07).toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--han-brightness",
+              (1 + visualLevel * 0.28).toFixed(3),
+            );
+            orbRef.current.style.setProperty(
+              "--han-blur",
+              `${26 + visualLevel * 54}px`,
+            );
+            orbRef.current.style.setProperty(
+              "--han-spread",
+              `${3 + visualLevel * 14}px`,
+            );
+          }
           if (rms >= CLOSING_AUDIO_RMS_THRESHOLD) {
             const now = performance.now();
             if (closingTurnRef.current) {
@@ -540,7 +626,7 @@ export function HanVoiceConversation({
 
   const stopMedia = useCallback(() => {
     if (sessionTimerRef.current != null)
-      window.clearTimeout(sessionTimerRef.current);
+      window.clearInterval(sessionTimerRef.current);
     if (sessionConfigurationTimerRef.current != null)
       window.clearTimeout(sessionConfigurationTimerRef.current);
     if (naturalCloseTimerRef.current != null)
@@ -1113,6 +1199,15 @@ export function HanVoiceConversation({
             transcriptConfidence,
             transcriptHintsFromContext(activeContext),
           );
+      if (!assessment.ok && assessment.reason === "prompt_leak") {
+        pendingUserTextRef.current = "";
+        setError(null);
+        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setState(
+          allowsBargeIn && activeResponseRef.current ? "speaking" : "listening",
+        );
+        return;
+      }
       if (!assessment.ok) {
         pendingUserTextRef.current = "";
         if (allowsBargeIn && activeResponseRef.current) {
@@ -1509,10 +1604,25 @@ export function HanVoiceConversation({
       const activateRealtimeSession = () => {
         const activeRolePlay = contextRef.current.rolePlay;
         onActiveChange(true);
-        sessionTimerRef.current = window.setTimeout(
-          () => void finishConversation(),
-          maxSessionMs,
-        );
+        // A periodic wall-clock check, not a single long setTimeout
+        // (2026-09-05 cost audit fix) - a single multi-minute setTimeout
+        // can fire late if the tab is backgrounded (browsers throttle
+        // background-tab timers), letting a costly Realtime session run
+        // past its intended budget. Re-checking Date.now() every 15s is
+        // far more resistant to that drift. Note this still can't help
+        // against a genuinely frozen/suspended tab - OpenAI's own
+        // server-side 60-minute hard session cap (not configurable via
+        // the API) is the real backstop for that case, independent of
+        // anything this client does.
+        const sessionStartedAt = Date.now();
+        sessionTimerRef.current = window.setInterval(() => {
+          if (Date.now() - sessionStartedAt < maxSessionMs) return;
+          if (sessionTimerRef.current != null) {
+            window.clearInterval(sessionTimerRef.current);
+            sessionTimerRef.current = null;
+          }
+          void finishConversation();
+        }, 15_000);
         if (activeRolePlay && naturalCloseAfterMs) {
           naturalCloseTimerRef.current = window.setTimeout(() => {
             closeRequestedRef.current = true;
@@ -1678,6 +1788,82 @@ export function HanVoiceConversation({
           : state === "speaking"
             ? "Speaking…"
             : "Ready to practice";
+
+  if (variant === "orb") {
+    const active = state !== "idle";
+    const orbTone =
+      state === "speaking"
+        ? "from-primary-300 via-primary-500 to-accent-500"
+        : state === "listening"
+          ? "from-secondary-300 via-secondary-500 to-primary-700"
+          : state === "connecting" || state === "thinking"
+            ? "from-accent-300 via-accent-500 to-primary-700"
+            : "from-primary-400 via-primary-600 to-primary-900";
+
+    return (
+      <div className="relative grid min-h-[32rem] place-items-center overflow-hidden rounded-panel border border-border/60 bg-page px-5 py-10">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-80 [background:radial-gradient(circle_at_50%_45%,color-mix(in_srgb,var(--color-primary-500)_9%,transparent),transparent_48%)]"
+          aria-hidden="true"
+        />
+
+        <button
+          ref={orbRef}
+          type="button"
+          onClick={() =>
+            void (state === "idle"
+              ? startConversation()
+              : finishConversation())
+          }
+          disabled={disabled && state === "idle"}
+          aria-label={
+            state === "idle"
+              ? `Start voice conversation with ${roleLabel}`
+              : `End voice conversation with ${roleLabel}`
+          }
+          className="group relative grid size-64 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-primary-400 disabled:cursor-not-allowed disabled:opacity-50 sm:size-72"
+        >
+          <span
+            className="absolute inset-[1%] scale-[var(--learner-scale,1)] rounded-full border-2 border-secondary-300/70 opacity-[var(--learner-glow,0.12)] shadow-[0_0_var(--learner-blur,22px)_var(--learner-spread,2px)_color-mix(in_srgb,var(--color-secondary-500)_65%,transparent)] transition-[transform,opacity,box-shadow] duration-75 ease-out"
+            aria-hidden="true"
+          />
+          <span
+            className="absolute inset-[7%] scale-[var(--han-scale,1)] rounded-full border-2 border-primary-300/75 opacity-[var(--han-glow,0.2)] shadow-[0_0_var(--han-blur,26px)_var(--han-spread,3px)_color-mix(in_srgb,var(--color-primary-500)_68%,transparent)] transition-[transform,opacity,box-shadow] duration-75 ease-out"
+            aria-hidden="true"
+          />
+          <span
+            className="absolute inset-[10%] animate-[han-orb-breathe_5s_ease-in-out_infinite] rounded-full border border-neutral-0/10 bg-primary-500/5 blur-[1px]"
+            aria-hidden="true"
+          />
+          <span
+            data-speaking={state === "speaking"}
+            className={`relative grid size-44 place-items-center overflow-hidden rounded-full bg-linear-to-br ${orbTone} shadow-[inset_-18px_-22px_40px_rgba(0,0,0,0.28),inset_14px_14px_30px_rgba(255,255,255,0.16),0_24px_70px_rgba(0,0,0,0.32)] transition-[transform,filter,background-color] duration-100 ease-out data-[speaking=true]:scale-[var(--han-core-scale,1)] data-[speaking=true]:brightness-[var(--han-brightness,1)] sm:size-52`}
+          >
+            <span
+              className="absolute -top-[24%] left-[5%] size-[82%] rounded-full bg-neutral-0/20 blur-2xl"
+              aria-hidden="true"
+            />
+            <span
+              className="absolute right-[4%] -bottom-[26%] size-[74%] rounded-full bg-accent-300/25 blur-2xl"
+              aria-hidden="true"
+            />
+            <span className="relative grid size-16 place-items-center rounded-full border border-neutral-0/20 bg-neutral-950/10 text-neutral-0/90 shadow-inner backdrop-blur-sm transition-opacity duration-base group-hover:bg-neutral-950/20">
+              {state === "connecting" ? (
+                <Loader2 className="size-7 animate-spin" aria-hidden="true" />
+              ) : !active ? (
+                <Mic className="size-7" aria-hidden="true" />
+              ) : null}
+            </span>
+          </span>
+        </button>
+
+        <span className="sr-only" role="status" aria-live="polite">
+          {status}
+          {error ? ` ${error}` : ""}
+        </span>
+      </div>
+    );
+  }
 
   if (variant === "immersive") {
     return (

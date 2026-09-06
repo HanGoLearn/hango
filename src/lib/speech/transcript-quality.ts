@@ -23,8 +23,27 @@ export type HanTranscriptAssessment =
   | { ok: true; transcript: string }
   | {
       ok: false;
-      reason: "empty" | "low_confidence" | "unsupported_language";
+      reason:
+        "empty" | "low_confidence" | "unsupported_language" | "prompt_leak";
     };
+
+function isSttPromptLeak(transcript: string): boolean {
+  const normalized = transcript.replace(/\s+/gu, " ").trim();
+
+  // Realtime STT can very rarely return its own conditioning prompt after a
+  // false VAD turn (silence/background noise) instead of returning no text.
+  // Such prose is syntactically valid English/Chinese and may have usable
+  // logprobs, so the normal language/confidence gates cannot distinguish it
+  // from learner speech. Match stable pairs of phrases from both prompts;
+  // using two distant anchors avoids rejecting a learner who merely mentions
+  // HanGo or transcription in an ordinary sentence.
+  return (
+    (normalized.includes("HanGo Mandarin-learning conversation") &&
+      normalized.includes("Transcribe only words supported by the audio")) ||
+    (normalized.includes("简体中文普通话学习练习") &&
+      normalized.includes("不要根据静音、背景噪音、咳嗽或模糊声音"))
+  );
+}
 
 export function buildHanSttPrompt(
   mode: SttTranscriptionMode,
@@ -164,7 +183,10 @@ export function normalizeHanTranscript(
 
   const plainSingleSyllableCounts = new Map<string, number>();
   for (const hint of hints.slice(0, 12)) {
-    const pieces = hint.pinyin.trim().split(/[\s'-]+/u).filter(Boolean);
+    const pieces = hint.pinyin
+      .trim()
+      .split(/[\s'-]+/u)
+      .filter(Boolean);
     if (pieces.length !== 1) continue;
     const plain = removePinyinMarks(pieces[0]!).toLocaleLowerCase("es");
     plainSingleSyllableCounts.set(
@@ -199,6 +221,9 @@ export function assessHanTranscript(
   hints: readonly MandarinTranscriptHint[] = [],
 ): HanTranscriptAssessment {
   const normalized = normalizeHanTranscript(transcript, hints);
+  if (isSttPromptLeak(normalized)) {
+    return { ok: false, reason: "prompt_leak" };
+  }
   if (!normalized || !/[\p{Letter}\p{Number}]/u.test(normalized)) {
     return { ok: false, reason: "empty" };
   }
@@ -253,6 +278,23 @@ function replaceExpectedPinyin(
   const pinyin = hint.pinyin.trim();
   if (!hanzi || !pinyin) return transcript;
 
+  const plainPinyin = removePinyinMarks(pinyin)
+    .toLocaleLowerCase("es")
+    .replace(/[\s'-]+/gu, "");
+
+  // Spanish/English-biased STT can hear a learner's isolated cónglái as the
+  // proper name "Zhou Enlai", sometimes adding the filler "y el". This is
+  // not safe as a global substitution because 周恩来 may be the learner's
+  // actual subject. Repair only a bare utterance while the active learning
+  // context explicitly expects 从来.
+  if (
+    hanzi === "从来" &&
+    plainPinyin === "conglai" &&
+    /^(?:y\s+el\s+)?zhou[\s-]+enlai[.!?¿¡,;:]*$/iu.test(transcript.trim())
+  ) {
+    return hanzi;
+  }
+
   const variants = new Set([pinyin, removePinyinMarks(pinyin)]);
   let result = transcript;
   for (const variant of variants) {
@@ -294,8 +336,13 @@ function replaceExpectedPinyin(
       /(?:palabra|pronunci|decir|dice|digo|practic|mandar[ií]n|chino|word|pronounc|say|saying|practice|mandarin|chinese)/iu;
     result = result.replace(pattern, (match, offset: number, whole: string) => {
       const before = whole.slice(Math.max(0, offset - 60), offset);
-      const after = whole.slice(offset + match.length, offset + match.length + 60);
-      return learningCue.test(before) || learningCue.test(after) ? hanzi : match;
+      const after = whole.slice(
+        offset + match.length,
+        offset + match.length + 60,
+      );
+      return learningCue.test(before) || learningCue.test(after)
+        ? hanzi
+        : match;
     });
   }
   return result;

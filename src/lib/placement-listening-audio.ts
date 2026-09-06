@@ -4,6 +4,12 @@ import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
 import { mergeWavAudio } from "@/lib/han-speech";
 import { contentAudioKey } from "@/lib/audio-content-key";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateTtsCostUsd,
+  estimateTtsDurationSeconds,
+} from "@/lib/ai-usage";
 
 // Mirrors dialogue-audio.ts's rate limit exactly - same abuse/cost
 // protection rationale, generation is cached so this only throttles the
@@ -37,7 +43,9 @@ const FALLBACK_VOICES = ["alloy", "onyx"] as const;
 
 function pickVoice(line: { order: number; voice: string | null }): string {
   if (line.voice) return line.voice;
-  return FALLBACK_VOICES[line.order % FALLBACK_VOICES.length] ?? FALLBACK_VOICES[0];
+  return (
+    FALLBACK_VOICES[line.order % FALLBACK_VOICES.length] ?? FALLBACK_VOICES[0]
+  );
 }
 
 /**
@@ -55,7 +63,13 @@ function pacingInstructionsForLevel(hskLevel: number): string {
 
 async function ensureLineAudioKey(
   userId: string,
-  line: { id: string; chineseText: string; audioFilePath: string | null; order: number; voice: string | null },
+  line: {
+    id: string;
+    chineseText: string;
+    audioFilePath: string | null;
+    order: number;
+    voice: string | null;
+  },
   hskLevel: number,
 ): Promise<string> {
   const storage = getStorageProvider();
@@ -87,6 +101,7 @@ async function ensureLineAudioKey(
   }
 
   checkRateLimit(userId);
+  await checkDailyUsageCap(userId, "placement-listening-audio");
 
   const tts = getTtsProvider();
   const result = await tts.synthesize(
@@ -94,6 +109,15 @@ async function ensureLineAudioKey(
     voice,
     pacingInstructionsForLevel(hskLevel),
   );
+  await recordAiUsage({
+    userId,
+    feature: "placement-listening-audio",
+    provider: result.provider,
+    model: result.model,
+    estimatedCostUsd: estimateTtsCostUsd(line.chineseText),
+    durationSeconds: estimateTtsDurationSeconds(line.chineseText),
+    durationSource: "TEXT_LENGTH_ESTIMATE",
+  });
 
   await storage.upload(key, result.audio, result.contentType);
   await db.placementListeningLine.update({
@@ -136,7 +160,9 @@ export async function getOrGeneratePlacementListeningAudioUrl(
 
   const lineKeys: string[] = [];
   for (const line of script.lines) {
-    lineKeys.push(await ensureLineAudioKey(userId, line, script.question.hskLevel));
+    lineKeys.push(
+      await ensureLineAudioKey(userId, line, script.question.hskLevel),
+    );
   }
 
   const clips = await Promise.all(lineKeys.map((key) => storage.download(key)));

@@ -12,7 +12,12 @@ import {
   type HandwrittenSubmissionResult,
   type HandwrittenTopic,
 } from "@/lib/handwritten-writing";
-import { evaluateHandwrittenWriting } from "@/lib/handwritten-writing-evaluator";
+import {
+  evaluateHandwrittenWriting,
+  HANDWRITTEN_EVALUATION_MODEL,
+} from "@/lib/handwritten-writing-evaluator";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import { recordAiUsage, checkDailyUsageCap } from "@/lib/ai-usage";
 
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_SUBMISSIONS = 4;
@@ -64,12 +69,30 @@ async function evaluateAndPersist(
   images: { mimeType: string; bytes: ArrayBuffer }[],
 ): Promise<HandwrittenSubmissionResult> {
   checkRateLimit(userId);
-  const { result, transcription } = await evaluateHandwrittenWriting(
+  await checkDailyUsageCap(userId, "handwritten-writing");
+  const { result, transcription, usage } = await evaluateHandwrittenWriting(
     userId,
     level,
     topic,
     images,
   );
+  // Recorded regardless of readable/unreadable - the vision call itself
+  // already happened and cost money either way.
+  if (usage) {
+    await recordAiUsage({
+      userId,
+      feature: "handwritten-writing",
+      provider: "openai",
+      model: HANDWRITTEN_EVALUATION_MODEL,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        HANDWRITTEN_EVALUATION_MODEL,
+        usage.inputTokens,
+        usage.outputTokens,
+      ),
+    });
+  }
 
   if (result.readable && transcription) {
     const levelConfig = HANDWRITTEN_LEVEL_CONFIG[level];

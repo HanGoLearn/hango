@@ -13,10 +13,11 @@ import {
 import { getScenariosWithProgress } from "@/lib/content/learning-journey-data";
 import { getReviewQueue } from "@/lib/review-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
-import { hskLevelForPoints } from "@/lib/points-system";
+import { hskLevelForPoints, hskNumberForPoints } from "@/lib/points-system";
 import { getLeaderboardTop, getLearnerRank } from "@/lib/leaderboard-data";
 import { getAchievementSummary } from "@/lib/achievements";
 import { getAvatarPageData } from "@/lib/avatar-data";
+import { getWordsOfTheDay } from "@/lib/words-of-the-day";
 
 // 120, not 60 (2026-08-30) - achievements-catalog.ts now has a streak_100
 // achievement ("studied 100 days in a row"), and computeStreak can never
@@ -90,25 +91,31 @@ export const getStudyStreak = cache(
 );
 
 export async function getDashboardData(userId: string) {
+  // Resolved first, not inside the Promise.all below (2026-09-01) - Words
+  // of the Day needs the learner's real level to pick its pool, and
+  // fetching it here lets that call take the level directly instead of
+  // re-querying `learnerProfile` a second time.
+  const profile = await getOrCreateLearnerProfile(userId);
+  const hskLevel = hskNumberForPoints(profile.generalLevelPoints);
+
   const [
     continueTarget,
     streak,
     scenarios,
     competencies,
     reviewQueue,
-    profile,
     activityDates,
     leaderboardTop,
     leaderboardRank,
     achievementSummary,
     avatar,
+    wordsOfTheDay,
   ] = await Promise.all([
     getContinueLearningTarget(userId),
     getStudyStreak(userId),
     getScenariosWithProgress(userId),
     getCompetencyProgress(userId),
     getReviewQueue(userId),
-    getOrCreateLearnerProfile(userId),
     // Same cached call getStudyStreak makes internally (see above) - zero
     // additional queries, just reused for the weekly strip's per-day detail
     // that computeStreak's own {currentStreak, activeToday} doesn't expose.
@@ -124,6 +131,10 @@ export async function getDashboardData(userId: string) {
     // Teaser for /tienda (2026-08-30) - reused wholesale (React.cache'd),
     // not a separate summary shape, since it's already this compact.
     getAvatarPageData(userId),
+    // Shared across every learner at this level today (2026-09-01,
+    // words-of-the-day.ts) - zero AI cost to show; a lookup only fires if
+    // the learner taps a word (reuses lookupVocabularyWordAction as-is).
+    getWordsOfTheDay(hskLevel),
   ]);
 
   return {
@@ -154,5 +165,6 @@ export async function getDashboardData(userId: string) {
       levelLabel: hskLevelForPoints(profile.generalLevelPoints),
     },
     weeklyActivity: computeLast7DaysActivity(activityDates),
+    wordsOfTheDay,
   };
 }

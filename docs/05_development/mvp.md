@@ -1,10 +1,10 @@
 # HanGo MVP Definition
 
-Version: 1.0
+Version: 1.1
 
 Status: Official
 
-Last Updated: August 2026
+Last Updated: 2026-09-05 (exclusion corrections - see inline notes)
 
 ---
 
@@ -642,10 +642,18 @@ The AI Teacher must be available throughout the authenticated application.
 
 ## Excluded From the MVP
 
-- Long-term personal memory across all sessions.
+> **2026-09-05 audit note:** two items below have since shipped -
+> long-term personal memory (Han Companion's `LearnerFact` system,
+> 2026-08-31 - a fixed set of facts extracted from finished conversations
+> and read back later, not unbounded memory of every session) and
+> real-time voice interruption (barge-in support in the live Realtime
+> voice conversation, `allowsRealtimeBargeIn` in `src/lib/han-realtime.ts`).
+
+- ~~Long-term personal memory across all sessions.~~ **Built in a scoped
+  form (2026-08-31) - see note above.**
 - Fully autonomous study planning.
 - Advanced emotional modeling.
-- Real-time voice interruption.
+- ~~Real-time voice interruption.~~ **Built - see note above.**
 - Multiple AI tutor personalities.
 - AI avatars.
 
@@ -1169,18 +1177,27 @@ Complex tiers, bundles, classroom plans, and enterprise pricing are outside the 
 
 # MVP Exclusions
 
+> **2026-09-05 audit note:** this list is a historical snapshot of what was
+> excluded when it was written, not current scope. Three items below have
+> since been built and shipped: **Learner avatars** (a zodiac-animal avatar
+> system, `src/components/avatar/`), **Leaderboards** (`app/(app)/leaderboard`,
+> with a weekly cron payout), and a HanCoins virtual-currency economy
+> (`app/(app)/tienda`, `src/lib/coins.ts` - the closest real match to
+> "Virtual currency" below). Everything else on this list is still
+> genuinely unbuilt as far as this audit found.
+
 The following features must not be implemented as part of the MVP unless explicitly approved:
 
 - Complete HSK 3–9 curriculum.
 - HSK mock examinations.
 - Virtual city.
 - Three-dimensional environments.
-- Learner avatars.
+- ~~Learner avatars.~~ **Built (2026-08-30) - see note above.**
 - AI tutor avatars.
 - Social network.
 - Community feed.
 - Public profiles.
-- Leaderboards.
+- ~~Leaderboards.~~ **Built (2026-08-30) - see note above.**
 - Multiplayer learning.
 - Live teachers.
 - Teacher marketplace.
@@ -1199,7 +1216,7 @@ The following features must not be implemented as part of the MVP unless explici
 - Advanced spaced repetition.
 - Certificates.
 - Achievement marketplace.
-- Virtual currency.
+- ~~Virtual currency.~~ **Built (2026-08-30, HanCoins) - see note above.**
 
 ---
 

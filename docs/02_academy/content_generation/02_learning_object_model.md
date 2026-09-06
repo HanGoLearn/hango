@@ -2,9 +2,18 @@
 
 Version: 1.0
 
-Status: Official
+Status: Aspirational — not implemented (2026-09-05 audit)
 
 Last Updated: August 2026
+
+> **No schema model implements this generic object model.** There is no
+> `Metadata`/`Prerequisites`/`Review Information`/`Author`/`Version` field
+> on any real content model in `prisma/schema.prisma`. Real content types
+> (`Lesson`, `Dialogue`, `VocabularyItem`, `GrammarPoint`, `Exercise`,
+> `Quiz`, `Mission`, `WritingTask`) are each their own concrete Prisma
+> model with their own specific fields, hand-authored in `prisma/seed.ts` -
+> see `01_content_principles.md`'s audit note. Keep this document as a
+> design reference, not as a description of the real data model.
 
 ---
 

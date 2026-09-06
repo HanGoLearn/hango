@@ -1,10 +1,21 @@
 # HanGo Navigation System
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** this document said HanGo has five primary
+> sections. The real app (`src/lib/navigation.ts`'s `primaryNavItems`,
+> rendered identically in the desktop sidebar and mobile bottom nav) has
+> **eight**: Dashboard, Learning Journey, Speaking Lab, Writing Lab,
+> **Han**, Progress, **Shop**, Settings. "Han" and "Shop" sections have
+> been added below, and the fictional "AI Teacher side panel"/"persistent
+> button" model has been replaced with the real floating-bubble +
+> dedicated-page design. Settings was also missing from the "five primary
+> sections" framing even though it's a real primary-nav item (it's just
+> mobile-nav-only-omitted, not absent from the app).
 
 ---
 
@@ -32,10 +43,10 @@ The navigation should follow three principles:
 
 # Main Navigation Structure
 
-HanGo contains five primary sections.
+HanGo contains eight primary sections, in this order (`src/lib/navigation.ts`):
 
 ```
-Home
+Dashboard
 
 Learning Journey
 
@@ -43,10 +54,17 @@ Speaking Lab
 
 Writing Lab
 
+Han
+
 Progress
+
+Shop
+
+Settings
 ```
 
-These sections represent the core learning experience.
+The mobile bottom nav shows the same seven sections minus Settings
+(reached from the account menu instead).
 
 ---
 
@@ -161,7 +179,29 @@ The learner accesses:
 
 ---
 
-# 5. Progress
+# 5. Han
+
+## Purpose
+
+The dedicated hub for every Han-branded AI feature - its own primary-nav
+slot since 2026-08-31 (Han is the app's real competitive differentiator,
+not a secondary utility). `src/components/han/han-hub.tsx` has four named
+entry points:
+
+- **Han Tutor** - the same text/voice chat that's also reachable as a
+  floating bubble from anywhere else in the app (see "Floating Han Access"
+  below).
+- **Han Companion** - voice-only, with cross-session personal memory (a
+  fixed set of facts extracted from finished conversations, read back
+  later) - a distinct mode from Tutor, not just a different label on the
+  same feature.
+- **Han Vocabulary** - a standalone word/phrase lookup tool, independent
+  of any lesson.
+- **Han Class** - a locked "Coming soon" teaser.
+
+---
+
+# 6. Progress
 
 ## Purpose
 
@@ -171,30 +211,32 @@ The learner accesses:
 
 - Competency profile.
 - Learning Journey progress.
+- General Level (earned points mapped to an HSK-style label).
 - Strengths.
 - Weaknesses.
 - Recommendations.
 
 ---
 
-# AI Teacher Access
+# 7. Shop
 
-The AI Teacher should always be accessible.
+## Purpose
 
-The learner should not need to leave their current activity to ask questions.
+The HanCoins economy - spend coins earned from lessons, achievements, and
+the weekly leaderboard payout on avatar customization (`app/(app)/tienda`).
+Added 2026-08-30 alongside the avatar/zodiac-animal system and the
+leaderboard.
 
-Recommended implementation:
+---
 
-Persistent AI Teacher button or side panel.
+# Floating Han Access
 
-Available from:
-
-- Home.
-- Learning Journey.
-- Speaking Lab.
-- Writing Lab.
-- Progress.
-- Content pages.
+Han Tutor is also reachable without leaving the current page: a floating,
+non-modal bubble (`AiTeacherBubble`, rendered in the shared app shell) is
+present on every authenticated page. There is no persistent panel/drawer
+with Collapsed/Compact/Expanded states - that was an earlier design this
+document previously described; the real implementation is the floating
+bubble plus the dedicated Han hub page above.
 
 ---
 
@@ -276,21 +318,21 @@ Important considerations:
 
 # Desktop Navigation
 
-Desktop experience should use available space effectively.
-
-Recommended layout:
+**Real layout** (`src/components/shell/app-shell.tsx`): two columns, not
+three - there is no persistent third "AI Teacher" column.
 
 ```
 ------------------------------------------------
 
-Sidebar       Main Content        AI Teacher
+Sidebar       Main Content
 
-Menu          Learning Area       Assistant
+Menu          Learning Area
 
 ------------------------------------------------
 ```
 
-The AI Teacher can remain visible while the learner studies.
+Han is reachable via its own sidebar item, or via the floating bubble
+that overlays the main content area - see "Floating Han Access" above.
 
 ---
 

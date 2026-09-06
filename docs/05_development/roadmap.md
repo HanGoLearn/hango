@@ -802,17 +802,23 @@ The exact number of lessons will be defined in `mvp.md`.
 
 # Features Excluded From the MVP
 
+> **2026-09-05 audit note:** three items below have since shipped - see
+> `mvp.md`'s matching audit note for detail: avatar systems (2026-08-30
+> zodiac-animal avatars), a HanCoins economy (the closest real match to
+> "complex gamification" - shop, achievements, coin-earning), and
+> competitive rankings (the weekly leaderboard, 2026-08-30).
+
 The MVP should not include:
 
-- Avatar systems.
+- ~~Avatar systems.~~ **Built (2026-08-30) - see note above.**
 - Virtual city.
 - Social feed.
 - Community.
 - Live teachers.
 - Classroom management.
 - Teacher marketplace.
-- Complex gamification.
-- Competitive rankings.
+- ~~Complex gamification.~~ **Built in part (HanCoins economy, 2026-08-30) - see note above.**
+- ~~Competitive rankings.~~ **Built (weekly leaderboard, 2026-08-30) - see note above.**
 - Cantonese.
 - Multiple learning languages.
 - Native mobile applications.

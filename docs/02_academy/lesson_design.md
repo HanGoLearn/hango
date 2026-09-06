@@ -1,10 +1,28 @@
 # HanGo Lesson Design
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (flow diagram corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the 12-step flow originally documented below
+> does not match any real lesson. `prisma/seed.ts`'s `createFullLesson()`
+> helper - used for 163 of the app's ~164 lessons - hard-codes exactly
+> **6** in-lesson steps, with an explicit code comment: *"Situation and
+> Dialogue are merged into one screen, and Guided Practice/Quiz/Mission/
+> Writing are left out of the in-lesson step flow... Quiz/Mission are
+> reachable from Progress/Speaking Lab, Writing from the Writing Lab."*
+> The "Standard Lesson Flow" diagram below has been corrected to match.
+> Individual step write-ups further down the document (Situation,
+> Objective, Dialogue, Comprehension, Guided Practice, etc.) are left as
+> design reference for steps that either got merged, moved elsewhere in
+> the app, or were never built - each is annotated with its real status
+> where it's mentioned.
+>
+> One notable finding: **`AI_CHALLENGE` is a real `LessonStepType` enum
+> value with real rendering code in `lesson-engine.tsx`, but it is never
+> assigned to a single lesson** - built but unused.
 
 ---
 
@@ -30,18 +48,15 @@ Instead, every lesson begins with a real-world objective that naturally introduc
 
 # Standard Lesson Flow
 
-Every lesson follows this sequence:
+**Real flow, as built** (`createFullLesson()` in `prisma/seed.ts`, 163 of
+~164 lessons):
 
 ```
-Situation
+Vocabulary
 
 ↓
 
-Objective
-
-↓
-
-Dialogue
+Situation (Situation + Dialogue merged into one screen)
 
 ↓
 
@@ -49,35 +64,32 @@ Comprehension
 
 ↓
 
-Vocabulary
-
-↓
-
 Grammar
 
 ↓
 
-Guided Practice
-
-↓
-
-Speaking Practice
-
-↓
-
-Writing Practice
-
-↓
-
-AI Challenge
-
-↓
-
-Mission
+Speaking
 
 ↓
 
 Reflection
+```
+
+Guided Practice, Writing, Mission, and Quiz are not in-lesson steps -
+Mission/Quiz are reached from Progress/Speaking Lab, and Writing from the
+dedicated Writing Lab. Objective is not its own screen; the situation
+screen carries the objective. AI Challenge is a real, built step type
+with no lesson currently assigned to it.
+
+The original 12-step design this document was written against is kept
+below for historical/design context - treat it as the aspirational
+starting point the real 6-step flow was simplified from, not as what a
+learner experiences today.
+
+```
+Situation → Objective → Dialogue → Comprehension → Vocabulary → Grammar
+→ Guided Practice → Speaking Practice → Writing Practice → AI Challenge
+→ Mission → Reflection
 ```
 
 ---

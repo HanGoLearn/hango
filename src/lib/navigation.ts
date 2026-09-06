@@ -6,6 +6,7 @@ import {
   TrendingUp,
   Store,
   Settings,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -75,6 +76,22 @@ export const primaryNavItems: NavItem[] = [
     href: "/writing-lab",
     icon: PenLine,
     badgeClassName: "bg-info-500",
+    badgeIconClassName: "text-on-color-light",
+  },
+  {
+    // 2026-08-31 (Han as differentiator) - its own primary-nav slot, not a
+    // dashboard teaser, since this is the app's real competitive moat, not
+    // a secondary utility. primary-700 (darker than Learning Journey's
+    // primary-500), not a new color family - stays in the brand-red
+    // territory Han fits, but visually distinct from Learning Journey's
+    // badge. Darker fill only increases contrast against on-color-light
+    // versus the already-verified primary-500/on-color-light pairing
+    // (design_system.md's WCAG audit note above), not a fresh unverified
+    // combination.
+    label: "Han",
+    href: "/han",
+    icon: MessageCircle,
+    badgeClassName: "bg-primary-700",
     badgeIconClassName: "text-on-color-light",
   },
   {

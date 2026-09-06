@@ -1,10 +1,23 @@
 # HanGo Market Positioning
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (audit note added 2026-09-05 - see below)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** "Target Audience"/"Primary Target Learner"
+> below insist on an intermediate-only (HSK 3-early 5) learner who
+> "already understands basic Chinese," and "Positioning Risks" recommends
+> mitigating "Appearing Like Another Beginner App" by clearly stating the
+> intermediate-only focus. The shipped homepage does the opposite already
+> - see `docs/00_company/06_target_users.md`'s matching audit note for the
+> real, live evidence. The documented Hero headline direction ("Learn
+> Chinese through real situations") also doesn't match the actual shipped
+> headline or its language (the site ships Spanish-first, this document is
+> English-only). Flagging for a product decision, not silently resolving
+> it - either this document needs a real update to the beginner-inclusive
+> positioning, or the current marketing needs to be revisited.
 
 ---
 

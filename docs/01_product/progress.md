@@ -1,10 +1,20 @@
 # HanGo Progress System
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the 9-competency taxonomy below (Language
+> Skills + Communication Abilities) is real and verified against
+> `prisma/seed.ts` and `src/lib/competency-progress.ts`. Three things
+> were wrong and are corrected below: (1) Grammar Control and Vocabulary
+> Range are **not** staged competencies - the schema explicitly says so;
+> the real Progress page shows them as flat exposure counts instead; (2)
+> the Mastery Levels' stage names were an earlier design that got renamed
+> before shipping; (3) this document never mentioned the page's actual
+> headline metric, the earned **General Level**.
 
 ---
 
@@ -93,28 +103,14 @@ Indicators:
 
 ---
 
-## Grammar Control
+## Grammar and Vocabulary (not staged competencies)
 
-Measures the ability to use Chinese structures correctly.
-
-Indicators:
-
-- Correct usage.
-- Complexity.
-- Natural application.
-
----
-
-## Vocabulary Range
-
-Measures the learner's active and passive vocabulary.
-
-Indicators:
-
-- Recognition.
-- Usage.
-- Retention.
-- Contextual understanding.
+**Correction (2026-09-05):** unlike the four skills above, Grammar and
+Vocabulary are explicitly **not** tracked as staged competencies -
+`prisma/schema.prisma`'s own comment on the `Competency` model states
+this directly. The real Progress page instead shows a flat count: "X
+vocabulary items encountered," "Y grammar points encountered" - exposure,
+not a mastery stage.
 
 ---
 
@@ -190,58 +186,32 @@ Examples:
 
 # Learning Journey Progress
 
-The learner progresses through scenarios.
+**Correction (2026-09-05):** each scenario's real progress is a single
+`completionPercent` plus a `mastered: boolean` - not tiered per-scenario
+mastery levels ("Level 1/2/3" below was an invented example, not a real
+feature).
 
-Each scenario has a mastery level.
+---
 
-Example:
+# General Level (the real headline metric)
 
-Restaurant Scenario:
-
-Level 1:
-Can order basic food.
-
-Level 2:
-Can ask questions and explain preferences.
-
-Level 3:
-Can discuss food culture and opinions.
+**Added 2026-09-05, previously missing from this document entirely.** The
+Progress page's top-of-page metric is the learner's earned **General
+Level**: 0-2000 points, accumulated from completed scenarios/lessons/labs,
+mapped to an HSK-style label. This is the authoritative signal Han treats
+as the learner's real level when it disagrees with a self-reported one -
+see `points_system.md` and `hsk_mapping.md` for the full formula.
 
 ---
 
 # Mastery Levels
 
-Each competency follows progressive stages.
-
----
-
-## Introduced
-
-The learner has encountered the concept.
-
----
-
-## Practicing
-
-The learner can use the concept with support.
-
----
-
-## Developing
-
-The learner can use the concept independently but still makes mistakes.
-
----
-
-## Confident
-
-The learner can use the concept naturally.
-
----
-
-## Mastered
-
-The learner can apply the skill across different contexts.
+Each of the four staged competencies (Listening/Speaking/Reading/Writing,
+plus the five Communication Abilities) follows five real stages, in
+order: **Exposure → Practice → Functional → Confident → Mastery**
+(`src/lib/competency-progress.ts`). These replaced an earlier draft
+naming (Introduced/Practicing/Developing/Confident/Mastered) before
+shipping - if you see the old names elsewhere, they're stale.
 
 ---
 

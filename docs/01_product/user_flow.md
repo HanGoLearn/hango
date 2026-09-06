@@ -1,10 +1,20 @@
 # HanGo User Flow
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (Stages 2 and 5 corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** Stage 2 described a mandatory initial
+> assessment; the real placement exam is optional and skippable. Stage 5's
+> lesson flow was the same 11-step design `lesson_design.md` already
+> documents as superseded by a real 6-step flow - both have been corrected
+> below to match. This document also predates HanCoins, the avatar shop,
+> the leaderboard, achievements, and the Han hub (Tutor/Companion/
+> Vocabulary) - none of which are mentioned anywhere below; treat the rest
+> of this document as the pre-gamification core loop, still broadly
+> accurate in spirit, just incomplete.
 
 ---
 
@@ -66,51 +76,32 @@ The user provides:
 
 ---
 
-# Stage 2: Initial Assessment
+# Stage 2: Initial Assessment (real: optional placement exam)
 
 ## Objective
 
-Understand the learner's current ability.
+Give a returning-level learner immediate credit instead of re-doing
+already-known material - **not** a mandatory gate every new learner must
+pass through.
 
-The assessment evaluates:
-
-- Vocabulary knowledge.
-- Grammar understanding.
-- Reading ability.
-- Listening ability.
-- Speaking confidence.
-- Writing ability.
+Real behavior (`app/(app)/placement-exam`,
+`src/components/onboarding/steps/placement-offer-step.tsx`): offered once
+during onboarding with an explicit "Skip for now" option. It evaluates
+exactly **five** skills - Vocabulary, Grammar, Reading, Listening,
+Speaking (no separate Writing skill) - adaptively, climbing HSK level by
+level while the learner keeps passing at an 80% ratio.
 
 ---
 
-# Assessment Output
+# Assessment Output (real)
 
-After evaluation, HanGo generates:
-
-- Estimated level.
-- Competency profile.
-- Recommended Learning Journey.
-- Initial goals.
-
-Example:
-
-```
-Current Level:
-
-HSK 4 approximately
-
-Strength:
-
-Reading
-
-Needs Improvement:
-
-Speaking Fluency
-
-Recommended Focus:
-
-Daily Communication
-```
+The real payoff is automatic **General Level point credit** for every
+lesson at or below the learner's demonstrated level - not a strengths/
+weaknesses narrative report. A learner who places at HSK 5, for example,
+starts with the point credit HSK 1-5 content would have earned, and
+resumes normal lesson-by-lesson play from there. There is no generated
+"Strength: Reading / Needs Improvement: Speaking Fluency" summary
+anywhere in the app.
 
 ---
 
@@ -154,18 +145,18 @@ The Dashboard shows:
 
 The learner enters a lesson.
 
-Flow:
+**Real flow** (see `lesson_design.md`'s audit note for detail):
 
 ```
-Scenario
-
-↓
-
-Context Introduction
-
-↓
-
 Vocabulary
+
+↓
+
+Situation (situation + dialogue merged into one screen)
+
+↓
+
+Comprehension
 
 ↓
 
@@ -173,32 +164,15 @@ Grammar
 
 ↓
 
-Dialogue
-
-↓
-
-Listening
-
-↓
-
 Speaking
 
 ↓
 
-Writing
-
-↓
-
-Exercises
-
-↓
-
-Mission
-
-↓
-
-Evaluation
+Reflection
 ```
+
+Writing, Mission, and Quiz are reached separately (Writing Lab, Progress/
+Speaking Lab), not as in-lesson steps.
 
 ---
 

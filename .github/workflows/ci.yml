@@ -1,0 +1,61 @@
+name: CI
+
+# Runs the full test suite automatically on every push/PR (2026-09-05 audit
+# fix) - before this, all 98+ tests only ever ran if someone remembered to
+# run them by hand. Needs only DATABASE_URL + AUTH_SECRET to work
+# (src/lib/env/server.ts) - OPENAI_API_KEY is deliberately left unset, so
+# every AI call in the app falls back to its own mock provider
+# automatically (src/lib/ai/index.ts) - this suite never spends real
+# OpenAI/Anthropic money to run.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: hango
+          POSTGRES_PASSWORD: hango
+          POSTGRES_DB: hango_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://hango:hango@localhost:5432/hango_ci
+      # Never a real secret - CI only needs *a* 32+ char value to satisfy
+      # src/lib/env/server.ts's validation, nothing here reads real user
+      # sessions.
+      AUTH_SECRET: ci-only-placeholder-value-not-a-real-secret-32chars
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Gitignored (regenerated per-environment) - nothing else in this
+      # workflow can import `@/generated/prisma/client` until this runs.
+      - run: npx prisma generate
+
+      - run: npx prisma migrate deploy
+
+      - run: npm run typecheck
+      - run: npm run lint
+
+      - run: npm run test:unit
+      - run: npm run test:component
+      - run: npm run test:integration
+      - run: npm run test:smoke

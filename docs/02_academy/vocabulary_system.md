@@ -6,6 +6,15 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** this document references the Simulation Engine
+> as a real vocabulary-practice channel — that system was never built (see
+> `simulation_engine.md`). Also, several "Vocabulary Card" fields described
+> below (stroke order, collocations, synonyms/antonyms, a 5-stage mastery
+> level) have no backing schema field or data — `VocabularyItem` only has
+> `chineseForm/pinyin/meaning/partOfSpeech/hskLevel/audioFilePath`, and the
+> real mastery signal is binary (seen/not seen) plus per-question quiz
+> correctness, not a staged progression.
+
 ---
 
 # Purpose

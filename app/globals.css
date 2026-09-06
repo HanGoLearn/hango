@@ -359,6 +359,21 @@
   }
 }
 
+/* Han Companion's calm, voice-first presence. Han's live output level is
+ * layered on top through CSS variables in HanVoiceConversation; this idle
+ * motion deliberately stays slow enough not to read as speech activity. */
+@keyframes han-orb-breathe {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.38;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.72;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

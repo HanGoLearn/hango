@@ -7,6 +7,7 @@ import {
   WelcomeAudioRateLimitError,
 } from "@/lib/welcome-audio";
 import { TtsProviderError } from "@/lib/tts";
+import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 
 export type WelcomeAudioActionResult =
   { ok: true; url: string } | { ok: false; error: string };
@@ -14,6 +15,7 @@ export type WelcomeAudioActionResult =
 function toErrorMessage(error: unknown): string {
   if (
     error instanceof WelcomeAudioRateLimitError ||
+    error instanceof DailyUsageCapExceededError ||
     error instanceof TtsProviderError
   ) {
     return error.message;

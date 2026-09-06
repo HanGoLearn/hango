@@ -113,6 +113,7 @@ describe("TopBar", () => {
         coinBalance={40}
         avatarAnimal={null}
         avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
+        isAdministrator={false}
       />,
     );
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
@@ -123,11 +124,12 @@ describe("TopBar", () => {
 });
 
 describe("UserMenu", () => {
-  it("opens to reveal Settings and Log out", async () => {
+  it("opens to reveal Settings and Log out, but not Administrador for a regular learner", async () => {
     render(
       <UserMenu
         animal={null}
         equipped={{ HEAD: null, FACE: null, TORSO: null }}
+        isAdministrator={false}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "User menu" }));
@@ -141,6 +143,24 @@ describe("UserMenu", () => {
     expect(
       screen.getByRole("menuitem", { name: "Log out" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Administrador" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reveals Administrador, linking to the private back-office, only for an administrator (2026-09-05)", async () => {
+    render(
+      <UserMenu
+        animal={null}
+        equipped={{ HEAD: null, FACE: null, TORSO: null }}
+        isAdministrator
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "User menu" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Administrador" }),
+    ).toHaveAttribute("href", "/admin");
   });
 });
 

@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getAiProvider } from "@/lib/ai";
 import { AiProviderError, type AiMessageInput } from "@/lib/ai/provider";
 import { estimateCostUsd } from "@/lib/ai/cost";
+import { recordAiUsage, checkDailyUsageCap } from "@/lib/ai-usage";
 import {
   buildSystemPrompt,
   detectHanResponseLanguage,
@@ -20,6 +21,11 @@ import { createTtlCache } from "@/lib/ttl-cache";
 import { detectHanAppContextIntent } from "@/lib/han-app-intent";
 import { getHanOnDemandAppContext } from "@/lib/han-app-context-data";
 import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
+import {
+  buildLearnerFactsExtractionPrompt,
+  parseLearnerFacts,
+  type LearnerFactTranscriptMessage,
+} from "@/lib/learner-facts-prompt";
 
 const MAX_INPUT_LENGTH = 1000;
 /**
@@ -128,6 +134,55 @@ export async function getConversationHistory(userId: string) {
 }
 
 /**
+ * How many real text-chat messages (already excluding Speaking-practice
+ * turns) a conversation needs before it's worth extracting personal facts
+ * from (2026-08-31, Han Companion memory) - `resetConversation` fires on
+ * every single `openTeacher()` call, i.e. every bubble open, not on close
+ * (see ai-teacher-provider.tsx's `openTeacher`), so without a floor this
+ * would fire an AI call on every stray open/glance instead of once per
+ * real conversation.
+ */
+const MIN_MESSAGES_FOR_FACT_EXTRACTION = 8;
+
+/**
+ * Fire-and-forget, deliberately never awaited by resetConversation below -
+ * the 2026-08-21 fix that made resetConversation itself non-blocking exists
+ * specifically so opening the chat panel isn't delayed by a database round
+ * trip; awaiting an AI call here would reintroduce that exact regression.
+ * Own try/catch since nothing awaits this promise - an unhandled rejection
+ * here must never surface anywhere else.
+ */
+async function extractAndSaveLearnerFacts(
+  userId: string,
+  conversationId: string,
+  messages: { role: "USER" | "ASSISTANT"; content: string }[],
+): Promise<void> {
+  try {
+    const transcript: LearnerFactTranscriptMessage[] = messages.map((m) => ({
+      role: m.role === "USER" ? "user" : "assistant",
+      content: m.content,
+    }));
+    const result = await getAiProvider().complete({
+      systemPrompt: buildLearnerFactsExtractionPrompt(transcript),
+      messages: [{ role: "user", content: "Extract the facts." }],
+      maxOutputTokens: 400,
+    });
+    const facts = parseLearnerFacts(result.content);
+    if (facts.length === 0) return;
+    await db.learnerFact.createMany({
+      data: facts.map((fact) => ({
+        userId,
+        category: fact.category,
+        fact: fact.fact,
+        sourceConversationId: conversationId,
+      })),
+    });
+  } catch (error) {
+    console.error("[ai-teacher] extractAndSaveLearnerFacts failed", error);
+  }
+}
+
+/**
  * Clears the text chat's own history so Han "starts fresh" every time the
  * chat is opened (openTeacher, ai-teacher-provider.tsx) - deliberately
  * does NOT delete the AiConversation row itself, and deliberately never
@@ -141,20 +196,46 @@ export async function getConversationHistory(userId: string) {
  * in-progress lesson's Speaking transcript along with it. A learner who
  * did Speaking practice, then later clicked any "Ask AI" button before
  * reaching Reflection, would lose that Speaking evidence with no warning.
+ *
+ * Also the trigger point for Han Companion's personal-memory extraction
+ * (2026-08-31) - the about-to-be-deleted messages ARE the just-finished
+ * conversation, so this is read before the delete, not a separate fetch.
+ *
+ * `extractFacts` (2026-08-31 fix) defaults to `false` and must be passed
+ * `true` explicitly by Han Companion's own reset call only. The original
+ * version extracted from *any* reset conversation with enough messages,
+ * gated only by "not role-play" - Han Tutor is also not role-play, so a
+ * long Tutor conversation got captured as personal memory too, and Tutor
+ * then read it back on a later, unrelated visit. That directly broke an
+ * already-agreed rule: Tutor always resets fresh, it never remembers
+ * anything across sessions (real user report, 2026-08-31).
  */
-export async function resetConversation(userId: string): Promise<void> {
+export async function resetConversation(
+  userId: string,
+  extractFacts = false,
+): Promise<void> {
   const conversation = await db.aiConversation.findUnique({
     where: { userId },
-    include: { messages: { select: { id: true, contextSnapshot: true } } },
+    include: {
+      messages: {
+        select: { id: true, role: true, content: true, contextSnapshot: true },
+      },
+    },
   });
   if (!conversation) return;
 
-  const idsToDelete = conversation.messages
-    .filter((message) => !isSpeakingMessage(message.contextSnapshot))
-    .map((message) => message.id);
-  if (idsToDelete.length === 0) return;
+  const messagesToDelete = conversation.messages.filter(
+    (message) => !isSpeakingMessage(message.contextSnapshot),
+  );
+  if (messagesToDelete.length === 0) return;
 
-  await db.aiMessage.deleteMany({ where: { id: { in: idsToDelete } } });
+  if (extractFacts && messagesToDelete.length >= MIN_MESSAGES_FOR_FACT_EXTRACTION) {
+    void extractAndSaveLearnerFacts(userId, conversation.id, messagesToDelete);
+  }
+
+  await db.aiMessage.deleteMany({
+    where: { id: { in: messagesToDelete.map((message) => message.id) } },
+  });
 }
 
 async function invalidateLessonReflection(
@@ -275,12 +356,13 @@ export async function sendAiTeacherMessage(
     );
   }
   checkRateLimit(userId);
+  await checkDailyUsageCap(userId, "ai-teacher-chat");
 
   const appIntent = !context.rolePlay
     ? detectHanAppContextIntent(trimmed, context.currentPageName)
     : null;
 
-  const [profile, competencyProgress, rawEvidence, onDemandAppContext] =
+  const [profile, competencyProgress, rawEvidence, onDemandAppContext, learnerFacts] =
     await Promise.all([
       db.learnerProfile.findUnique({
         where: { userId },
@@ -297,6 +379,22 @@ export async function sendAiTeacherMessage(
       appIntent
         ? getHanOnDemandAppContext(userId, trimmed, context.currentPageName)
         : Promise.resolve(null),
+      // Han Companion's personal memory (2026-08-31, fixed same day) - only
+      // Companion (mode === "PRACTICE", no role-play) ever reads this.
+      // Originally gated on `!context.rolePlay` alone, which also matches
+      // Han Tutor (also not role-play) - a real user report caught Tutor
+      // "remembering" a past conversation across sessions, breaking the
+      // already-agreed "Tutor always resets fresh" rule. Mirrors the same
+      // `mode === "PRACTICE" && !context.rolePlay` condition ai-context.ts
+      // uses to decide immersion Practice instructions.
+      mode === "PRACTICE" && !context.rolePlay
+        ? db.learnerFact.findMany({
+            where: { userId },
+            orderBy: { updatedAt: "desc" },
+            take: 8,
+            select: { fact: true },
+          })
+        : Promise.resolve([]),
     ]);
   // The 10 most recent results, derived from the same rows
   // getCompetencyProgress already fetched (via getRawProgressEvidence)
@@ -337,6 +435,7 @@ export async function sendAiTeacherMessage(
       explanationLanguage: profile?.explanationLanguage ?? null,
       generalLevelPoints: profile?.generalLevelPoints,
       learnerName: profile?.displayName,
+      knownFacts: learnerFacts.map((row) => row.fact),
       ...adaptiveSummary,
     },
     context.rolePlay
@@ -354,19 +453,18 @@ export async function sendAiTeacherMessage(
     maxOutputTokens: 800,
   });
 
-  await db.aiUsageLog.create({
-    data: {
-      userId,
-      provider: result.provider,
-      model: result.model,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      estimatedCostUsd: estimateCostUsd(
-        result.model,
-        result.inputTokens,
-        result.outputTokens,
-      ),
-    },
+  await recordAiUsage({
+    userId,
+    feature: "ai-teacher-chat",
+    provider: result.provider,
+    model: result.model,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    estimatedCostUsd: estimateCostUsd(
+      result.model,
+      result.inputTokens,
+      result.outputTokens,
+    ),
   });
 
   if (storageEnabled) {

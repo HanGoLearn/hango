@@ -6,6 +6,11 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** the "Simulations" section below lists the
+> Simulation Engine as a primary assessment source - it was never built
+> (see `simulation_engine.md`). The Mastery Levels and Diagnostic Assessment
+> (placement exam) sections are accurate and verified against real code.
+
 ---
 
 # Purpose

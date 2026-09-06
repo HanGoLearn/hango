@@ -87,24 +87,38 @@ export async function POST(request: Request) {
   // Ephemeral app context is server-owned. Never let a browser-provided
   // x-han-context value inject persistent Realtime session instructions.
   delete context.onDemandAppContext;
-  const [profile, competencyProgress, recentEvidence] = await Promise.all([
-    db.learnerProfile.findUnique({
-      where: { userId: session.user.id },
-      select: {
-        currentLevel: true,
-        explanationLanguage: true,
-        generalLevelPoints: true,
-        displayName: true,
-      },
-    }),
-    getCompetencyProgress(session.user.id),
-    db.progressEvidence.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      select: { result: true },
-    }),
-  ]);
+  const [profile, competencyProgress, recentEvidence, learnerFacts] =
+    await Promise.all([
+      db.learnerProfile.findUnique({
+        where: { userId: session.user.id },
+        select: {
+          currentLevel: true,
+          explanationLanguage: true,
+          generalLevelPoints: true,
+          displayName: true,
+        },
+      }),
+      getCompetencyProgress(session.user.id),
+      db.progressEvidence.findMany({
+        where: { userId: session.user.id },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: { result: true },
+      }),
+      // Han Companion's personal memory (2026-08-31, fixed same day) - only
+      // Companion (mode === "PRACTICE", no role-play) ever reads this - see
+      // ai-teacher-data.ts's sendAiTeacherMessage for the matching text-chat
+      // fix and why `!context.rolePlay` alone wasn't the right gate (Han
+      // Tutor's voice conversations are also not role-play).
+      mode === "PRACTICE" && !context.rolePlay
+        ? db.learnerFact.findMany({
+            where: { userId: session.user.id },
+            orderBy: { updatedAt: "desc" },
+            take: 8,
+            select: { fact: true },
+          })
+        : Promise.resolve([]),
+    ]);
   const adaptive = buildAdaptiveLearnerSummary(
     competencyProgress.map((item) => ({
       name: item.name,
@@ -142,6 +156,7 @@ export async function POST(request: Request) {
       explanationLanguage: profile?.explanationLanguage ?? null,
       generalLevelPoints: profile?.generalLevelPoints,
       learnerName: profile?.displayName,
+      knownFacts: learnerFacts.map((row) => row.fact),
       ...adaptive,
     },
     context,

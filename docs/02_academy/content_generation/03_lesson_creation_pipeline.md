@@ -2,9 +2,18 @@
 
 Version: 1.0
 
-Status: Official
+Status: Aspirational — not implemented (2026-09-05 audit)
 
 Last Updated: August 2026
+
+> **This 10-stage pipeline does not exist as an operational system.** Real
+> lessons are written directly as TypeScript data in `prisma/seed.ts`'s
+> `createFullLesson()` calls - no separate authoring tool, review queue, or
+> staged pipeline runs between writing content and it being live. See
+> `01_content_principles.md`'s audit note for the same finding in more
+> detail, including the 2026-08-14 removal of the one real AI-generation
+> fallback this project ever had. Keep this document as a design reference,
+> not as a description of how a lesson actually gets made today.
 
 ---
 

@@ -1,0 +1,52 @@
+[
+  {
+    "index": 0,
+    "name": "Examen",
+    "usedAddress": "A1:I48"
+  },
+  {
+    "index": 1,
+    "name": "Resumen",
+    "usedAddress": "A1:J17"
+  },
+  {
+    "index": 2,
+    "name": "Equipo",
+    "usedAddress": "A1:G9"
+  },
+  {
+    "index": 3,
+    "name": "Evaluación founders",
+    "usedAddress": "A1:Q30"
+  },
+  {
+    "index": 4,
+    "name": "Backlog MVP",
+    "usedAddress": "A1:J34"
+  },
+  {
+    "index": 5,
+    "name": "Roadmap semanal",
+    "usedAddress": "A1:I53"
+  },
+  {
+    "index": 6,
+    "name": "Roadmap 4 meses",
+    "usedAddress": "A1:F17"
+  },
+  {
+    "index": 7,
+    "name": "Costos por usuario",
+    "usedAddress": "A1:E17"
+  },
+  {
+    "index": 8,
+    "name": "Inversión",
+    "usedAddress": "A1:F11"
+  },
+  {
+    "index": 9,
+    "name": "Próximas ideas",
+    "usedAddress": "A1:K48"
+  }
+]

@@ -1,10 +1,22 @@
 # HanGo UI Specification
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (layout sections corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the persistent, three-column "AI Teacher Side
+> Panel" with Collapsed/Compact/Expanded states below was never built. The
+> real shell (`src/components/shell/app-shell.tsx`) is two columns
+> (Sidebar + Main Content); Han is reached via a floating, non-modal
+> bubble that overlays the main content, plus its own dedicated hub page
+> (`/han`) - not a persistent panel. The Desktop/Tablet structure diagrams
+> and the "AI Teacher Side Panel" section have been corrected below. The
+> Mobile Structure's "persistent floating button" description was already
+> correct. The sidebar item list is corrected too - eight items exist
+> today (Dashboard, Learning Journey, Speaking Lab, Writing Lab, Han,
+> Progress, Shop, Settings), not six.
 
 ---
 
@@ -48,25 +60,25 @@ Administrative interfaces are outside the initial learner-facing UI unless expli
 
 The application uses a shared layout across authenticated screens.
 
-## Desktop Structure
+## Desktop Structure (real, two columns)
 
 ```text
 ┌───────────────────────────────────────────────────────────────┐
 │ Top Bar                                                       │
-├──────────────┬──────────────────────────────┬─────────────────┤
-│              │                              │                 │
-│ Navigation   │ Main Content                 │ AI Teacher      │
-│ Sidebar      │                              │ Side Panel      │
-│              │                              │                 │
-│              │                              │                 │
-└──────────────┴──────────────────────────────┴─────────────────┘
+├──────────────┬────────────────────────────────────────────────┤
+│              │                                                │
+│ Navigation   │ Main Content                                  │
+│ Sidebar      │ (Han's floating bubble overlays this column)  │
+│              │                                                │
+└──────────────┴────────────────────────────────────────────────┘
 ```
 
 The main content is the visual priority.
 
 The navigation sidebar remains compact.
 
-The AI Teacher remains visible or easily expandable.
+Han opens as a floating, non-modal dialog over the main content - it is
+never a persistent third column.
 
 ---
 
@@ -81,11 +93,8 @@ The AI Teacher remains visible or easily expandable.
 └──────────┴────────────────────────────────────┘
 ```
 
-The AI Teacher opens as:
-
-- A drawer.
-- An overlay.
-- A resizable panel when space allows.
+Han opens the same floating dialog as on desktop - there is no separate
+drawer/overlay/resizable-panel variant for this breakpoint.
 
 ---
 
@@ -128,16 +137,18 @@ It should not compete with the main learning content.
 
 # Navigation Sidebar
 
-The desktop sidebar contains:
+The desktop sidebar contains, in this real order (`src/lib/navigation.ts`):
 
 - HanGo logo.
 - Dashboard.
 - Learning Journey.
 - Speaking Lab.
 - Writing Lab.
+- **Han.**
 - Progress.
+- **Shop.**
 - Settings.
-- User profile summary.
+- User profile summary (the account-corner avatar menu).
 
 The active section must be clearly visible.
 
@@ -145,38 +156,21 @@ The sidebar may collapse to icons on narrower desktop screens.
 
 ---
 
-# AI Teacher Side Panel
+# Han's Floating Bubble (real implementation, replacing "AI Teacher Side Panel")
 
-The AI Teacher occupies the right side of the desktop interface.
+**Correction (2026-09-05):** there is no persistent panel with
+Collapsed/Compact/Expanded states. Han is a single floating, non-modal
+dialog (`AiTeacherBubble`) available on every authenticated page:
 
-## Collapsed State
+- **Closed state**: a floating button.
+- **Open state**: the dialog opens with the full chat/voice interface -
+  there is no separate "compact" intermediate state; it's either the
+  closed button or the fully open conversation.
 
-Displays:
-
-- AI Teacher icon.
-- Status.
-- Open action.
-- Optional recommendation indicator.
-
-## Compact State
-
-Displays:
-
-- Current mode.
-- Context summary.
-- Recent message.
-- Suggested actions.
-- Text and voice input.
-
-## Expanded State
-
-Displays:
-
-- Full conversation history.
-- Voice interaction.
-- Detailed explanations.
-- Practice actions.
-- Context indicator.
+For a dedicated, full-page experience (not the floating overlay), the
+`/han` hub page offers Han Tutor, Han Companion, Han Vocabulary, and a
+locked Han Class teaser - see `docs/01_product/navigation.md`'s "Han"
+section and `docs/01_product/ai_teacher.md` for detail.
 - Mode selector.
 
 The AI Teacher panel must be resizable or expandable without losing the current lesson state.

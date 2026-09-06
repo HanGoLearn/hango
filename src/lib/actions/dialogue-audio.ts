@@ -8,6 +8,7 @@ import {
   DialogueAudioNotFoundError,
 } from "@/lib/dialogue-audio";
 import { TtsProviderError } from "@/lib/tts";
+import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 
 export type DialogueLineAudioActionResult =
   { ok: true; url: string } | { ok: false; error: string };
@@ -15,6 +16,7 @@ export type DialogueLineAudioActionResult =
 function toErrorResult(error: unknown): DialogueLineAudioActionResult {
   if (
     error instanceof DialogueAudioRateLimitError ||
+    error instanceof DailyUsageCapExceededError ||
     error instanceof TtsProviderError
   ) {
     return { ok: false, error: error.message };

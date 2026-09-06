@@ -1,21 +1,26 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import {
   createSpeakingSession,
   submitRecording,
   submitTextFallback,
   completeSpeakingSession,
   deleteSpeakingAttempt,
+  generateCustomScenario,
   SpeakingInputError,
   SpeakingRateLimitError,
+  SpeakingScenarioRateLimitError,
 } from "@/lib/speaking-data";
 import { getStorageProvider } from "@/lib/storage";
 import type { SpeakingFeedback } from "@/lib/speaking-feedback";
+import type { CustomScenario } from "@/lib/custom-scenario-prompt";
 
 function speakingErrorMessage(error: unknown): string {
   if (error instanceof SpeakingInputError) return error.message;
   if (error instanceof SpeakingRateLimitError) return error.message;
+  if (error instanceof SpeakingScenarioRateLimitError) return error.message;
   if (error instanceof Error && error.message === "Recording is too large.") {
     return error.message;
   }
@@ -159,4 +164,49 @@ export async function deleteSpeakingAttemptAction(
 ): Promise<void> {
   const userId = await requireUserId();
   await deleteSpeakingAttempt(userId, attemptId);
+}
+
+export type GenerateCustomScenarioResult =
+  | { ok: true; scenario: CustomScenario }
+  | { ok: false; error: string };
+
+/**
+ * Han Companion's "what do you want to practice today?" (2026-08-31,
+ * Fase 4). Never throws for validation/rate-limit/AI failure - same
+ * ok/error pattern as every other Speaking/AI Teacher action.
+ */
+export async function generateCustomScenarioAction(
+  learnerRequest: string,
+): Promise<GenerateCustomScenarioResult> {
+  const userId = await requireUserId();
+
+  try {
+    const [profile, facts] = await Promise.all([
+      db.learnerProfile.findUnique({
+        where: { userId },
+        select: { generalLevelPoints: true },
+      }),
+      db.learnerFact.findMany({
+        where: { userId },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+        select: { fact: true },
+      }),
+    ]);
+    const scenario = await generateCustomScenario(
+      userId,
+      learnerRequest,
+      profile?.generalLevelPoints,
+      facts.map((row) => row.fact),
+    );
+    if (!scenario) {
+      return {
+        ok: false,
+        error: "Han couldn't come up with a scenario for that. Try rephrasing it.",
+      };
+    }
+    return { ok: true, scenario };
+  } catch (error) {
+    return { ok: false, error: speakingErrorMessage(error) };
+  }
 }

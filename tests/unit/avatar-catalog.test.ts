@@ -32,9 +32,9 @@ describe("avatar catalog", () => {
     }
   });
 
-  it("has exactly 3 available animals (the launch trio) and 9 locked", () => {
-    expect(ANIMALS.filter((a) => a.available)).toHaveLength(3);
-    expect(ANIMALS.filter((a) => !a.available)).toHaveLength(9);
+  it("has exactly 4 available animals (launch trio + Tiger) and 8 locked", () => {
+    expect(ANIMALS.filter((a) => a.available)).toHaveLength(4);
+    expect(ANIMALS.filter((a) => !a.available)).toHaveLength(8);
   });
 
   it("RARITY_PRICE defines all 3 tiers, strictly increasing", () => {

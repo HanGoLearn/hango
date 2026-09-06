@@ -1,10 +1,23 @@
 # HanGo Branding
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (terminology corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the "Official Product Terminology" list said
+> "AI Teacher" and omitted "Shop" entirely - `src/lib/navigation.ts:30`
+> actually cites *this file* as the terminology source of truth, so the
+> mismatch was a real, load-bearing inconsistency, not just a documentation
+> gap. The real product name is **"Han"** (its own primary-nav item, its
+> own branded hub page, its own mascot/voice) - "AI Teacher" is still
+> accurate as the underlying *system* name in engineering docs, but is not
+> what learners see anywhere in the UI. The list below is corrected. The
+> working tagline further down is already self-marked "temporary," and
+> the shipped homepage headline is in Spanish, not English - noted below,
+> not corrected, since this app's marketing is Spanish-first and no
+> English tagline is actually live to compare against.
 
 ---
 
@@ -402,14 +415,20 @@ The following names should be used consistently:
 
 - Dashboard.
 - Learning Journey.
-- AI Teacher.
+- **Han** (the learner-facing name; "AI Teacher" is the underlying system's
+  engineering name, used in `docs/03_engineering/` and code, not shown to
+  learners).
 - Speaking Lab.
 - Writing Lab.
+- **Shop** (the HanCoins economy / avatar customization, added 2026-08-30 -
+  previously missing from this list).
 - Progress.
 - Scenario.
 - Lesson.
 - Mission.
-- Simulation.
+- ~~Simulation.~~ **Never built - see `docs/02_academy/simulation_engine.md`'s
+  2026-09-05 audit note. Drop from active terminology until/unless a real
+  system exists to name.**
 - Competency Profile.
 
 Alternative names should not be introduced without updating the official documentation.

@@ -16,6 +16,7 @@ export interface TopBarProps {
   coinBalance: number;
   avatarAnimal: string | null;
   avatarEquipped: Record<AccessorySlot, string | null>;
+  isAdministrator: boolean;
 }
 
 /**
@@ -28,6 +29,7 @@ export function TopBar({
   coinBalance,
   avatarAnimal,
   avatarEquipped,
+  isAdministrator,
 }: TopBarProps) {
   const pathname = usePathname();
   const activeItem = primaryNavItems.find((item) =>
@@ -58,7 +60,11 @@ export function TopBar({
           </Chip>
         </div>
         <ThemeToggle />
-        <UserMenu animal={avatarAnimal} equipped={avatarEquipped} />
+        <UserMenu
+          animal={avatarAnimal}
+          equipped={avatarEquipped}
+          isAdministrator={isAdministrator}
+        />
       </div>
     </header>
   );

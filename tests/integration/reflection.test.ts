@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
+import { planVocabularyQuestions } from "@/lib/content/vocabulary-quiz";
 
 const { completeMock } = vi.hoisted(() => ({ completeMock: vi.fn() }));
 vi.mock("@/lib/ai", async (importOriginal) => {
@@ -15,8 +16,11 @@ vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
 const { getLessonReflectionReportAction } =
   await import("@/lib/actions/reflection");
-const { getOrGenerateLessonReflectionReport, recordVocabularyInteraction } =
-  await import("@/lib/reflection");
+const {
+  getOrGenerateLessonReflectionReport,
+  getLessonScoreBreakdown,
+  recordVocabularyInteraction,
+} = await import("@/lib/reflection");
 
 const testEmails: string[] = [];
 const testLessonIds: string[] = [];
@@ -523,5 +527,262 @@ describe("recordVocabularyInteraction (2026-08-20, replaced upsert with create +
       where: { userId: user.id, vocabularyItemId: word.id },
     });
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("Vocabulary scoring (2026-08-31, rhythm variation + quick-test mode)", () => {
+  it("scores a full randomized walkthrough against the exact plan recomputed from (lessonId, wordId, difficulty, exampleCount)", async () => {
+    const user = await createTestUser(
+      `vocab-walkthrough-${Date.now()}@hango.dev`,
+    );
+    const level = await db.scenarioLevel.findFirstOrThrow({
+      where: { scenario: { slug: { not: "restaurant" } } },
+    });
+    const lesson = await db.lesson.create({
+      data: {
+        scenarioLevelId: level.id,
+        title: `Test Walkthrough Lesson ${Date.now()}`,
+        slug: `test-walkthrough-lesson-${Date.now()}`,
+        communicationObjective: "Order food",
+        status: "PUBLISHED",
+      },
+    });
+    testLessonIds.push(lesson.id);
+
+    // Word A: every planned question answered correctly. Word B: only the
+    // first planned question answered correctly, the rest wrong - proves
+    // the breakdown is a real per-key lookup against the recomputed plan,
+    // not a flat word-count formula.
+    const wordA = await db.vocabularyItem.create({
+      data: { chineseForm: "要", pinyin: "yào", meaning: "want", status: "PUBLISHED" },
+    });
+    const wordB = await db.vocabularyItem.create({
+      data: { chineseForm: "菜", pinyin: "cài", meaning: "dish", status: "PUBLISHED" },
+    });
+    testVocabularyIds.push(wordA.id, wordB.id);
+    await db.vocabularyExample.createMany({
+      data: [wordA.id, wordB.id].flatMap((vocabularyItemId) => [
+        { vocabularyItemId, order: 0, chineseText: "我要菜。", pinyin: "wǒ yào cài.", translation: "I want the dish." },
+        { vocabularyItemId, order: 1, chineseText: "你要菜吗？", pinyin: "nǐ yào cài ma?", translation: "Do you want the dish?" },
+        { vocabularyItemId, order: 2, chineseText: "他要菜了。", pinyin: "tā yào cài le.", translation: "He wants the dish now." },
+      ]),
+    });
+    await db.lessonVocabulary.createMany({
+      data: [
+        { lessonId: lesson.id, vocabularyItemId: wordA.id, order: 0 },
+        { lessonId: lesson.id, vocabularyItemId: wordB.id, order: 1 },
+      ],
+    });
+
+    const planA = planVocabularyQuestions(wordA.id, lesson.id, level.difficulty, 3);
+    const planB = planVocabularyQuestions(wordB.id, lesson.id, level.difficulty, 3);
+    await db.vocabularyQuizAttempt.createMany({
+      data: [
+        ...planA.map((entry) => ({
+          userId: user.id,
+          vocabularyItemId: wordA.id,
+          lessonId: lesson.id,
+          questionKey: entry.key,
+          isCorrect: true,
+        })),
+        ...planB.map((entry, index) => ({
+          userId: user.id,
+          vocabularyItemId: wordB.id,
+          lessonId: lesson.id,
+          questionKey: entry.key,
+          isCorrect: index === 0,
+        })),
+      ],
+    });
+
+    const breakdown = await getLessonScoreBreakdown(user.id, lesson.id);
+    expect(breakdown.vocabulary).toEqual({
+      correct: planA.length + 1,
+      total: planA.length + planB.length,
+    });
+  });
+
+  it("a quick-test pass credits 1/1 per word, never inflated or deflated by that word's full plan length", async () => {
+    const user = await createTestUser(
+      `vocab-quicktest-pass-${Date.now()}@hango.dev`,
+    );
+    const level = await db.scenarioLevel.findFirstOrThrow({
+      where: { scenario: { slug: { not: "restaurant" } } },
+    });
+    const lesson = await db.lesson.create({
+      data: {
+        scenarioLevelId: level.id,
+        title: `Test Quicktest Pass Lesson ${Date.now()}`,
+        slug: `test-quicktest-pass-lesson-${Date.now()}`,
+        communicationObjective: "Order food",
+        status: "PUBLISHED",
+      },
+    });
+    testLessonIds.push(lesson.id);
+
+    const wordA = await db.vocabularyItem.create({
+      data: { chineseForm: "要", pinyin: "yào", meaning: "want", status: "PUBLISHED" },
+    });
+    const wordB = await db.vocabularyItem.create({
+      data: { chineseForm: "菜", pinyin: "cài", meaning: "dish", status: "PUBLISHED" },
+    });
+    testVocabularyIds.push(wordA.id, wordB.id);
+    // 5 examples each - the fuller walkthrough would plan several questions
+    // per word; quick-test correctness must still score exactly 1/1.
+    await db.vocabularyExample.createMany({
+      data: [wordA.id, wordB.id].flatMap((vocabularyItemId) =>
+        Array.from({ length: 5 }, (_, order) => ({
+          vocabularyItemId,
+          order,
+          chineseText: `例句${order}要菜。`,
+          pinyin: "example",
+          translation: "example",
+        })),
+      ),
+    });
+    await db.lessonVocabulary.createMany({
+      data: [
+        { lessonId: lesson.id, vocabularyItemId: wordA.id, order: 0 },
+        { lessonId: lesson.id, vocabularyItemId: wordB.id, order: 1 },
+      ],
+    });
+
+    await db.vocabularyQuizAttempt.createMany({
+      data: [wordA, wordB].map((word) => ({
+        userId: user.id,
+        vocabularyItemId: word.id,
+        lessonId: lesson.id,
+        questionKey: `${word.id}:quicktest`,
+        isCorrect: true,
+      })),
+    });
+
+    const breakdown = await getLessonScoreBreakdown(user.id, lesson.id);
+    expect(breakdown.vocabulary).toEqual({ correct: 2, total: 2 });
+  });
+
+  it("a quick-test fail remediates only the missed word, blending its quicktest-passed sibling (1/1) with the remediated word's full-plan score", async () => {
+    const user = await createTestUser(
+      `vocab-quicktest-fail-${Date.now()}@hango.dev`,
+    );
+    const level = await db.scenarioLevel.findFirstOrThrow({
+      where: { scenario: { slug: { not: "restaurant" } } },
+    });
+    const lesson = await db.lesson.create({
+      data: {
+        scenarioLevelId: level.id,
+        title: `Test Quicktest Fail Lesson ${Date.now()}`,
+        slug: `test-quicktest-fail-lesson-${Date.now()}`,
+        communicationObjective: "Order food",
+        status: "PUBLISHED",
+      },
+    });
+    testLessonIds.push(lesson.id);
+
+    const wordPassed = await db.vocabularyItem.create({
+      data: { chineseForm: "要", pinyin: "yào", meaning: "want", status: "PUBLISHED" },
+    });
+    const wordMissed = await db.vocabularyItem.create({
+      data: { chineseForm: "菜", pinyin: "cài", meaning: "dish", status: "PUBLISHED" },
+    });
+    testVocabularyIds.push(wordPassed.id, wordMissed.id);
+    await db.vocabularyExample.createMany({
+      data: [
+        { vocabularyItemId: wordMissed.id, order: 0, chineseText: "我要菜。", pinyin: "wǒ yào cài.", translation: "I want the dish." },
+        { vocabularyItemId: wordMissed.id, order: 1, chineseText: "你要菜吗？", pinyin: "nǐ yào cài ma?", translation: "Do you want the dish?" },
+      ],
+    });
+    await db.lessonVocabulary.createMany({
+      data: [
+        { lessonId: lesson.id, vocabularyItemId: wordPassed.id, order: 0 },
+        { lessonId: lesson.id, vocabularyItemId: wordMissed.id, order: 1 },
+      ],
+    });
+
+    // wordPassed: quick-test correct, 1/1, never walked through.
+    // wordMissed: quick-test wrong (routes it into remediation) and its
+    // stray quicktest key must not itself count toward the total - only
+    // the recomputed full plan's own keys do.
+    const planMissed = planVocabularyQuestions(
+      wordMissed.id,
+      lesson.id,
+      level.difficulty,
+      2,
+    );
+    await db.vocabularyQuizAttempt.createMany({
+      data: [
+        {
+          userId: user.id,
+          vocabularyItemId: wordPassed.id,
+          lessonId: lesson.id,
+          questionKey: `${wordPassed.id}:quicktest`,
+          isCorrect: true,
+        },
+        {
+          userId: user.id,
+          vocabularyItemId: wordMissed.id,
+          lessonId: lesson.id,
+          questionKey: `${wordMissed.id}:quicktest`,
+          isCorrect: false,
+        },
+        ...planMissed.map((entry, index) => ({
+          userId: user.id,
+          vocabularyItemId: wordMissed.id,
+          lessonId: lesson.id,
+          questionKey: entry.key,
+          isCorrect: index === 0,
+        })),
+      ],
+    });
+
+    const breakdown = await getLessonScoreBreakdown(user.id, lesson.id);
+    expect(breakdown.vocabulary).toEqual({
+      correct: 1 + 1,
+      total: 1 + planMissed.length,
+    });
+  });
+
+  it("does not produce NaN for a sparse zero-example word - meaning/chineseForm are the only viable candidates", async () => {
+    const user = await createTestUser(
+      `vocab-sparse-${Date.now()}@hango.dev`,
+    );
+    const level = await db.scenarioLevel.findFirstOrThrow({
+      where: { scenario: { slug: { not: "restaurant" } } },
+    });
+    const lesson = await db.lesson.create({
+      data: {
+        scenarioLevelId: level.id,
+        title: `Test Sparse Word Lesson ${Date.now()}`,
+        slug: `test-sparse-word-lesson-${Date.now()}`,
+        communicationObjective: "Order food",
+        status: "PUBLISHED",
+      },
+    });
+    testLessonIds.push(lesson.id);
+
+    const word = await db.vocabularyItem.create({
+      data: { chineseForm: "要", pinyin: "yào", meaning: "want", status: "PUBLISHED" },
+    });
+    testVocabularyIds.push(word.id);
+    await db.lessonVocabulary.create({
+      data: { lessonId: lesson.id, vocabularyItemId: word.id, order: 0 },
+    });
+
+    const plan = planVocabularyQuestions(word.id, lesson.id, level.difficulty, 0);
+    expect(plan.length).toBeGreaterThanOrEqual(1); // no examples -> no blank/order candidates
+    await db.vocabularyQuizAttempt.create({
+      data: {
+        userId: user.id,
+        vocabularyItemId: word.id,
+        lessonId: lesson.id,
+        questionKey: plan[0]!.key,
+        isCorrect: true,
+      },
+    });
+
+    const breakdown = await getLessonScoreBreakdown(user.id, lesson.id);
+    expect(breakdown.vocabulary).toEqual({ correct: 1, total: plan.length });
+    expect(Number.isNaN(breakdown.vocabulary!.correct)).toBe(false);
+    expect(Number.isNaN(breakdown.vocabulary!.total)).toBe(false);
   });
 });

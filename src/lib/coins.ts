@@ -5,6 +5,8 @@ import {
   RARITY_PRICE,
   type AccessorySlot,
 } from "@/lib/avatar-catalog";
+import { createTtlCache } from "@/lib/ttl-cache";
+import { toUtcDateString } from "@/lib/study-streak";
 
 export class AccessoryNotFoundError extends Error {}
 export class AlreadyOwnedError extends Error {}
@@ -45,6 +47,41 @@ export async function grantCoins(
   } catch (error) {
     console.error("[coins] grantCoins failed", { reason, sourceKey }, error);
   }
+}
+
+const DAILY_LOGIN_COINS = 5;
+
+/**
+ * Daily login bonus (2026-08-31, coins operations audit), split out of
+ * app-shell.tsx: `grantCoins`'s dedup is a `skipDuplicates` INSERT
+ * *attempt* - even when it no-ops, that attempt is still one billed Prisma
+ * Operation. app-shell.tsx runs on every single page load, so without this
+ * a user opening 20 pages in a day fired 20 wasted insert attempts for a
+ * bonus that only ever succeeds once. TTL-cached per (userId, date) so
+ * only the first page load of the day (per warm server instance) actually
+ * reaches the database - same in-memory-cache tool and tradeoff as
+ * project/db-operations-optimization.md's Tier 3 (no cross-instance
+ * guarantee, but the DB's own sourceKey uniqueness still makes a
+ * cold-instance retry harmless, just not free).
+ */
+const grantDailyLoginCoinsOnce = createTtlCache(
+  async (userId: string, dateKey: string): Promise<void> => {
+    await grantCoins(
+      userId,
+      DAILY_LOGIN_COINS,
+      "daily_login",
+      `daily_login:${dateKey}`,
+    );
+  },
+  24 * 60 * 60 * 1000,
+  (userId, dateKey) => `${userId}:${dateKey}`,
+);
+
+export async function grantDailyLoginCoins(
+  userId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await grantDailyLoginCoinsOnce(userId, toUtcDateString(now));
 }
 
 /**

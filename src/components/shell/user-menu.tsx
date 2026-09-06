@@ -1,7 +1,12 @@
 "use client";
 
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { User, LogOut, Settings as SettingsIcon } from "lucide-react";
+import {
+  User,
+  LogOut,
+  Settings as SettingsIcon,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/actions/logout";
 import { IconButton } from "@/components/ui/icon-button";
@@ -12,6 +17,8 @@ import { cn } from "@/lib/cn";
 export interface UserMenuProps {
   animal: string | null;
   equipped: Record<AccessorySlot, string | null>;
+  /** Only ever true for the account's own real role, checked server-side (session.user.role) - this hides the entry point, it isn't what gates the /admin route itself (requireRole() does that). */
+  isAdministrator: boolean;
 }
 
 /**
@@ -20,7 +27,7 @@ export interface UserMenuProps {
  * back to the generic `User` icon this always showed before, for learners
  * who haven't picked an animal yet.
  */
-export function UserMenu({ animal, equipped }: UserMenuProps) {
+export function UserMenu({ animal, equipped, isAdministrator }: UserMenuProps) {
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
@@ -50,6 +57,17 @@ export function UserMenu({ animal, equipped }: UserMenuProps) {
               Settings
             </Link>
           </DropdownMenuPrimitive.Item>
+          {isAdministrator && (
+            <DropdownMenuPrimitive.Item asChild>
+              <Link
+                href="/admin"
+                className="flex cursor-default items-center gap-2 rounded-control px-3 py-2 font-interface text-body text-text-primary outline-none data-[highlighted]:bg-elevated"
+              >
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                Administrador
+              </Link>
+            </DropdownMenuPrimitive.Item>
+          )}
           <DropdownMenuPrimitive.Item
             onSelect={() => {
               void logoutAction();

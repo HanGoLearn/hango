@@ -6,6 +6,20 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** the per-category type lists below (synonyms/
+> antonyms/classifiers/image-association/etc.) are broader than what
+> shipped - the real, closed `ExerciseType` enum has exactly six values
+> (`MULTIPLE_CHOICE`, `TRUE_FALSE`, `FILL_IN_BLANK`, `SENTENCE_ORDERING`,
+> `MATCHING`, `SHORT_RESPONSE`). This is already documented directly in
+> `prisma/schema.prisma`'s own comment on `ExerciseType`, which explicitly
+> says it "intentionally matches FASE 7.2's MVP list, not
+> exercises_system.md's longer illustrative example list." "Exercise
+> Generation" origins (Pre-designed/AI-generated/AI-personalized/AI-
+> adapted) are also overstated - only pre-designed (hand-authored) exists;
+> see `content_generation/01_content_principles.md`'s audit note. The
+> 5-level hint system further down is an exact, verified match to the real
+> `ExerciseHint` model.
+
 ---
 
 # Purpose

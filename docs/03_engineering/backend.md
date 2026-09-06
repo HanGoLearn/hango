@@ -6,6 +6,15 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** nothing below is factually wrong, but it's
+> too abstract to check against real code - no mention of Next.js, Server
+> Actions, or `src/lib`'s real organization. The "Backend Modules"
+> pipeline (Authentication → User Management → Learning Engine → ...) has
+> no matching folder structure; real backend logic lives in flat,
+> feature-named files under `src/lib/*.ts` and `src/lib/actions/*.ts`.
+> See `architecture.md` (completed 2026-09-05) for the concrete, current
+> stack.
+
 ---
 
 # Purpose

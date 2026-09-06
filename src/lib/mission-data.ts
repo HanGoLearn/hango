@@ -1,6 +1,12 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import { buildMissionSystemPrompt } from "@/lib/mission-prompt";
 import {
   buildMissionEvaluationPrompt,
@@ -37,6 +43,31 @@ function checkRateLimit(userId: string): void {
   }
   timestamps.push(now);
   recentMessageTimestamps.set(userId, timestamps);
+}
+
+// Separate counter from checkRateLimit above (2026-09-05 cost audit fix) -
+// endMissionAttempt is a distinct, pricier operation (a 500-token report
+// evaluation, once per ending) from the many small 300-token chat turns
+// sendMissionMessage's limiter already covers; sharing one counter would
+// let a normal back-and-forth conversation exhaust the budget before the
+// learner ever reaches the end. Until this fix, start/endMissionAttempt
+// had NO limiter at all - a start->end loop could fire unbounded AI calls.
+const ATTEMPT_END_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const ATTEMPT_END_RATE_LIMIT_MAX = 10;
+const recentEndTimestamps = new Map<string, number[]>();
+
+function checkEndRateLimit(userId: string): void {
+  const now = Date.now();
+  const timestamps = (recentEndTimestamps.get(userId) ?? []).filter(
+    (t) => now - t < ATTEMPT_END_RATE_LIMIT_WINDOW_MS,
+  );
+  if (timestamps.length >= ATTEMPT_END_RATE_LIMIT_MAX) {
+    throw new MissionRateLimitError(
+      "You've ended a lot of missions in a short time. Please wait a bit before continuing.",
+    );
+  }
+  timestamps.push(now);
+  recentEndTimestamps.set(userId, timestamps);
 }
 
 async function getMissionWithConditions(missionId: string) {
@@ -81,6 +112,7 @@ export async function sendMissionMessage(
     );
   }
   checkRateLimit(userId);
+  await checkDailyUsageCap(userId, "mission-chat");
 
   const attempt = await assertOwnedAttempt(userId, attemptId);
   const mission = await getMissionWithConditions(attempt.missionId);
@@ -102,6 +134,19 @@ export async function sendMissionMessage(
     systemPrompt,
     messages: [...transcript, { role: "user", content: message }],
     maxOutputTokens: 300,
+  });
+  await recordAiUsage({
+    userId,
+    feature: "mission-chat",
+    provider: result.provider,
+    model: result.model,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    estimatedCostUsd: estimateCostUsd(
+      result.model,
+      result.inputTokens,
+      result.outputTokens,
+    ),
   });
 
   const nextTranscript: MissionTranscriptMessage[] = [
@@ -126,6 +171,14 @@ export async function sendMissionMessage(
  */
 export async function endMissionAttempt(userId: string, attemptId: string) {
   const attempt = await assertOwnedAttempt(userId, attemptId);
+  // Idempotency guard (2026-09-05 cost audit fix) - nothing previously
+  // stopped calling this twice on the same attempt (a double-tap, a retried
+  // request). Without this, a repeat call re-ran a paid AI evaluation and
+  // inserted a second, duplicate ProgressEvidence row for the same
+  // competencies (recordProgressEvidence has no skipDuplicates), silently
+  // double-weighting one attempt in the learner's competency average.
+  if (attempt.completionState === "COMPLETED") return attempt;
+
   const mission = await getMissionWithConditions(attempt.missionId);
   const successConditionDescriptions = mission.successConditions.map(
     (c) => c.description,
@@ -135,6 +188,8 @@ export async function endMissionAttempt(userId: string, attemptId: string) {
 
   let report: MissionReport;
   try {
+    checkEndRateLimit(userId);
+    await checkDailyUsageCap(userId, "mission-report");
     const provider = getAiProvider();
     const result = await provider.complete({
       systemPrompt: buildMissionEvaluationPrompt(
@@ -150,9 +205,28 @@ export async function endMissionAttempt(userId: string, attemptId: string) {
       messages: [{ role: "user", content: "Evaluate this mission." }],
       maxOutputTokens: 500,
     });
+    await recordAiUsage({
+      userId,
+      feature: "mission-report",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     report = parseMissionReport(result.content, successConditionDescriptions);
   } catch (error) {
-    if (!(error instanceof AiProviderError)) throw error;
+    if (
+      !(error instanceof AiProviderError) &&
+      !(error instanceof MissionRateLimitError) &&
+      !(error instanceof DailyUsageCapExceededError)
+    ) {
+      throw error;
+    }
     report = defaultMissionReport(successConditionDescriptions);
   }
 

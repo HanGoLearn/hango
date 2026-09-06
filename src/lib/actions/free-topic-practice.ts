@@ -2,6 +2,12 @@
 
 import { auth } from "@/lib/auth";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import {
   buildSpeakingConversationFeedbackPrompt,
   parseSpeakingConversationFeedback,
@@ -61,6 +67,7 @@ export async function getFreeTopicPracticeFeedbackAction(
   }
 
   try {
+    await checkDailyUsageCap(session.user.id, "free-topic-feedback");
     const provider = getAiProvider();
     const result = await provider.complete({
       systemPrompt: buildSpeakingConversationFeedbackPrompt(
@@ -84,6 +91,19 @@ export async function getFreeTopicPracticeFeedbackAction(
       maxOutputTokens: 1_600,
       timeoutMs: 45_000,
     });
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: "free-topic-feedback",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     return {
       ok: true,
       feedback: parseSpeakingConversationFeedback(result.content),
@@ -93,6 +113,9 @@ export async function getFreeTopicPracticeFeedbackAction(
     // scores (DEFAULT_SPEAKING_FEEDBACK) - those looked identical to a real
     // result and misled the learner (user report, 2026-08-08).
     if (error instanceof AiProviderError) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof DailyUsageCapExceededError) {
       return { ok: false, error: error.message };
     }
     return { ok: false, error: "Something went wrong generating feedback." };

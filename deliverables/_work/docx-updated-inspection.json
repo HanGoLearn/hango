@@ -1,0 +1,1583 @@
+{
+  "path": "C:\\HanGo\\deliverables\\Hango_Proyecto_Actualizado_2026-09-05.docx",
+  "paragraph_count": 227,
+  "nonempty_paragraphs": [
+    {
+      "index": 1,
+      "style": "Normal",
+      "text": "HanGo"
+    },
+    {
+      "index": 2,
+      "style": "Normal",
+      "text": "Documento estratégico para socios"
+    },
+    {
+      "index": 3,
+      "style": "Normal",
+      "text": "Producto actual, alcance del MVP y visión de ecosistema"
+    },
+    {
+      "index": 4,
+      "style": "Normal",
+      "text": "VERSIÓN DE TRABAJO · 2.2 · 5 DE SEPTIEMBRE DE 2026"
+    },
+    {
+      "index": 5,
+      "style": "Normal",
+      "text": "Propósito"
+    },
+    {
+      "index": 6,
+      "style": "Normal",
+      "text": "Explicar con claridad qué es HanGo, qué existe hoy, qué se busca validar y cómo puede evolucionar después del MVP."
+    },
+    {
+      "index": 9,
+      "style": "Heading 1",
+      "text": "00  Cómo usar este documento"
+    },
+    {
+      "index": 10,
+      "style": "Normal",
+      "text": "Este documento ofrece una lectura estratégica y comprensible de HanGo. Está pensado para socios potenciales, colaboradores, aliados e inversionistas que necesiten entender el producto sin revisar el código ni seguir un calendario semanal de ejecución."
+    },
+    {
+      "index": 11,
+      "style": "Normal",
+      "text": "ALCANCE  Este documento explica la tesis, el producto, el MVP, la validación, el modelo de negocio y las futuras líneas HanGo. El Excel de roadmap conserva el detalle operativo; el informe académico conserva la metodología y el sustento pedagógico."
+    },
+    {
+      "index": 12,
+      "style": "Heading 2",
+      "text": "Índice ejecutivo"
+    },
+    {
+      "index": 14,
+      "style": "Heading 2",
+      "text": "Definiciones"
+    },
+    {
+      "index": 16,
+      "style": "Heading 1",
+      "text": "01  Resumen ejecutivo"
+    },
+    {
+      "index": 17,
+      "style": "Normal",
+      "text": "TESIS  HanGo es un ecosistema de aprendizaje de mandarín que acompaña al estudiante desde sus primeros pasos hasta el perfeccionamiento. Convierte situaciones reales, objetivos de aprendizaje y datos del alumno en práctica guiada, conversación, feedback y progreso observable."
+    },
+    {
+      "index": 18,
+      "style": "Normal",
+      "text": "HanGo ya cuenta con un producto local amplio para principiantes absolutos y estudiantes que buscan perfeccionar su chino. El núcleo combina Learning Journey, fundamentos con pinyin y tonos, placement integrado, ejercicios, comprensión, Speaking de lección, Speaking Lab, Writing, Reflection, Progress y Han Tutor. El espacio de Han añade Han Companion para conversación por voz y Han Vocabulary para consulta contextual. La motivación incluye avatares, HanCoins, logros, tienda y leaderboard. Esta amplitud todavía debe validarse con usuarios: falta llevar una versión estable a producción, seleccionar una ruta piloto, revisar su mandarín con criterio humano y comprobar aprendizaje, retorno y costo sostenible."
+    },
+    {
+      "index": 19,
+      "style": "Normal",
+      "text": "La decisión estratégica sigue siendo concentrar el MVP en HanGo Learn. La ruta desde cero, Han Tutor, Han Companion, Han Vocabulary, los dos sistemas de Speaking, la personalización y HanCoins pertenecen a Learn, aunque no todos deben convertirse en puertas obligatorias para la beta. Teacher, Institutions, Connect, Community, Play y Marketplace continúan como visión de largo plazo y no deben competir con la validación del núcleo."
+    },
+    {
+      "index": 20,
+      "style": "Heading 2",
+      "text": "HanGo actual"
+    },
+    {
+      "index": 22,
+      "style": "Heading 2",
+      "text": "Objetivo de los próximos 3-4 meses"
+    },
+    {
+      "index": 23,
+      "style": "List Bullet",
+      "text": "Publicar una beta controlada de HanGo Learn con una ruta de 6-8 lecciones por cada nivel."
+    },
+    {
+      "index": 24,
+      "style": "List Bullet",
+      "text": "Probarla con una cohorte inicial de 10-20 estudiantes adecuados al segmento elegido."
+    },
+    {
+      "index": 25,
+      "style": "List Bullet",
+      "text": "Medir activación, finalización, retorno, aprendizaje, calidad de Han/Speaking y costo por usuario."
+    },
+    {
+      "index": 26,
+      "style": "List Bullet",
+      "text": "Corregir primero los problemas que impidan aprender, confiar o completar la experiencia."
+    },
+    {
+      "index": 27,
+      "style": "List Bullet",
+      "text": "Decidir con evidencia si corresponde ampliar, reducir, monetizar o repetir la validación."
+    },
+    {
+      "index": 28,
+      "style": "Heading 1",
+      "text": "02  Problema, usuario y oportunidad"
+    },
+    {
+      "index": 29,
+      "style": "Heading 2",
+      "text": "Problemas del estudiante"
+    },
+    {
+      "index": 30,
+      "style": "List Bullet",
+      "text": "Poca práctica oral auténtica fuera de clase y temor a equivocarse frente a otras personas."
+    },
+    {
+      "index": 31,
+      "style": "List Bullet",
+      "text": "Feedback tardío o superficial en pronunciación, tonos, escritura, gramática y comprensión."
+    },
+    {
+      "index": 32,
+      "style": "List Bullet",
+      "text": "Aprendizaje fragmentado entre libros, videos, tarjetas, aplicaciones y chats que no comparten contexto."
+    },
+    {
+      "index": 33,
+      "style": "List Bullet",
+      "text": "Progreso difícil de interpretar: completar actividades no siempre demuestra que una habilidad mejoró."
+    },
+    {
+      "index": 34,
+      "style": "List Bullet",
+      "text": "Contenido demasiado fácil o demasiado complejo cuando la herramienta no comprende el nivel real del alumno."
+    },
+    {
+      "index": 35,
+      "style": "Heading 2",
+      "text": "Problemas del profesor y de la institución"
+    },
+    {
+      "index": 36,
+      "style": "List Bullet",
+      "text": "Poca visibilidad de lo que el alumno practica y aprende entre clases."
+    },
+    {
+      "index": 37,
+      "style": "List Bullet",
+      "text": "Tiempo elevado para crear, adaptar, asignar y corregir actividades."
+    },
+    {
+      "index": 38,
+      "style": "List Bullet",
+      "text": "Herramientas separadas que generan fricción, costos adicionales y datos dispersos. Por ejemplo, profesores que pagan membresía en Kahoot."
+    },
+    {
+      "index": 39,
+      "style": "List Bullet",
+      "text": "Dificultad para convertir resultados de speaking y writing en decisiones docentes accionables."
+    },
+    {
+      "index": 40,
+      "style": "Heading 2",
+      "text": "Usuario inicial"
+    },
+    {
+      "index": 41,
+      "style": "Normal",
+      "text": "HanGo se dirige a estudiantes hispanohablantes desde cero y también a quienes ya estudian mandarín y quieren perfeccionarlo. La primera cohorte deberá acotar un tramo concreto de esa promesa para poder medirlo bien, pero el inicio desde cero ya forma parte de la dirección actual del producto y no se presenta como una línea futura separada."
+    },
+    {
+      "index": 42,
+      "style": "Heading 2",
+      "text": "Por qué puede existir una oportunidad"
+    },
+    {
+      "index": 43,
+      "style": "Normal",
+      "text": "La IA permite conversación, voz, transcripción y feedback a una escala que antes era costosa. Pero la oportunidad de HanGo no depende de usar IA por sí sola: depende de conectarla con una ruta de mandarín, un nivel consistente, memoria del alumno, contexto de la aplicación y evidencia acumulada de aprendizaje."
+    },
+    {
+      "index": 44,
+      "style": "Heading 1",
+      "text": "03  Arquitectura oficial del ecosistema HanGo"
+    },
+    {
+      "index": 45,
+      "style": "Normal",
+      "text": "HanGo se organiza en siete líneas. Solo HanGo Learn entra en el MVP. Las demás son expansiones condicionadas a señales reales de uso, aprendizaje, recurrencia y capacidad operativa."
+    },
+    {
+      "index": 47,
+      "style": "Normal",
+      "text": "LÍMITES DE MARCA  Han es el tutor de IA dentro de HanGo Learn, no una línea separada. Speaking, Writing, Progress, los labs, los avatares y HanCoins también pertenecen a Learn. Los juegos entre alumnos pertenecen a HanGo Play. Una futura ampliación de recompensas pertenece a Learn 2.0; la creación y venta de contenido pertenece a HanGo Marketplace."
+    },
+    {
+      "index": 48,
+      "style": "Heading 2",
+      "text": "Cómo se relacionan"
+    },
+    {
+      "index": 49,
+      "style": "Normal",
+      "text": "1.  HanGo Learn crea el valor educativo inicial y genera evidencia de aprendizaje."
+    },
+    {
+      "index": 50,
+      "style": "Normal",
+      "text": "2.  HanGo Teacher permite que un profesor convierta esa evidencia en seguimiento y nuevas asignaciones, además de crear interacciones con los alumnos a través de modelos de aprendizaje (juegos entre ellos)."
+    },
+    {
+      "index": 51,
+      "style": "Normal",
+      "text": "3.  HanGo Institutions lleva el modelo a cohortes, sedes y programas completos."
+    },
+    {
+      "index": 52,
+      "style": "Normal",
+      "text": "4.  HanGo Connect añade práctica entre personas cuando exista masa crítica y seguridad operativa."
+    },
+    {
+      "index": 53,
+      "style": "Normal",
+      "text": "5.  HanGo Community crea continuidad social, preguntas, grupos y cultura."
+    },
+    {
+      "index": 54,
+      "style": "Normal",
+      "text": "6.  HanGo Play transforma parte de la práctica en experiencias lúdicas medibles."
+    },
+    {
+      "index": 55,
+      "style": "Normal",
+      "text": "7.  HanGo Marketplace habilita oferta externa de contenido y servicios cuando existan compradores, creadores y control de calidad."
+    },
+    {
+      "index": 56,
+      "style": "Heading 1",
+      "text": "04  HanGo Learn: qué existe hoy"
+    },
+    {
+      "index": 57,
+      "style": "Normal",
+      "text": "HanGo Learn es el producto que ya se está construyendo y el único que debe demostrar valor en el MVP. Su función es acompañar al estudiante desde los fundamentos iniciales hasta situaciones reales, práctica, feedback y un siguiente paso recomendado de acuerdo con su nivel."
+    },
+    {
+      "index": 58,
+      "style": "Heading 2",
+      "text": "Experiencia principal"
+    },
+    {
+      "index": 60,
+      "style": "Heading 2",
+      "text": "Principios de experiencia"
+    },
+    {
+      "index": 61,
+      "style": "List Bullet",
+      "text": "El nivel principal es el nivel HanGo; HSK se usa solo como referencia externa cuando aporta claridad."
+    },
+    {
+      "index": 62,
+      "style": "List Bullet",
+      "text": "Han Tutor lateral explica y responde con pedagogía adaptativa. Su modo de práctica sigue siendo distinto de Han Companion, que ofrece una conversación personal por voz."
+    },
+    {
+      "index": 63,
+      "style": "List Bullet",
+      "text": "El Speaking de Learning Journey representa un personaje y un objetivo de lección; Speaking Lab es una práctica independiente. Ninguno de los dos debe compartir identidad, memoria ni propósito con Han Tutor o Han Companion."
+    },
+    {
+      "index": 64,
+      "style": "List Bullet",
+      "text": "La IA debe comprender la intención del alumno aunque la pronunciación sea aproximada, sin ocultar el error en el feedback."
+    },
+    {
+      "index": 65,
+      "style": "List Bullet",
+      "text": "El progreso debe reflejar evidencia real y no inflarse por completar pantallas o repetir respuestas."
+    },
+    {
+      "index": 66,
+      "style": "List Bullet",
+      "text": "El contenido del MVP requiere revisión humana de mandarín, además de pruebas de producto."
+    },
+    {
+      "index": 67,
+      "style": "Heading 2",
+      "text": "Motivación y personalización ya implementadas"
+    },
+    {
+      "index": 68,
+      "style": "Normal",
+      "text": "HanGo ya cuenta con una primera economía de motivación diseñada para acompañar el aprendizaje, no para reemplazarlo. Su impacto debe medirse durante la beta con la misma prudencia que Han, Speaking o Writing."
+    },
+    {
+      "index": 69,
+      "style": "List Bullet",
+      "text": "Cuatro avatares zodiacales disponibles: conejo, mono, perro y tigre; los otros ocho signos aparecen como futuras opciones."
+    },
+    {
+      "index": 70,
+      "style": "List Bullet",
+      "text": "Doce accesorios por animal, organizados en cabeza, rostro y torso, con precios comunes y especiales dentro de una tienda cosmética."
+    },
+    {
+      "index": 71,
+      "style": "List Bullet",
+      "text": "HanCoins con historial de movimientos: se ganan por actividad verificable y se gastan únicamente en accesorios; nunca compran Nivel General ni mejoran una calificación."
+    },
+    {
+      "index": 72,
+      "style": "List Bullet",
+      "text": "Logros, celebraciones y leaderboard acumulativo por puntos de Nivel General. Un premio semanal separado entrega HanCoins según lo ganado durante la semana; ambos deben auditarse para evitar que la competencia desplace el aprendizaje."
+    },
+    {
+      "index": 73,
+      "style": "Heading 1",
+      "text": "05  Alcance realista del MVP"
+    },
+    {
+      "index": 74,
+      "style": "Normal",
+      "text": "DEFINICIÓN  El MVP no es todo el ecosistema. Es una primera versión operable de HanGo Learn capaz de demostrar que un usuario completa una ruta, recibe valor, aprende, regresa y puede ser atendido a un costo sostenible."
+    },
+    {
+      "index": 75,
+      "style": "Heading 2",
+      "text": "Obligatorio para la primera versión"
+    },
+    {
+      "index": 76,
+      "style": "List Bullet",
+      "text": "Ruta piloto que permita comenzar desde cero y avanzar hacia situaciones reales, limitada a 6-8 lecciones coherentes y objetivos medibles para la primera cohorte."
+    },
+    {
+      "index": 77,
+      "style": "List Bullet",
+      "text": "Onboarding, acceso, persistencia y recuperación de cuenta confiables."
+    },
+    {
+      "index": 78,
+      "style": "List Bullet",
+      "text": "Han Tutor estable, natural y adaptado al nivel, con ejemplos en caracteres, pinyin y traducción; Han Companion se mantiene como experiencia de voz separada."
+    },
+    {
+      "index": 79,
+      "style": "List Bullet",
+      "text": "Han Vocabulary como consulta contextual ajustada automáticamente al nivel, sin puntaje ni HanCoins."
+    },
+    {
+      "index": 80,
+      "style": "List Bullet",
+      "text": "Han Companion como conversación personal por voz, sin transcript visible ni mezcla con el tutor o los Speakings."
+    },
+    {
+      "index": 81,
+      "style": "List Bullet",
+      "text": "Speaking contextual de lección con turnos naturales, memoria y feedback posterior."
+    },
+    {
+      "index": 82,
+      "style": "List Bullet",
+      "text": "Reflection y Progress basados en evidencia real."
+    },
+    {
+      "index": 83,
+      "style": "List Bullet",
+      "text": "Writing básico funcional. La evaluación manuscrita por foto está construida, pero aún no se ha validado con usuarios y solo entra si su calidad y costo son aceptables."
+    },
+    {
+      "index": 84,
+      "style": "List Bullet",
+      "text": "Despliegue, monitoreo, backups, privacidad, registro de tokens y costo por función, rate limits, reintentos idempotentes y soporte de beta."
+    },
+    {
+      "index": 85,
+      "style": "List Bullet",
+      "text": "Revisión humana del mandarín de toda la ruta que se entregue a usuarios."
+    },
+    {
+      "index": 86,
+      "style": "Heading 2",
+      "text": "Condicional"
+    },
+    {
+      "index": 87,
+      "style": "List Bullet",
+      "text": "Practice with Han en Speaking Lab, si no debilita la estabilidad del Speaking de lección."
+    },
+    {
+      "index": 88,
+      "style": "List Bullet",
+      "text": "Placement simplificado y segundo escenario, si no retrasan el flujo principal."
+    },
+    {
+      "index": 89,
+      "style": "List Bullet",
+      "text": "Writing manuscrito por fotos, si la lectura es honesta, útil y costeable."
+    },
+    {
+      "index": 90,
+      "style": "List Bullet",
+      "text": "Google Sign-In u otras comodidades, únicamente si el acceso base ya es confiable."
+    },
+    {
+      "index": 91,
+      "style": "Heading 2",
+      "text": "Fuera del MVP"
+    },
+    {
+      "index": 92,
+      "style": "Normal",
+      "text": "HanGo Teacher, Institutions, Connect, Community, Play y Marketplace; aplicaciones nativas; modo offline completo; monetización o economía ampliada de HanCoins; mundo virtual; personalización institucional profunda; y cualquier expansión que no sea necesaria para validar HanGo Learn."
+    },
+    {
+      "index": 93,
+      "style": "Heading 2",
+      "text": "Criterios de salida"
+    },
+    {
+      "index": 95,
+      "style": "Heading 1",
+      "text": "06  Diferenciación y ventaja potencial"
+    },
+    {
+      "index": 96,
+      "style": "Normal",
+      "text": "HanGo no debería competir diciendo únicamente que usa inteligencia artificial. La diferenciación debe surgir de integrar aprendizaje de mandarín, práctica multimodal, contexto y seguimiento en una sola experiencia."
+    },
+    {
+      "index": 98,
+      "style": "Heading 2",
+      "text": "Activos que podrían volverse defendibles"
+    },
+    {
+      "index": 99,
+      "style": "List Bullet",
+      "text": "Historial longitudinal de habilidades, errores, práctica y mejora de cada alumno."
+    },
+    {
+      "index": 100,
+      "style": "List Bullet",
+      "text": "Conexión entre contenido, evaluación, conversación, escritura y siguiente acción."
+    },
+    {
+      "index": 101,
+      "style": "List Bullet",
+      "text": "Experiencia específica para mandarín y usuarios hispanohablantes, desde principiante absoluto hasta perfeccionamiento."
+    },
+    {
+      "index": 102,
+      "style": "List Bullet",
+      "text": "Calidad acumulada mediante revisión humana, pruebas reales y datos de uso."
+    },
+    {
+      "index": 103,
+      "style": "List Bullet",
+      "text": "Integración futura con profesores e instituciones sin perder la experiencia directa del estudiante."
+    },
+    {
+      "index": 104,
+      "style": "Normal",
+      "text": "PRUDENCIA  Estas ventajas son hipótesis de producto, no una ventaja competitiva demostrada. Deben confirmarse mediante retención, aprendizaje, calidad y disposición a pagar."
+    },
+    {
+      "index": 105,
+      "style": "Heading 1",
+      "text": "07  Validación y métricas"
+    },
+    {
+      "index": 106,
+      "style": "Heading 2",
+      "text": "Proceso estratégico, no calendario semanal"
+    },
+    {
+      "index": 108,
+      "style": "Heading 2",
+      "text": "Métricas principales"
+    },
+    {
+      "index": 109,
+      "style": "List Bullet",
+      "text": "Activación: registro, onboarding y primera acción de valor."
+    },
+    {
+      "index": 110,
+      "style": "List Bullet",
+      "text": "Finalización: lecciones y actividades clave completadas sin ayuda externa constante."
+    },
+    {
+      "index": 111,
+      "style": "List Bullet",
+      "text": "Retorno: uso al día siguiente, a la semana y durante la cohorte."
+    },
+    {
+      "index": 112,
+      "style": "List Bullet",
+      "text": "Aprendizaje: mejora en habilidades, errores objetivo o tareas pre/post."
+    },
+    {
+      "index": 113,
+      "style": "List Bullet",
+      "text": "Calidad: fallos graves de Han Tutor, Han Companion, los dos Speakings, Writing, transcripción, nivel, contenido y progreso."
+    },
+    {
+      "index": 114,
+      "style": "List Bullet",
+      "text": "Economía: tokens de entrada y salida, costo por usuario, minuto de voz, evaluación y función; además de reintentos y consumo evitado por caché o contenido determinista."
+    },
+    {
+      "index": 115,
+      "style": "List Bullet",
+      "text": "Valor percibido: satisfacción, recomendación, intención de continuar y disposición concreta a pagar."
+    },
+    {
+      "index": 116,
+      "style": "Heading 2",
+      "text": "Interpretación"
+    },
+    {
+      "index": 117,
+      "style": "Normal",
+      "text": "Una métrica aislada no valida HanGo. Mucha conversación puede ser costosa sin producir aprendizaje; muchas lecciones completadas pueden ocultar respuestas repetidas; y una opinión positiva no demuestra retorno. La decisión debe combinar comportamiento, desempeño, costo y entrevistas."
+    },
+    {
+      "index": 118,
+      "style": "Heading 1",
+      "text": "08  Modelo de negocio y entrada al mercado"
+    },
+    {
+      "index": 119,
+      "style": "Heading 2",
+      "text": "Hipótesis de ingresos"
+    },
+    {
+      "index": 121,
+      "style": "Normal",
+      "text": "No se recomienda fijar un precio definitivo antes de conocer el costo real de voz e IA, la frecuencia de uso y el valor percibido. Tampoco se recomienda construir billing complejo antes de observar retención y una señal concreta de pago."
+    },
+    {
+      "index": 122,
+      "style": "Heading 2",
+      "text": "Entrada inicial al mercado"
+    },
+    {
+      "index": 123,
+      "style": "Normal",
+      "text": "1.  Reclutar una cohorte cercana pero representativa de estudiantes de mandarín."
+    },
+    {
+      "index": 124,
+      "style": "Normal",
+      "text": "2.  Observar sesiones y entrevistar tanto a quienes continúan como a quienes abandonan."
+    },
+    {
+      "index": 125,
+      "style": "Normal",
+      "text": "3.  Usar la landing pública, el preview social y contenido corto para comunicar que HanGo sirve desde cero hasta perfeccionamiento, mostrar experiencias reales y captar testers medibles."
+    },
+    {
+      "index": 126,
+      "style": "Normal",
+      "text": "4.  Conversar con profesores antes de presentar un portal terminado."
+    },
+    {
+      "index": 127,
+      "style": "Normal",
+      "text": "5.  Probar un piloto institucional manual antes de construir HanGo Teacher o Institutions a escala."
+    },
+    {
+      "index": 128,
+      "style": "Heading 2",
+      "text": "Disciplina de costos"
+    },
+    {
+      "index": 129,
+      "style": "List Bullet",
+      "text": "Medir texto, tokens de entrada y salida, transcripción, TTS, voz en tiempo real, visión, storage, hosting y soporte por separado mediante registros de uso por proveedor y modelo."
+    },
+    {
+      "index": 130,
+      "style": "List Bullet",
+      "text": "Mantener presupuestos máximos de salida y rate limits por flujo. Las evaluaciones más costosas tienen techos explícitos; placement speaking usa hasta 1.800 tokens de salida y Reflection o Speaking Lab hasta 1.600."
+    },
+    {
+      "index": 131,
+      "style": "List Bullet",
+      "text": "No confundir el techo técnico de tokens ni el costo de pruebas internas con el consumo esperado de un usuario activo real."
+    },
+    {
+      "index": 132,
+      "style": "List Bullet",
+      "text": "Usar el Excel de costos como fuente actualizable; no convertir sus supuestos en promesas de margen."
+    },
+    {
+      "index": 133,
+      "style": "Heading 1",
+      "text": "09  Visión detallada de productos futuros"
+    },
+    {
+      "index": 134,
+      "style": "Normal",
+      "text": "REGLA DE EXPANSIÓN  Una línea futura solo se construye si existe un problema comprobado, un usuario específico, una señal mínima, un responsable y un límite de inversión. La visión es amplia; el compromiso actual sigue siendo HanGo Learn."
+    },
+    {
+      "index": 135,
+      "style": "Heading 2",
+      "text": "HanGo Learn 2.0"
+    },
+    {
+      "index": 136,
+      "style": "Normal",
+      "text": "Learn 2.0 representa la evolución del producto de aprendizaje después de validar el MVP. No es una segunda aplicación; es una versión más profunda y personalizada del núcleo."
+    },
+    {
+      "index": 137,
+      "style": "List Bullet",
+      "text": "Profundización adaptativa de la ruta desde cero ya iniciada: mejor secuencia de pinyin, tonos, caracteres, repaso y transferencia hacia situaciones reales."
+    },
+    {
+      "index": 138,
+      "style": "List Bullet",
+      "text": "Plan personalizado con objetivos, frecuencia, repaso y recomendaciones basadas en datos reales."
+    },
+    {
+      "index": 139,
+      "style": "List Bullet",
+      "text": "Pronunciación por sonido: consonantes, vocales, sílabas y tonos, además de una nota global."
+    },
+    {
+      "index": 140,
+      "style": "List Bullet",
+      "text": "Repetición espaciada avanzada y vocabulario visual conectado con los errores del alumno."
+    },
+    {
+      "index": 141,
+      "style": "List Bullet",
+      "text": "Listening Lab y Reading Lab con dificultad, velocidad y temas graduados."
+    },
+    {
+      "index": 142,
+      "style": "List Bullet",
+      "text": "Guía de gramática y biblioteca cultural vinculadas a lecciones, dudas y situaciones reales."
+    },
+    {
+      "index": 143,
+      "style": "List Bullet",
+      "text": "Aplicación móvil, notificaciones y modo offline solo después de validar retorno en web."
+    },
+    {
+      "index": 144,
+      "style": "List Bullet",
+      "text": "Plan premium sencillo cuando existan señales de pago y costos comprendidos."
+    },
+    {
+      "index": 145,
+      "style": "Heading 3",
+      "text": "HanCoins y recompensas dentro de HanGo Learn"
+    },
+    {
+      "index": 146,
+      "style": "Normal",
+      "text": "HanCoins ya funciona como sistema interno de recompensa, separado de los puntos de Nivel General y sin valor financiero. Se gana por actividad verificable, constancia, logros y premios semanales, y se usa únicamente en la personalización cosmética del avatar. Cualquier ampliación debe esperar evidencia de que mejora retorno y motivación sin crear pay-to-win, ansiedad, competencia tóxica o acumulación vacía."
+    },
+    {
+      "index": 147,
+      "style": "Heading 2",
+      "text": "HanGo Teacher"
+    },
+    {
+      "index": 148,
+      "style": "Normal",
+      "text": "HanGo Teacher busca extender el valor de Learn al trabajo del profesor."
+    },
+    {
+      "index": 149,
+      "style": "List Bullet",
+      "text": "Teacher Lite: crear una clase, invitar alumnos, asignar una lección y ver finalización y resultados básicos."
+    },
+    {
+      "index": 150,
+      "style": "List Bullet",
+      "text": "Versión ampliada: grupos, tareas, feedback, adaptación de contenido, alertas y comunicación."
+    },
+    {
+      "index": 151,
+      "style": "List Bullet",
+      "text": "Copiloto docente: apoyo para preparar actividades, interpretar resultados y sugerir siguientes pasos."
+    },
+    {
+      "index": 152,
+      "style": "List Bullet",
+      "text": "Integración con HanGo Play para partidas y quizzes en vivo, sin duplicar el motor de juegos."
+    },
+    {
+      "index": 153,
+      "style": "Normal",
+      "text": "CONDICIÓN  Teacher solo merece una inversión importante si profesores reales repiten el flujo, asignan una segunda actividad y toman decisiones con los resultados."
+    },
+    {
+      "index": 154,
+      "style": "Heading 2",
+      "text": "HanGo Institutions"
+    },
+    {
+      "index": 155,
+      "style": "Normal",
+      "text": "Institutions es la capa para academias, universidades, colegios u organizaciones con múltiples profesores y cohortes."
+    },
+    {
+      "index": 156,
+      "style": "List Bullet",
+      "text": "Administración de sedes, roles, licencias, y acceso."
+    },
+    {
+      "index": 157,
+      "style": "List Bullet",
+      "text": "Configuración de currículo, rutas, actividades y políticas de uso."
+    },
+    {
+      "index": 158,
+      "style": "List Bullet",
+      "text": "Reportes agregados, alertas, exportaciones y trazabilidad por programa."
+    },
+    {
+      "index": 159,
+      "style": "List Bullet",
+      "text": "Privacidad, retención de datos, integraciones y SSO en fases posteriores."
+    },
+    {
+      "index": 160,
+      "style": "Normal",
+      "text": "PRIMERA VALIDACIÓN  Antes de construir un portal institucional debe ejecutarse un piloto manual con sponsor, usuario operativo y comprador claramente identificados."
+    },
+    {
+      "index": 161,
+      "style": "Heading 2",
+      "text": "HanGo Connect"
+    },
+    {
+      "index": 162,
+      "style": "Normal",
+      "text": "Connect permitiría encontrar compañeros adecuados para practicar mandarín. Su valor depende tanto del matching como de la seguridad y la capacidad de crear encuentros repetidos."
+    },
+    {
+      "index": 163,
+      "style": "List Bullet",
+      "text": "Matching por nivel HanGo, intereses, horario, objetivos y preferencias de interacción."
+    },
+    {
+      "index": 164,
+      "style": "List Bullet",
+      "text": "Voice notes, audio o llamadas por turnos con escenarios y apoyos de conversación."
+    },
+    {
+      "index": 165,
+      "style": "List Bullet",
+      "text": "Compañeros recurrentes, reputación, reportes, bloqueo y moderación."
+    },
+    {
+      "index": 166,
+      "style": "List Bullet",
+      "text": "Protecciones específicas para menores, abuso, spam y datos personales si el producto lo requiere."
+    },
+    {
+      "index": 167,
+      "style": "Normal",
+      "text": "RIESGO  Connect no debe lanzarse sin masa crítica, moderación, seguridad y una prueba manual que demuestre que las parejas coordinan y repiten."
+    },
+    {
+      "index": 168,
+      "style": "Heading 2",
+      "text": "HanGo Community"
+    },
+    {
+      "index": 169,
+      "style": "Normal",
+      "text": "Community sería el espacio social de continuidad alrededor del aprendizaje, distinto de Connect, que se concentra en encontrar compañeros."
+    },
+    {
+      "index": 170,
+      "style": "List Bullet",
+      "text": "Perfiles opcionales, objetivos, logros y privacidad configurable."
+    },
+    {
+      "index": 171,
+      "style": "List Bullet",
+      "text": "Preguntas, respuestas, publicaciones culturales y correcciones moderadas."
+    },
+    {
+      "index": 172,
+      "style": "List Bullet",
+      "text": "Grupos, clubes, retos y seguimiento de profesores o creadores."
+    },
+    {
+      "index": 173,
+      "style": "List Bullet",
+      "text": "Normas, reportes, moderación y diseño anti-spam desde el inicio."
+    },
+    {
+      "index": 174,
+      "style": "Normal",
+      "text": "CONDICIÓN  Community requiere densidad de usuarios y conversaciones orgánicas. Antes puede probarse en una comunidad privada externa sin construir un feed propio."
+    },
+    {
+      "index": 175,
+      "style": "Heading 2",
+      "text": "HanGo Play"
+    },
+    {
+      "index": 176,
+      "style": "Normal",
+      "text": "Play reúne todas las experiencias lúdicas. Los juegos entre alumnos y los juegos para el aula no son productos separados."
+    },
+    {
+      "index": 177,
+      "style": "List Bullet",
+      "text": "Duelos y retos cooperativos o competitivos de vocabulario, caracteres, tonos, listening y frases."
+    },
+    {
+      "index": 178,
+      "style": "List Bullet",
+      "text": "Roleplays y misiones multijugador, síncronas o asíncronas."
+    },
+    {
+      "index": 179,
+      "style": "List Bullet",
+      "text": "Modo aula tipo Kahoot con equipos, control del profesor y resultados posteriores."
+    },
+    {
+      "index": 180,
+      "style": "List Bullet",
+      "text": "Los avatares, HanCoins y logros básicos ya pertenecen a HanGo Learn. HanGo Play podría reutilizar esa identidad en juegos y retos; coleccionables complejos y espacios virtuales siguen siendo una capa futura, no una prioridad del MVP."
+    },
+    {
+      "index": 181,
+      "style": "Normal",
+      "text": "MÉTRICA CORRECTA  Play debe demostrar práctica y aprendizaje, no solo tiempo de pantalla, partidas o puntos."
+    },
+    {
+      "index": 182,
+      "style": "Heading 2",
+      "text": "HanGo Marketplace"
+    },
+    {
+      "index": 183,
+      "style": "Normal",
+      "text": "Marketplace agrupa la creación, descubrimiento y comercialización de contenido o servicios. HanGo Creator no es una línea separada: es el lado de oferta de Marketplace."
+    },
+    {
+      "index": 184,
+      "style": "List Bullet",
+      "text": "Herramientas para crear recursos, actividades, cursos o experiencias asistidas por IA."
+    },
+    {
+      "index": 185,
+      "style": "List Bullet",
+      "text": "Perfiles de profesores y creadores, seguidores, analytics y distribución."
+    },
+    {
+      "index": 186,
+      "style": "List Bullet",
+      "text": "Descubrimiento, reseñas, pagos, comisiones, payouts, reembolsos y disputas."
+    },
+    {
+      "index": 187,
+      "style": "List Bullet",
+      "text": "Tutorías, cursos, recursos y colaboraciones con influencers o embajadores."
+    },
+    {
+      "index": 188,
+      "style": "List Bullet",
+      "text": "Curación, moderación, propiedad intelectual y control de calidad."
+    },
+    {
+      "index": 189,
+      "style": "Normal",
+      "text": "CONDICIÓN  Marketplace requiere primero creadores capaces de producir oferta útil y compradores que repitan transacciones. La audiencia sin conversión no es suficiente."
+    },
+    {
+      "index": 190,
+      "style": "Heading 1",
+      "text": "10  Horizontes de crecimiento"
+    },
+    {
+      "index": 191,
+      "style": "Normal",
+      "text": "Los horizontes siguientes son orientativos y se activan por evidencia, no por cumplir una fecha."
+    },
+    {
+      "index": 193,
+      "style": "Heading 2",
+      "text": "Qué no debe ocurrir"
+    },
+    {
+      "index": 194,
+      "style": "List Bullet",
+      "text": "Construir siete productos simultáneamente por entusiasmo con la visión."
+    },
+    {
+      "index": 195,
+      "style": "List Bullet",
+      "text": "Usar una fecha como justificación para lanzar una experiencia sin calidad mínima."
+    },
+    {
+      "index": 196,
+      "style": "List Bullet",
+      "text": "Confundir una función ya programada con una función validada por usuarios."
+    },
+    {
+      "index": 197,
+      "style": "List Bullet",
+      "text": "Convertir cada comentario individual en una nueva prioridad."
+    },
+    {
+      "index": 198,
+      "style": "List Bullet",
+      "text": "Prometer Teacher, Institutions o Marketplace antes de comprobar el problema correspondiente."
+    },
+    {
+      "index": 199,
+      "style": "Heading 1",
+      "text": "11  Equipo, colaboración y gobierno"
+    },
+    {
+      "index": 200,
+      "style": "Normal",
+      "text": "ESTADO  Arean es el fundador actual. Jazmín se encuentra en evaluación para una responsabilidad técnica y Krishna es una posible incorporación para aprendizaje, investigación y partnerships. No existe todavía un acuerdo definitivo de tres cofundadores ni una asignación cerrada de equity."
+    },
+    {
+      "index": 202,
+      "style": "Heading 2",
+      "text": "Principios de una posible sociedad"
+    },
+    {
+      "index": 203,
+      "style": "List Bullet",
+      "text": "La amistad, la confianza o una red de contactos no sustituyen ejecución, ownership y tiempo sostenido."
+    },
+    {
+      "index": 204,
+      "style": "List Bullet",
+      "text": "Equity, dinero, rol y dedicación son variables diferentes y deben discutirse con evidencia."
+    },
+    {
+      "index": 205,
+      "style": "List Bullet",
+      "text": "El trabajo relevante debe quedar protegido mediante confidencialidad, accesos individuales y asignación de propiedad intelectual."
+    },
+    {
+      "index": 206,
+      "style": "List Bullet",
+      "text": "Las decisiones deben registrar responsable, criterio, fecha y posibilidad de reversión."
+    },
+    {
+      "index": 207,
+      "style": "List Bullet",
+      "text": "Una evaluación puede terminar en founder, advisor, colaborador o cierre de la relación sin que sea un fracaso personal."
+    },
+    {
+      "index": 208,
+      "style": "Heading 2",
+      "text": "Fuente operativa"
+    },
+    {
+      "index": 209,
+      "style": "Normal",
+      "text": "El Excel de roadmap mantiene el detalle de responsables, seguimiento, riesgos, decisiones, costos y cartera de ideas. Este documento no repite tareas semana por semana para evitar dos fuentes de verdad."
+    },
+    {
+      "index": 210,
+      "style": "Heading 1",
+      "text": "12  Riesgos principales"
+    },
+    {
+      "index": 212,
+      "style": "Heading 1",
+      "text": "13  Decisiones abiertas y tesis de cierre"
+    },
+    {
+      "index": 213,
+      "style": "Heading 2",
+      "text": "Decisiones que aún requieren evidencia"
+    },
+    {
+      "index": 214,
+      "style": "List Bullet",
+      "text": "Perfil exacto de la primera cohorte y ruta de 6-8 lecciones."
+    },
+    {
+      "index": 215,
+      "style": "List Bullet",
+      "text": "Qué componentes condicionales entran sin retrasar el MVP."
+    },
+    {
+      "index": 216,
+      "style": "List Bullet",
+      "text": "Proveedores y límites operativos para una beta confiable."
+    },
+    {
+      "index": 217,
+      "style": "List Bullet",
+      "text": "Rango de precio y prioridad B2C versus B2B después de observar uso real."
+    },
+    {
+      "index": 218,
+      "style": "List Bullet",
+      "text": "Quién revisará el mandarín y con qué criterio de aprobación."
+    },
+    {
+      "index": 219,
+      "style": "List Bullet",
+      "text": "Continuidad, rol y dedicación de cada candidato al equipo fundador."
+    },
+    {
+      "index": 220,
+      "style": "List Bullet",
+      "text": "Qué señal justificaría iniciar Teacher Lite o un piloto institucional."
+    },
+    {
+      "index": 221,
+      "style": "Heading 2",
+      "text": "Lo que HanGo es hoy"
+    },
+    {
+      "index": 222,
+      "style": "Normal",
+      "text": "HanGo es un producto de aprendizaje de mandarín funcional y ambicioso, todavía en transición desde construcción local hacia validación real. Su activo más importante no es la cantidad de funciones, sino la posibilidad de conectar ruta, contexto, práctica, feedback y progreso en una experiencia especializada."
+    },
+    {
+      "index": 223,
+      "style": "Heading 2",
+      "text": "Lo que HanGo podría llegar a ser"
+    },
+    {
+      "index": 224,
+      "style": "Normal",
+      "text": "Si HanGo Learn demuestra que los estudiantes aprenden, regresan y pueden ser atendidos con calidad y costos sostenibles, HanGo puede evolucionar hacia una infraestructura más amplia para profesores, instituciones, compañeros, comunidades, juego y oferta educativa. Esa visión tiene potencial, pero cada línea debe ganarse con evidencia."
+    },
+    {
+      "index": 225,
+      "style": "Normal",
+      "text": "TESIS DE INVERSIÓN  La oportunidad no consiste en financiar muchas funciones al mismo tiempo. Consiste en convertir un producto local avanzado en un núcleo validado, construir datos y confianza alrededor del aprendizaje y expandir únicamente cuando cada nueva línea resuelva un problema real."
+    },
+    {
+      "index": 226,
+      "style": "Normal",
+      "text": "La pregunta central para el siguiente ciclo es sencilla: ¿puede HanGo Learn demostrar valor educativo y retorno suficiente para justificar una empresa y, posteriormente, un ecosistema?"
+    }
+  ],
+  "table_count": 12,
+  "tables": [
+    {
+      "index": 0,
+      "rows": [
+        [
+          "Bloque",
+          "Contenido"
+        ],
+        [
+          "01-03",
+          "Tesis, problema, estado actual y arquitectura oficial de HanGo."
+        ],
+        [
+          "04-06",
+          "HanGo Learn, alcance del MVP y diferenciación."
+        ],
+        [
+          "07-08",
+          "Validación, métricas, negocio y entrada al mercado."
+        ],
+        [
+          "09-10",
+          "Visión detallada de productos futuros y horizontes de crecimiento."
+        ],
+        [
+          "11-13",
+          "Equipo, riesgos, decisiones abiertas y tesis de cierre."
+        ]
+      ]
+    },
+    {
+      "index": 1,
+      "rows": [
+        [
+          "Término",
+          "Uso en este documento"
+        ],
+        [
+          "Pre-MVP",
+          "Producto funcional en entorno local, todavía sin beta productiva validada."
+        ],
+        [
+          "MVP",
+          "Primera experiencia pequeña y operable que permite comprobar uso, aprendizaje, calidad y costo."
+        ],
+        [
+          "Beta cerrada",
+          "Prueba controlada con usuarios seleccionados, soporte cercano y límites de uso."
+        ],
+        [
+          "Línea HanGo",
+          "Producto diferenciado dentro del ecosistema: Learn, Teacher, Institutions, Connect, Community, Play o Marketplace."
+        ],
+        [
+          "Idea futura",
+          "Hipótesis que requiere evidencia antes de convertirse en compromiso de desarrollo."
+        ]
+      ]
+    },
+    {
+      "index": 2,
+      "rows": [
+        [
+          "Dimensión",
+          "Estado actual",
+          "Lectura ejecutiva"
+        ],
+        [
+          "Producto",
+          "Pre-MVP funcional",
+          "Existe una experiencia amplia desde cero hasta perfeccionamiento; falta reducirla a una ruta piloto coherente y operable."
+        ],
+        [
+          "Usuarios",
+          "Pruebas principalmente internas",
+          "Todavía no hay evidencia suficiente de activación, retorno o disposición a pagar."
+        ],
+        [
+          "Contenido",
+          "Base curricular amplia desde fundamentos",
+          "El MVP validará un tramo de 6-8 lecciones con pinyin cuando corresponda y revisión humana del mandarín."
+        ],
+        [
+          "Calidad",
+          "Mejoras iterativas",
+          "Han Tutor, Han Companion, ambos Speakings, Writing y Progress han avanzado, pero deben probarse como un sistema completo."
+        ],
+        [
+          "Operación",
+          "No productiva",
+          "Faltan despliegue, monitoreo, recuperación, privacidad y soporte de beta."
+        ],
+        [
+          "Equipo",
+          "Founder + candidatos",
+          "Roles y sociedad continúan sujetos a evidencia de trabajo y compromiso sostenido."
+        ]
+      ]
+    },
+    {
+      "index": 3,
+      "rows": [
+        [
+          "Línea",
+          "Usuario principal",
+          "Qué resuelve",
+          "Horizonte"
+        ],
+        [
+          "HanGo Learn",
+          "Estudiante",
+          "Aprender mandarín desde cero y perfeccionarlo con ruta, IA, voz, escritura, vocabulario y progreso.",
+          "MVP actual"
+        ],
+        [
+          "HanGo Teacher",
+          "Profesor",
+          "Asignar, acompañar y revisar práctica fuera del aula.",
+          "Después del MVP"
+        ],
+        [
+          "HanGo Institutions",
+          "Institución",
+          "Administrar licencias, currículo y resultados.",
+          "Tras pilotos institucionales"
+        ],
+        [
+          "HanGo Connect",
+          "Estudiante",
+          "Encontrar compañeros adecuados y practicar con seguridad.",
+          "Largo plazo"
+        ],
+        [
+          "HanGo Community",
+          "Estudiante y profesor",
+          "Compartir preguntas, cultura, grupos y continuidad social.",
+          "Largo plazo"
+        ],
+        [
+          "HanGo Play",
+          "Estudiante y aula",
+          "Practicar mediante juegos con objetivos de aprendizaje.",
+          "Post-MVP / largo plazo"
+        ],
+        [
+          "HanGo Marketplace",
+          "Alumno, profesor y creador",
+          "Descubrir y comercializar contenido, cursos y servicios.",
+          "Largo plazo"
+        ]
+      ]
+    },
+    {
+      "index": 4,
+      "rows": [
+        [
+          "Componente",
+          "Qué hace",
+          "Estado"
+        ],
+        [
+          "Cuenta y onboarding",
+          "Registro, perfil, avatar, preferencias, placement opcional y recomendación inicial.",
+          "Construido; requiere prueba externa"
+        ],
+        [
+          "Learning Journey",
+          "Organiza fundamentos, situaciones, niveles, lecciones, acceso y continuidad desde cero hasta niveles avanzados.",
+          "Construido; se debe probar"
+        ],
+        [
+          "Motor de lección",
+          "Integra situación, diálogo, listening, vocabulario, comprensión, gramática, speaking y reflexión.",
+          "Construido"
+        ],
+        [
+          "Han Tutor",
+          "Explica y responde con pedagogía adaptativa; usa caracteres, pinyin y traducción en ejemplos escritos sin leer el pinyin en voz alta.",
+          "Construido; QA continuo"
+        ],
+        [
+          "Modo Practice de Han Tutor",
+          "Practica mandarín dentro del tutor sin convertirse en Han Companion ni en un sistema de Speaking.",
+          "Construido; QA continuo"
+        ],
+        [
+          "Speaking de lección",
+          "Roleplay en tiempo real con contexto, transcripción y evaluación posterior.",
+          "Construido; se debe probar"
+        ],
+        [
+          "Speaking Lab",
+          "Práctica oral libre o guiada fuera de una lección específica.",
+          "Construido; alcance condicionado"
+        ],
+        [
+          "Writing Lab",
+          "Práctica escrita, corrección y evaluación; incluye flujos manuscritos en validación.",
+          "Construido; costo/calidad por validar; se debe probar (sin pruebas actuales)"
+        ],
+        [
+          "Reflection y Progress",
+          "Convierte respuestas y desempeño en feedback y progreso por habilidad.",
+          "Construido; exactitud por auditar"
+        ],
+        [
+          "Placement",
+          "Estima el punto de partida, recomienda una ruta y acredita puntos de lecciones dominadas sin marcarlas como completadas.",
+          "Integrado en onboarding; requiere prueba externa"
+        ],
+        [
+          "Orientación inicial",
+          "Página permanente Welcome to Chinese con pinyin, tonos, números, cortesía y contexto cultural; no otorga puntos.",
+          "Construido; no calificado"
+        ],
+        [
+          "Motivación y personalización",
+          "Avatares zodiacales, HanCoins, tienda, logros, leaderboard acumulativo y premio semanal separado.",
+          "Construido; impacto en retención y aprendizaje por validar"
+        ],
+        [
+          "Han Companion",
+          "Conversación personal por voz con memoria de hechos compartidos; orbe con bordes distintos para alumno y Han, sin chat ni transcript visible.",
+          "Construido; QA continuo de voz, silencio y memoria"
+        ],
+        [
+          "Han Vocabulary",
+          "Consulta palabras por caracteres o pinyin y devuelve significado, ejemplos, uso y errores comunes al nivel real del alumno.",
+          "Construido; herramienta de referencia sin puntos"
+        ],
+        [
+          "Landing pública",
+          "Presenta HanGo en español desde cero hasta perfeccionamiento, muestra el ciclo de aprendizaje y dirige a registro o acceso.",
+          "Construida; falta medir conversión"
+        ]
+      ]
+    },
+    {
+      "index": 5,
+      "rows": [
+        [
+          "Pregunta",
+          "Evidencia mínima buscada"
+        ],
+        [
+          "¿El usuario entiende qué hacer?",
+          "Completa onboarding y llega a una acción de valor sin guía constante."
+        ],
+        [
+          "¿La ruta aporta valor?",
+          "Finaliza actividades clave y puede explicar qué aprendió o practicó."
+        ],
+        [
+          "¿Regresa?",
+          "Existe retorno voluntario durante la beta, no solo recordatorios personales."
+        ],
+        [
+          "¿Han y Speaking son confiables?",
+          "Pocos errores graves de idioma, nivel, turnos, contexto o identidad."
+        ],
+        [
+          "¿El aprendizaje es observable?",
+          "Mejora en tareas, errores objetivo o desempeño comparable."
+        ],
+        [
+          "¿El costo es sostenible?",
+          "Consumo por usuario y por función medido, con límites operativos."
+        ]
+      ]
+    },
+    {
+      "index": 6,
+      "rows": [
+        [
+          "Alternativa",
+          "Fortaleza habitual",
+          "Respuesta buscada de HanGo"
+        ],
+        [
+          "Aplicaciones masivas",
+          "Hábito y gamificación",
+          "Más contexto, speaking/writing y feedback conectado con situaciones reales."
+        ],
+        [
+          "Apps especializadas en chino",
+          "Contenido y práctica específica",
+          "Continuidad entre ruta, Han, errores, progreso y futura conexión docente."
+        ],
+        [
+          "IA general",
+          "Flexibilidad conversacional",
+          "Estructura, nivel, memoria de aprendizaje y evaluación trazable."
+        ],
+        [
+          "Profesor o instituto",
+          "Criterio humano y relación",
+          "Complemento entre clases, no reemplazo: práctica diaria y evidencia útil."
+        ],
+        [
+          "Redes o intercambio",
+          "Personas reales",
+          "Más adelante: matching, seguridad, escenarios y progresión mediante Connect."
+        ]
+      ]
+    },
+    {
+      "index": 7,
+      "rows": [
+        [
+          "Etapa",
+          "Propósito",
+          "Puerta para avanzar"
+        ],
+        [
+          "Base operable",
+          "Reducir alcance, asegurar calidad mínima y preparar producción.",
+          "Flujo completo estable y recuperable."
+        ],
+        [
+          "Beta cerrada",
+          "Observar a usuarios reales y registrar problemas sin ampliar el catálogo.",
+          "Activación, finalización y calidad suficientes."
+        ],
+        [
+          "Evidencia",
+          "Medir retorno, aprendizaje, costo y valor percibido.",
+          "Señales repetidas, no casos aislados."
+        ],
+        [
+          "Decisión",
+          "Elegir continuar, iterar, reducir, monetizar o pausar.",
+          "Decisión escrita y sustentada."
+        ]
+      ]
+    },
+    {
+      "index": 8,
+      "rows": [
+        [
+          "Vía",
+          "Cliente",
+          "Ingreso posible",
+          "Condición"
+        ],
+        [
+          "HanGo Learn",
+          "Estudiante",
+          "Suscripción gratuita limitada + plan premium.",
+          "Retención, utilidad y costo sostenible."
+        ],
+        [
+          "Teacher / Institutions",
+          "Profesor o institución",
+          "Piloto, licencia, institutions precio por alumno.",
+          "Uso docente repetido y comprador identificado."
+        ],
+        [
+          "HanGo Marketplace",
+          "Creador y comprador",
+          "Comisión por contenido, cursos o servicios.",
+          "Oferta, demanda, calidad y soporte reales."
+        ]
+      ]
+    },
+    {
+      "index": 9,
+      "rows": [
+        [
+          "Horizonte",
+          "Foco",
+          "Qué podría habilitar"
+        ],
+        [
+          "0-4 meses",
+          "HanGo Learn MVP",
+          "Beta productiva, ruta piloto desde cero, calidad, retorno, aprendizaje, costo y conversión de la landing."
+        ],
+        [
+          "Después de la beta",
+          "Profundizar Learn",
+          "Profundizar fundamentos, Han Companion, Han Vocabulary, shadowing y roleplays según evidencia de uso."
+        ],
+        [
+          "Después del MVP",
+          "Teacher Lite e instituciones manuales",
+          "Asignación básica, resultados y pilotos sin construir una suite completa."
+        ],
+        [
+          "Después de señales repetidas",
+          "Learn 2.0 y HanGo Play",
+          "Personalización avanzada, labs, premium y juegos pequeños medibles."
+        ],
+        [
+          "Largo plazo",
+          "Ecosistema",
+          "Teacher completo, Institutions, Connect, Community, Marketplace y expansión de Play."
+        ]
+      ]
+    },
+    {
+      "index": 10,
+      "rows": [
+        [
+          "Persona",
+          "Rol actual o propuesto",
+          "Responsabilidad principal"
+        ],
+        [
+          "Arean",
+          "Founder / Product & Business",
+          "Visión, producto, priorización, usuarios, modelo de negocio, coordinación y capital inicial."
+        ],
+        [
+          "Jazmín",
+          "Candidata técnica",
+          "Arquitectura, datos, seguridad, producción, confiabilidad, costos y operación."
+        ],
+        [
+          "Krishna",
+          "Posible Learning & Partnerships",
+          "Research, calidad educativa, profesores, instituciones y oportunidades de piloto."
+        ]
+      ]
+    },
+    {
+      "index": 11,
+      "rows": [
+        [
+          "Riesgo",
+          "Consecuencia",
+          "Respuesta propuesta"
+        ],
+        [
+          "Scope creep",
+          "El MVP nunca se estabiliza.",
+          "Toda nueva prioridad debe reemplazar otra o quedar en la cartera futura."
+        ],
+        [
+          "Calidad del mandarín",
+          "Pérdida inmediata de confianza.",
+          "Revisión humana del contenido piloto y registro de errores."
+        ],
+        [
+          "Han o Speaking inconsistentes",
+          "La experiencia central parece poco confiable.",
+          "Banco de casos, pruebas con ruido, niveles y conversaciones completas."
+        ],
+        [
+          "Costo de voz e IA",
+          "Margen inviable o consumo impredecible.",
+          "Registrar tokens y costo por función; aplicar techos de salida, rate limits, caché, idempotencia y alertas."
+        ],
+        [
+          "Progreso inflado",
+          "Resultados que no representan aprendizaje.",
+          "Auditoría de evidencia, pre/post y trazabilidad del puntaje."
+        ],
+        [
+          "Baja retención",
+          "El producto interesa, pero no crea hábito o valor.",
+          "Entrevistar activos e inactivos y reducir el alcance si es necesario."
+        ],
+        [
+          "B2B prematuro",
+          "Se construye un portal sin comprador.",
+          "Piloto manual y Teacher Lite antes de Institutions."
+        ],
+        [
+          "Equipo sin dedicación",
+          "Responsabilidades críticas quedan sin dueño.",
+          "Prueba de trabajo, horas reales, entregables y decisiones explícitas."
+        ],
+        [
+          "Seguridad social futura",
+          "Riesgo de abuso en Connect, Community o Play.",
+          "No lanzar sin moderación, reportes, bloqueo, privacidad y masa crítica."
+        ],
+        [
+          "Gamificación mal calibrada",
+          "HanCoins, logros o ranking desplazan el aprendizaje o incentivan conductas vacías.",
+          "Mantener HanCoins separados de los puntos de Nivel General y medir retorno, calidad y comportamiento."
+        ],
+        [
+          "Falsos turnos o transcripciones inventadas",
+          "El sistema atribuye al alumno palabras que no dijo y pierde confianza.",
+          "Rechazar silencio, ruido y firmas del prompt antes de mostrar, guardar o enviar el turno; pedir repetición cuando la evidencia sea débil."
+        ],
+        [
+          "Sistemas de voz confundidos",
+          "Han Tutor, Han Companion, Speaking de Learning Journey y Speaking Lab comparten identidad u objetivos incorrectos.",
+          "Mantener rutas, prompts, memoria, métricas y pruebas separadas para cada experiencia."
+        ]
+      ]
+    }
+  ],
+  "inline_shape_count": 1,
+  "section_count": 1,
+  "sections": [
+    {
+      "index": 0,
+      "width": 7772400,
+      "height": 10058400,
+      "top_margin": 749935,
+      "bottom_margin": 713105,
+      "left_margin": 914400,
+      "right_margin": 914400
+    }
+  ],
+  "core_properties": {
+    "title": "HanGo Documento estratégico para socios",
+    "subject": "Producto actual alcance del MVP y visión de ecosistema",
+    "author": "HanGo",
+    "last_modified_by": "Arean Mendoza",
+    "created": "2013-12-23T23:15:00+00:00",
+    "modified": "2026-09-05T12:00:00+00:00"
+  }
+}

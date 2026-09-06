@@ -1,10 +1,16 @@
 # HanGo UX Principles
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official (Section 4 and nav list corrected 2026-09-05 - see audit note)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** Section 4 described the same fictional
+> Collapsed/Compact/Expanded panel model already corrected in `ui.md` -
+> the real implementation is a single floating, non-modal dialog with no
+> intermediate states. The "Official primary sections" list further down
+> also omitted "Han" and "Shop." Both corrected below.
 
 ---
 
@@ -101,19 +107,18 @@ The learner should not need to copy and paste content already visible on the pag
 
 ---
 
-## 4. The AI Teacher Must Not Obstruct Learning
+## 4. Han Must Not Obstruct Learning
 
 Persistent access does not mean permanent visual dominance.
 
-The AI Teacher should support three interface states:
-
-- Collapsed.
-- Compact.
-- Expanded.
+**Real implementation (corrected 2026-09-05):** Han supports two states,
+not three - a closed floating button, and a fully open non-modal dialog.
+There is no intermediate "compact" panel state.
 
 The main learning content must remain the visual priority.
 
-On mobile, the AI Teacher should open as a drawer or full-screen interface rather than permanently occupying limited screen space.
+On mobile, Han opens the same floating dialog as on desktop, sized to the
+viewport - not a separate drawer variant.
 
 ---
 
@@ -771,15 +776,20 @@ Priority order:
 
 Primary navigation should remain stable.
 
-Official primary sections:
+Official primary sections (corrected 2026-09-05 - `src/lib/navigation.ts`
+has eight, not five):
 
 - Dashboard.
 - Learning Journey.
 - Speaking Lab.
 - Writing Lab.
+- Han.
 - Progress.
+- Shop.
+- Settings.
 
-Settings and profile remain secondary.
+Profile remains secondary (reached from the account-corner menu, not its
+own sidebar item).
 
 The learner should not encounter multiple paths leading to the same feature without a clear reason.
 

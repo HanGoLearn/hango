@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createElement } from "react";
+import { Prisma } from "@/generated/prisma/client";
 
 const { auth, redirect, getOrCreateLearnerProfile } = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -56,5 +57,34 @@ describe("AppGroupLayout (backend authorization, independent of proxy.ts)", () =
     });
 
     expect(result).toBeTruthy();
+  });
+
+  it("redirects to the invalid-session route when the session's user no longer exists (2026-09-05 fix - a JWT session can outlive its deleted user)", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "stale-id", role: "LEARNER" } });
+    getOrCreateLearnerProfile.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError(
+        "Foreign key constraint violated on the constraint: `LearnerProfile_userId_fkey`",
+        { code: "P2003", clientVersion: "test" },
+      ),
+    );
+
+    // Can't call signOut() from this Server Component (corrected same day -
+    // it mutates cookies, only allowed in a Server Action/Route Handler),
+    // so this redirects to a route handler that does instead - see
+    // app/api/auth/invalid-session/route.ts.
+    await expect(
+      AppGroupLayout({ children: createElement("p", null, "content") }),
+    ).rejects.toThrow("REDIRECT:/api/auth/invalid-session");
+  });
+
+  it("re-throws any other unexpected error instead of treating it as an invalid session", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1", role: "LEARNER" } });
+    getOrCreateLearnerProfile.mockRejectedValueOnce(
+      new Error("some unrelated database failure"),
+    );
+
+    await expect(
+      AppGroupLayout({ children: createElement("p", null, "content") }),
+    ).rejects.toThrow("some unrelated database failure");
   });
 });

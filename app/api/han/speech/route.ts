@@ -1,6 +1,16 @@
 import { auth } from "@/lib/auth";
 import { getAiProvider } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateTtsCostUsd,
+  estimateTtsDurationSeconds,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import { serverEnv } from "@/lib/env/server";
+import { getStorageProvider } from "@/lib/storage";
+import { contentAudioKey } from "@/lib/audio-content-key";
 import {
   oralScriptPrompt,
   mergeWavAudio,
@@ -12,6 +22,26 @@ import {
 
 const OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech";
 const MAX_SPEECH_CHARACTERS = 4_000;
+
+// Same cache-miss-only throttle shape as every other TTS surface in the app
+// (welcome-audio.ts, dialogue-audio.ts, etc.) - this route previously had
+// none at all despite making both a text completion call (the "oral script"
+// rewrite) and N raw TTS calls per request (2026-09-05 cost audit finding).
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const RATE_LIMIT_MAX_GENERATIONS = 30;
+const recentGenerationTimestamps = new Map<string, number[]>();
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = (recentGenerationTimestamps.get(userId) ?? []).filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS,
+  );
+  if (timestamps.length >= RATE_LIMIT_MAX_GENERATIONS) return false;
+  timestamps.push(now);
+  recentGenerationTimestamps.set(userId, timestamps);
+  return true;
+}
+
 const HAN_VOICES = new Set([
   "alloy",
   "ash",
@@ -59,12 +89,59 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const storage = getStorageProvider();
+  // Content-addressed on the exact request shape (2026-09-05 cost audit
+  // fix): a replayed message, or a short phrase Han says often, reuses the
+  // already-generated clip instead of paying for both a fresh oral-script
+  // rewrite and a fresh TTS render every single time.
+  const cacheKey = contentAudioKey(
+    `han-speech/${voice}/${responseLanguage}/${conversational ? "conversational" : "plain"}`,
+    text,
+  );
+  if (await storage.exists(cacheKey)) {
+    const cached = await storage.download(cacheKey);
+    return new Response(new Uint8Array(cached), {
+      headers: {
+        "content-type": "audio/wav",
+        "cache-control": "private, no-store",
+      },
+    });
+  }
+
+  if (!checkRateLimit(session.user.id)) {
+    return Response.json(
+      { error: "Han's voice is temporarily unavailable" },
+      { status: 429 },
+    );
+  }
+  try {
+    await checkDailyUsageCap(session.user.id, "han-speech");
+  } catch (error) {
+    if (error instanceof DailyUsageCapExceededError) {
+      return Response.json({ error: error.message }, { status: 429 });
+    }
+    throw error;
+  }
+
   let spokenText = removePinyinForSpeech(text);
   try {
     const oralScript = await getAiProvider().complete({
       systemPrompt: oralScriptPrompt(responseLanguage, conversational),
       messages: [{ role: "user", content: text }],
       maxOutputTokens: 260,
+    });
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: "han-speech",
+      provider: oralScript.provider,
+      model: oralScript.model,
+      inputTokens: oralScript.inputTokens,
+      outputTokens: oralScript.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        oralScript.model,
+        oralScript.inputTokens,
+        oralScript.outputTokens,
+      ),
     });
     spokenText = selectUsefulOralScript(text, oralScript.content);
   } catch {
@@ -102,6 +179,16 @@ export async function POST(request: Request): Promise<Response> {
   const audio = mergeWavAudio(
     await Promise.all(responses.map((response) => response.arrayBuffer())),
   );
+  await recordAiUsage({
+    userId: session.user.id,
+    feature: "han-speech",
+    provider: "openai",
+    model: "gpt-4o-mini-tts",
+    estimatedCostUsd: estimateTtsCostUsd(spokenText),
+    durationSeconds: estimateTtsDurationSeconds(spokenText),
+    durationSource: "TEXT_LENGTH_ESTIMATE",
+  });
+  await storage.upload(cacheKey, Buffer.from(audio), "audio/wav");
   const audioBody = audio.slice().buffer as ArrayBuffer;
 
   return new Response(audioBody, {

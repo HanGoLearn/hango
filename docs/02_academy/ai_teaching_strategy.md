@@ -2,9 +2,21 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (Teaching Modes and Language Settings corrected 2026-09-05)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** "Teaching Modes" and "Language Settings"
+> below describe an early design that shipped differently - corrected in
+> place below. Separately, Principle 1 ("Guide Before Giving Answers") is
+> essentially reversed in the real Tutor-mode system prompt
+> (`src/lib/ai-context.ts`), which explicitly instructs Han to "answer the
+> exact need in the first useful sentence" and ask at most one diagnostic
+> question - optimizing for concise direct answers, not Socratic
+> discovery. This document also predates the 2026-08-31 "Han Companion"
+> persona rewrite (warm-friend tone, proactive advice, gentle recasts
+> instead of corrections), which materially changed Practice-mode
+> behavior.
 
 ---
 
@@ -126,68 +138,42 @@ Feedback should recognize improvement while remaining honest about areas requiri
 
 ---
 
-# Teaching Modes
+# Teaching Modes (real implementation)
 
-The learner can choose different tutoring modes.
+**Correction (2026-09-05):** there is no mode selector UI, and only two
+real modes exist (`AiTeacherMode = "TUTOR" | "PRACTICE"` in
+`src/lib/ai-context.ts`) - not five separately-chosen Tutor/Conversation/
+Practice/Challenge/Review modes.
 
----
+## Tutor (Han Tutor)
 
-## Tutor Mode
+Explains concepts concisely and directly - see the audit note above on
+how this differs from the "guide before answering" principle. Also
+handles in-lesson conversation practice (a Speaking step's role-play) and
+free-topic conversation (Speaking Lab's "Practice with Han").
 
-The AI explains concepts step by step.
+## Practice (Han Companion)
 
-Ideal for learning new grammar and vocabulary.
+A warm, friend-like persona (2026-08-31 rewrite) with cross-session
+personal memory, proactive advice, and gentle recasts instead of direct
+corrections - voice-only, reached from the Han hub.
 
----
-
-## Conversation Mode
-
-The AI speaks almost entirely in Chinese.
-
-The learner practices natural conversation.
-
-Corrections occur after the conversation unless communication completely breaks down.
-
----
-
-## Practice Mode
-
-The AI generates unlimited exercises based on the learner's needs.
-
-Exercises adapt automatically to performance.
+There is no separate exercise-generation "Practice Mode," difficulty-
+escalating "Challenge Mode," or spaced-review "Review Mode" - adaptive
+exercises, difficulty, and review are handled by other systems (the
+Exercise/Quiz system, Review system), not by Han directly.
 
 ---
 
-## Challenge Mode
+# Language Settings (real implementation)
 
-The AI intentionally increases difficulty.
-
-Learners receive fewer hints and more unexpected situations.
-
-Designed for advanced practice.
-
----
-
-## Review Mode
-
-The AI revisits previously studied lessons.
-
-Weak areas receive additional attention.
-
----
-
-# Language Settings
-
-Learners control the language used by the AI.
-
-Available options:
-
-- English explanations.
-- Chinese explanations.
-- Mixed mode.
-- Chinese only.
-
-These settings can be changed at any time.
+**Correction (2026-09-05):** the explanation-language setting is a single
+mutually-exclusive choice among **three** real languages - English,
+Spanish, or Chinese (`EN`/`ES`/`ZH`) - not the "English/Chinese/Mixed
+mode/Chinese only" options described above. There is no "Mixed mode."
+Spanish is a real, heavily-used, first-class option this document never
+mentioned at all - the app's own institutional report
+(`informe_academico_hango.md`) is itself written in Spanish.
 
 ---
 

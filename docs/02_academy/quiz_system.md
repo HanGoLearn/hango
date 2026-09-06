@@ -6,6 +6,17 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** same root cause as `exercises_system.md`'s
+> audit note - `QuizQuestion` reuses the same six-value `ExerciseType`
+> enum, and `prisma/schema.prisma`'s own comment on it explicitly flags
+> that this document's broader list (including audio/voice-recording/
+> paragraph question types) "depends on FASE 9-11 infrastructure that
+> doesn't exist yet." No voice-recording, drag-and-drop, or paragraph
+> question type exists. "Speaking Quiz"/"Writing Quiz" categories exist in
+> the real `QuizCategory` enum, but there's no way to actually submit
+> voice or writing through a `Quiz` - that's handled entirely outside this
+> system, by Speaking Lab and Writing Lab respectively.
+
 ---
 
 # Purpose

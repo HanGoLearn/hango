@@ -5,7 +5,6 @@ import { Check } from "lucide-react";
 import {
   ACCESSORIES,
   RARITY_PRICE,
-  animalSlug,
   type AccessorySlot,
 } from "@/lib/avatar-catalog";
 import { Button } from "@/components/ui/button";
@@ -15,8 +14,6 @@ import { Caption } from "@/components/ui/typography";
 import { cn } from "@/lib/cn";
 
 export interface AccessoryPanelProps {
-  /** Which animal's version of each accessory to render - every accessory file is drawn per-animal. */
-  animal: string;
   slot: AccessorySlot;
   ownedAccessoryKeys: string[];
   /** Real equipped key for this slot (null = nothing equipped). */
@@ -38,20 +35,21 @@ export interface AccessoryPanelProps {
  * navigation layer added nothing.
  *
  * Each tile shows the *actual* accessory art (2026-08-30 correction -
- * "pon la gorra casual ahi, no un logo"). Every accessory file is already
- * its own transparent layer meant to be composited over the base animal,
- * so rendering it alone (no base underneath) is exactly "just the
- * product," for free - no new art contract needed.
+ * "pon la gorra casual ahi, no un logo").
  *
- * Uses a `-thumb` variant of each file, not the full compositing layer
- * (2026-08-30, "que los iconos se vean mas grandes") - the real accessory
- * only occupies 7-30% of the shared 1024x1024 canvas (the rest is margin
- * needed to align on the character), so at tile size the item read as tiny
- * inside a mostly-empty box. The `-thumb` files are a one-time tight crop
- * around each item's real content (generated with sharp, not part of the
- * asset contract given to Codex) - only for this grid, never used by
- * AvatarDisplay, which still needs the full untrimmed canvas to stay
- * aligned with the other layers.
+ * One generic icon per accessory, not per animal (2026-08-30, user's own
+ * design call - "no deberia ser mejor tener solo un icono en el shop"). The
+ * grid used to show the current animal's own composited-and-isolated layer,
+ * which meant 3x the art (and 3x the chance of a leftover ear/snout fragment
+ * from the isolation process - exactly the bug class that took most of a
+ * day to chase down for the character-compositing layers). A generic icon
+ * sidesteps that failure mode entirely: it's never extracted from a
+ * character render, just a standalone product shot Codex draws once per
+ * item. Lives at `/avatar/icons/accessory-{key}.png`, tight-cropped with the
+ * same sharp script as the old per-animal `-thumb` files. Switching animals
+ * no longer changes what this grid looks like - only the live preview on
+ * the portrait (AvatarDisplay) does, which still needs the full per-animal
+ * compositing layer and is unaffected by this.
  *
  * The preview/thumbnail area and the Equip/Buy action are two separate
  * `<button>`s, not a button nested inside a `role="button"` card - nesting
@@ -59,7 +57,6 @@ export interface AccessoryPanelProps {
  * a11y test suite this project already keeps green everywhere else).
  */
 export function AccessoryPanel({
-  animal,
   slot,
   ownedAccessoryKeys,
   equippedKey,
@@ -71,7 +68,6 @@ export function AccessoryPanel({
 }: AccessoryPanelProps) {
   const owned = new Set(ownedAccessoryKeys);
   const items = ACCESSORIES.filter((item) => item.slot === slot);
-  const slug = animalSlug(animal);
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -101,7 +97,7 @@ export function AccessoryPanel({
             >
               <span className="relative flex size-28 shrink-0 items-center justify-center">
                 <Image
-                  src={`/avatar/thumbs/avatar-${slug}-${slot.toLowerCase()}-${item.key}-thumb.png`}
+                  src={`/avatar/icons/accessory-${item.key}.png`}
                   alt={item.name}
                   fill
                   sizes="112px"

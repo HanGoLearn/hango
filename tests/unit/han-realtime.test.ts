@@ -453,8 +453,8 @@ describe("buildRealtimeTurnInstructions", () => {
     );
 
     expect(instructions).toContain("required explanation language is Chinese");
-    expect(instructions).toContain("pure adaptive Mandarin conversation");
-    expect(instructions).toContain("Do not explain, translate, teach examples");
+    expect(instructions).toContain("This is Han Practice");
+    expect(instructions).toContain("a real, warm conversation with Han as a companion");
     expect(instructions).toContain("Infer intended meaning from audio plus topic");
     expect(instructions).not.toContain("Mandarin item 吧");
     expect(instructions).not.toContain("complete vocabulary-or-grammar teaching structure");

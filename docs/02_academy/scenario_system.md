@@ -6,6 +6,17 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** the "Scenario Categories" section below lists
+> 6 generic illustrative domains, the same kind of pre-real-curriculum
+> placeholder content `curriculum_structure.md` already replaced with the
+> real structure. The actual curriculum has **9 domains across 3
+> chapters** (Foundations, Daily Life, Travel, Getting Around, Making
+> Friends, Health, Work & Office, Everyday Life, Advanced Situations -
+> see `curriculum_structure.md` for the authoritative list). The core
+> mechanics described elsewhere in this document (Context =
+> location/participants/situation) match the real `Scenario.context`
+> field correctly.
+
 ---
 
 # Purpose

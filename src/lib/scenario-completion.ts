@@ -132,7 +132,11 @@ export async function getOrGenerateScenarioCompletion(
   if (
     !existing ||
     existing.earnedPoints !== earnedPoints ||
-    existing.weightedReflectionAverage !== weightedReflectionAverage
+    existing.weightedReflectionAverage !== weightedReflectionAverage ||
+    // Rewards weren't confirmed last time (a prior attempt threw partway
+    // through) - retry the whole chain even though the values above
+    // already match. Every step below is independently safe to repeat.
+    !existing.rewardsGrantedAt
   ) {
     await db.scenarioCompletion.upsert({
       where: { userId_scenarioId: { userId, scenarioId } },
@@ -150,6 +154,13 @@ export async function getOrGenerateScenarioCompletion(
     // a later rescoring update (e.g. a lesson inside got redone), it just
     // no-ops after the first real grant.
     await grantCoins(userId, 5, "scenario_completed", `scenario:${scenarioId}`);
+    // Written last, on purpose (2026-09-05 fix) - see the field's own doc
+    // comment in schema.prisma. If anything above throws, this line never
+    // runs, so the guard above correctly retries the whole chain next time.
+    await db.scenarioCompletion.update({
+      where: { userId_scenarioId: { userId, scenarioId } },
+      data: { rewardsGrantedAt: new Date() },
+    });
   }
 
   return { earnedPoints, weightedReflectionAverage, scenarioPointsBudget, chapter };

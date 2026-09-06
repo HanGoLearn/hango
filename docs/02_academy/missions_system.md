@@ -6,6 +6,14 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** this document references the Simulation Engine
+> as an integrated system — it was never built (see `simulation_engine.md`).
+> Also, the real AI-graded rubric (`src/lib/mission-evaluation.ts`) scores
+> exactly 5 dimensions (communicationSuccess, taskCompletion,
+> vocabularyUsage, grammarUsage, clarity) - fewer than the criteria listed
+> below (no pronunciation, confidence, adaptability, or listening-
+> comprehension scoring). The 5 named difficulty levels are accurate.
+
 ---
 
 # Purpose

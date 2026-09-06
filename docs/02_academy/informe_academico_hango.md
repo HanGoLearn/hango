@@ -186,7 +186,7 @@ Los umbrales de puntos (0/100/350/700/900/1150/1500/1650/1800/2000) son exactame
 
 ### 3.3.4 Cómo se calcula el puntaje de cada lección y escenario
 
-El peso de cada lección **no se asigna a mano** — se deriva automáticamente del nivel HSK real (`hskReference`, un valor de 1 a 9) que ya tiene cada una de las cerca de 224 lecciones de la plataforma en la base de datos. Esto mantiene el sistema consistente sin necesidad de juicios manuales lección por lección.
+El peso de cada lección **no se asigna a mano** — se deriva automáticamente del nivel HSK real (`hskReference`, un valor de 1 a 9) que ya tiene cada una de las 164 lecciones de la plataforma en la base de datos (verificado 2026-09-05 contra `prisma/seed.ts`: 41 escenarios × 4 lecciones cada uno; la cifra de "~224" que circulaba antes era una meta aspiracional, no el dato real). Esto mantiene el sistema consistente sin necesidad de juicios manuales lección por lección.
 
 ```
 puntos_escenario = (suma_hsk_del_escenario / suma_hsk_del_capítulo) × presupuesto_del_capítulo
@@ -325,14 +325,27 @@ Capítulo  →  Dominio  →  Escenario  →  Nivel de Dificultad  →  Lección
 
 ## 4.2 Flujo real de una lección — 6 pasos
 
-Cada lección publicada sigue un flujo fijo y consistente de **6 pasos**, en este orden:
+> **Nota de auditoría (2026-09-05):** el orden de abajo (Gramática antes de
+> Situación) es el que sigue la única lección escrita a mano
+> (`seedRestaurantLesson`), no el real de las otras 163 lecciones (el
+> 99% del contenido), que usa el helper `createFullLesson()`. Ese helper
+> genera el orden **Vocabulario → Situación → Comprensión → Gramática →
+> Expresión Oral → Reflection** — Gramática va *después* de Comprensión,
+> no antes de Situación. Se corrige la numeración abajo para reflejar el
+> caso real y mayoritario.
+
+Cada lección publicada sigue un flujo fijo y consistente de **6 pasos**, en este orden (163 de 164 lecciones):
 
 1. **Vocabulario** — se enseña antes de que el estudiante lo encuentre en contexto. Cada palabra incluye caracteres chinos, pinyin, significado en inglés, categoría gramatical y 1-3 oraciones de ejemplo, cada una con su propio audio. El estudiante es evaluado con un quiz por palabra (ver Sección 3.2.1).
-2. **Gramática** — cada punto gramatical incluye su significado, estructura, un ejemplo resuelto y una nota sobre errores comunes, seguido de ejercicios. Se presenta antes de la Situación para que el estudiante reconozca el patrón cuando lo encuentre en el diálogo.
-3. **Situación** (incluye el diálogo) — Han presenta la escena y los objetivos comunicativos numerados de la lección, y luego el diálogo modelo completo entre dos personajes (un mesero y un cliente, un entrevistador y un candidato, etc.), con audio generado de sonido natural para toda la conversación.
-4. **Comprensión** — el estudiante escucha de nuevo la conversación completa antes de ver las preguntas o el texto en chino. 5 preguntas de comprensión por lección, verificando la comprensión real del diálogo escuchado.
+2. **Situación** (incluye el diálogo) — Han presenta la escena y los objetivos comunicativos numerados de la lección, y luego el diálogo modelo completo entre dos personajes (un mesero y un cliente, un entrevistador y un candidato, etc.), con audio generado de sonido natural para toda la conversación.
+3. **Comprensión** — el estudiante escucha de nuevo la conversación completa antes de ver las preguntas o el texto en chino. 5 preguntas de comprensión por lección, verificando la comprensión real del diálogo escuchado.
+4. **Gramática** — cada punto gramatical incluye su significado, estructura, un ejemplo resuelto y una nota sobre errores comunes, seguido de ejercicios.
 5. **Expresión Oral (Speaking)** — una conversación real con Han, en personaje, construida a partir del escenario, vocabulario y gramática específicos de esa lección. Evaluada con la rúbrica de 5 métricas descrita en la Sección 8.3, limitada por cuánto del vocabulario objetivo se usó y cuán completamente se cumplió el objetivo del escenario (ver fórmula en 3.2.2).
 6. **Reflection (Reflexión)** — la pantalla final de resultados de la lección: el puntaje ponderado 0-100 descrito en la Sección 3.2.
+
+La única excepción es la lección 1 (Restaurante), escrita a mano antes de
+existir el helper, que sigue Vocabulario → Gramática → Situación →
+Comprensión → Expresión Oral → Reflection.
 
 ### Contenido que existe fuera del flujo de 6 pasos
 

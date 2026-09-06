@@ -1,3 +1,5 @@
+import { vocabularyQuestionsPerWord } from "@/lib/points-system";
+
 export interface VocabularyQuizItem {
   id: string;
   meaning: string;
@@ -221,4 +223,126 @@ function shuffle<T>(items: T[], random: () => number): T[] {
     [result[i], result[j]] = [result[j]!, result[i]!];
   }
   return result;
+}
+
+/**
+ * Which example indices are viable fill-blank candidates for a word, given
+ * its difficulty and how many examples it actually has. Extracted verbatim
+ * from vocabulary-step.tsx's inline `fillBlankIndices` logic (2026-08-31,
+ * Vocabulary rhythm variation) so `planVocabularyQuestions` below and the
+ * component compute the exact same candidate set - easiest-to-hardest,
+ * since examples are authored in that order: Beginner only ever gets the
+ * hardest (index length-1); everyone else gets easiest+hardest (0 and
+ * length-1); Advanced additionally splices in the middle example once 3+
+ * exist. Never returns more candidates than examples actually support.
+ */
+function buildFillBlankCandidateIndices(
+  difficulty: string,
+  exampleCount: number,
+): number[] {
+  const indices: number[] = [];
+  if (difficulty === "BEGINNER" && exampleCount >= 2) {
+    indices.push(exampleCount - 1);
+  }
+  if (difficulty !== "BEGINNER" && exampleCount >= 2) {
+    indices.push(0, exampleCount - 1);
+  }
+  if (difficulty === "ADVANCED" && exampleCount >= 3) {
+    indices.splice(1, 0, Math.floor((exampleCount - 1) / 2));
+  }
+  return indices;
+}
+
+export interface VocabularyQuestionPlan {
+  key: string;
+  type: "meaning" | "chineseForm" | "blank" | "order";
+  exampleIndex?: number;
+}
+
+/**
+ * Decides which questions a given word gets, how many, and in what order -
+ * the one function both the Vocabulary Step (to render) and reflection.ts's
+ * scoring (to know what was legitimately asked) call, so they can never
+ * disagree (2026-08-31, "no deberia ser mejor variar el ritmo" - see
+ * points_system.md Part 1 for the earlier fixed-sequence design this
+ * replaces). Seeds its own randomness from exactly these 4 plain inputs -
+ * callers never construct or pass a seed themselves, so there's only ever
+ * one place in the codebase that can get the seed format wrong.
+ *
+ * Candidate pool per word: meaning, reverse (chineseForm), one fill-blank
+ * per viable example index (buildFillBlankCandidateIndices above), and
+ * order (only if the word has at least one real example - mirrors the
+ * `currentExamples[orderExampleIndex] &&` guard the component already had,
+ * since pickOrderExampleIndex falls back to index 0 even with zero examples
+ * rather than throwing). Deliberately excludes "pinyin" - still a valid
+ * VocabularyQuizField for buildVocabularyQuizOptions, but retired from the
+ * walkthrough itself on 2026-08-16 (see buildSentenceOrderQuestion's doc
+ * comment); this planner must never resurrect it.
+ *
+ * Subset size is 1 to `vocabularyQuestionsPerWord(difficulty)`, clamped to
+ * however many real candidates this specific word has - a sparse-example
+ * word can have fewer viable candidates than the difficulty ceiling
+ * implies, and asking for more than exist would be a bug, not a feature.
+ *
+ * A planned entry can still fail to actually build (buildFillBlankQuestion/
+ * buildSentenceOrderQuestion return null for rare content-quality reasons,
+ * e.g. an example sentence that doesn't literally contain the word's own
+ * chineseForm) - both the renderer and the scorer independently discover
+ * the same null from the same real data, so they stay consistent even then;
+ * no special-casing needed here.
+ *
+ * Known accepted gap: if a word's examples are edited (e.g. via
+ * scripts/_insert-vocab.mjs) after a lesson is live, exampleCount can differ
+ * between when a learner took Vocabulary and when their Reflection is later
+ * (re)computed, changing the candidate pool this function builds even
+ * though the seed string is identical - the seeded *sequence* reproduces,
+ * the *plan built from it* doesn't. Same category of staleness the old
+ * fixed-formula already accepted for a changed wordCount; not solved here.
+ * Avoid running vocabulary-editing scripts against lessons with recent
+ * learner activity.
+ */
+export function planVocabularyQuestions(
+  vocabularyItemId: string,
+  lessonId: string,
+  difficulty: string,
+  exampleCount: number,
+): VocabularyQuestionPlan[] {
+  const random = seededRandom(`${lessonId}:${vocabularyItemId}`);
+
+  const fillBlankIndices = buildFillBlankCandidateIndices(
+    difficulty,
+    exampleCount,
+  );
+  const orderExampleIndex =
+    exampleCount > 0
+      ? pickOrderExampleIndex(exampleCount, fillBlankIndices)
+      : null;
+
+  const candidates: VocabularyQuestionPlan[] = [
+    { key: `${vocabularyItemId}:meaning`, type: "meaning" },
+    { key: `${vocabularyItemId}:chineseForm`, type: "chineseForm" },
+    ...fillBlankIndices.map((exampleIndex) => ({
+      key: `${vocabularyItemId}:blank:${exampleIndex}`,
+      type: "blank" as const,
+      exampleIndex,
+    })),
+    ...(orderExampleIndex !== null
+      ? [
+          {
+            key: `${vocabularyItemId}:order`,
+            type: "order" as const,
+            exampleIndex: orderExampleIndex,
+          },
+        ]
+      : []),
+  ];
+  if (candidates.length === 0) return [];
+
+  const maxCount = Math.min(
+    vocabularyQuestionsPerWord(difficulty),
+    candidates.length,
+  );
+  const subsetSize = 1 + Math.floor(random() * maxCount);
+
+  return shuffle(candidates, random).slice(0, subsetSize);
 }

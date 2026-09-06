@@ -1,6 +1,12 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import {
   buildWritingFeedbackPrompt,
   buildCustomWritingFeedbackPrompt,
@@ -138,21 +144,41 @@ export async function saveDraft(
 }
 
 async function generateFeedback(
+  userId: string,
   taskType: string,
   prompt: string,
   submittedText: string,
   referenceAnswer?: string | null,
 ): Promise<WritingFeedback> {
   try {
+    await checkDailyUsageCap(userId, "writing-feedback");
     const provider = getAiProvider();
     const result = await provider.complete({
       systemPrompt: buildWritingFeedbackPrompt(taskType, prompt, submittedText, referenceAnswer),
       messages: [{ role: "user", content: submittedText }],
       maxOutputTokens: 500,
     });
+    await recordAiUsage({
+      userId,
+      feature: "writing-feedback",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     return parseWritingFeedback(result.content);
   } catch (error) {
-    if (error instanceof AiProviderError) return DEFAULT_WRITING_FEEDBACK;
+    if (
+      error instanceof AiProviderError ||
+      error instanceof DailyUsageCapExceededError
+    ) {
+      return DEFAULT_WRITING_FEEDBACK;
+    }
     throw error;
   }
 }
@@ -175,6 +201,7 @@ export async function submitWritingAttempt(userId: string, attemptId: string) {
   });
 
   const feedback = await generateFeedback(
+    userId,
     task.type,
     task.prompt,
     attempt.draft,
@@ -248,15 +275,34 @@ export async function submitCustomWriting(
 
   let feedback: WritingFeedback;
   try {
+    await checkDailyUsageCap(userId, "writing-feedback");
     const provider = getAiProvider();
     const result = await provider.complete({
       systemPrompt: buildCustomWritingFeedbackPrompt(characteristics, text),
       messages: [{ role: "user", content: text }],
       maxOutputTokens: 500,
     });
+    await recordAiUsage({
+      userId,
+      feature: "writing-feedback",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     feedback = parseWritingFeedback(result.content);
   } catch (error) {
-    if (!(error instanceof AiProviderError)) throw error;
+    if (
+      !(error instanceof AiProviderError) &&
+      !(error instanceof DailyUsageCapExceededError)
+    ) {
+      throw error;
+    }
     feedback = DEFAULT_WRITING_FEEDBACK;
   }
 

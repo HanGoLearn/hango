@@ -48,8 +48,10 @@ describe("avatar animal selection (integration, real database)", () => {
   });
 
   it("rejects an animal that isn't available yet", async () => {
+    // TIGER was BEGINNER-locked when this test was written; it's a real,
+    // available animal now (2026-08-30) - OX is still locked.
     await createTestUser(`avatar-locked-${Date.now()}@hango.dev`);
-    const result = await saveAvatarAnimalAction("TIGER");
+    const result = await saveAvatarAnimalAction("OX");
     expect(result.status).toBe("error");
   });
 

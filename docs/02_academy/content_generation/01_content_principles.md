@@ -2,9 +2,23 @@
 
 Version: 1.0
 
-Status: Official
+Status: Aspirational — not implemented (2026-09-05 audit)
 
 Last Updated: August 2026
+
+> **This document describes a formal AI-driven content pipeline that was
+> never built, and the real project moved in the opposite direction.** All
+> curriculum content (dialogues, vocabulary, grammar, exercises, quizzes,
+> missions, writing tasks) is hand-authored as literal TypeScript data
+> directly in `prisma/seed.ts`, mainly through a `createFullLesson()`
+> helper (163 of ~164 lessons). The one place a live AI-generation fallback
+> ever existed in production - auto-generating vocabulary example sentences
+> and grammar explanations on first request - was explicitly removed on
+> 2026-08-14 in favor of hand-authored content (see the schema comments on
+> `VocabularyExample` and `Exercise.grammarPointId` in
+> `prisma/schema.prisma`). Keep this document as a design reference for a
+> possible future pipeline, not as a description of how content is made
+> today.
 
 ---
 

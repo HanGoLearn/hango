@@ -12,7 +12,6 @@ import { AccountNameSection } from "@/components/settings/account-name-section";
 import { DisplayNameSection } from "@/components/settings/display-name-section";
 import { AvatarSection } from "@/components/settings/avatar-section";
 import { LearningPreferencesSection } from "@/components/settings/learning-preferences-section";
-import { DefaultAiModeSelect } from "@/components/settings/default-ai-mode-select";
 import { RecordingRetentionSelect } from "@/components/settings/recording-retention-select";
 import { DeleteAccountButton } from "@/components/settings/delete-account-button";
 import { HanAudioSettings } from "@/components/settings/han-audio-settings";
@@ -125,7 +124,6 @@ export default async function SettingsPage() {
           <SectionTitle>Han</SectionTitle>
         </div>
         <Card className="flex flex-col gap-6">
-          <DefaultAiModeSelect initialMode={profile.defaultAiMode} />
           <HanAudioSettings
             initialResponseMode={profile.hanResponseMode}
             initialVoice={profile.hanVoice}

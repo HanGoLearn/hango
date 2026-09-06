@@ -1,10 +1,21 @@
 # HanGo — Project Overview
 
-Version: 1.0
+Version: 1.1
 
-Status: Planning
+Status: Official (this was the only company doc still marked "Planning" -
+corrected 2026-09-05; the product has shipped and is well past planning)
 
 Product Name: HanGo
+
+> **2026-09-05 audit note:** this document substantially restates
+> `01_manifesto.md`/`02_vision.md`/`03_mission.md` almost point-for-point -
+> a real consolidation candidate, kept as-is here rather than merged,
+> since that's an editorial decision for a human to make. Its "HSK 3-9,
+> intermediate to advanced" framing in the Executive Summary has the same
+> beginner-vs-intermediate conflict already flagged in
+> `docs/00_company/06_target_users.md` - see that file's audit note. The
+> "Platform Modules" list below is corrected to the real current feature
+> set.
 
 ---
 
@@ -214,19 +225,24 @@ Each competency evolves independently.
 
 # Platform Modules
 
-HanGo consists of several integrated systems.
+HanGo consists of several integrated systems (corrected 2026-09-05 - see
+`docs/01_product/navigation.md` for the authoritative current list):
 
 Dashboard
 
 Learning Journey
 
-AI Teacher
-
 Speaking Lab
 
 Writing Lab
 
-Progress Center
+Han (the learner-facing name for the AI Teacher system - a dedicated hub
+with Tutor, Companion, and Vocabulary modes, plus a floating bubble
+available everywhere)
+
+Progress
+
+Shop (HanCoins economy and avatar customization)
 
 Settings
 

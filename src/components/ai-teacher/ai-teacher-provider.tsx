@@ -57,7 +57,16 @@ interface AiTeacherState {
     contextOverride?: AiTeacherContextData,
   ) => Promise<AiChatMessage | null>;
   appendRealtimeMessage: (message: Omit<AiChatMessage, "id">) => void;
-  resetConversation: () => Promise<void>;
+  /**
+   * `extractFacts` (2026-08-31 fix): only Han Companion should ever pass
+   * `true`. Personal-memory extraction is gated on the conversation being
+   * Companion's, not merely "not role-play" - Han Tutor is also
+   * `!rolePlay`, and the original `!context.rolePlay`-only gate let Tutor
+   * conversations get extracted and read back too (real user report:
+   * Tutor "remembered" a job-interview question across sessions, which it
+   * was always agreed *never* to do - Tutor resets every time, no memory).
+   */
+  resetConversation: (extractFacts?: boolean) => Promise<void>;
 }
 
 const AiTeacherStateContext = createContext<AiTeacherState | null>(null);
@@ -135,12 +144,12 @@ export function AiTeacherProvider({
     [contextState, pathname],
   );
 
-  const resetConversation = useCallback(async () => {
+  const resetConversation = useCallback(async (extractFacts = false) => {
     setMessages([]);
     setError(null);
     setResetting(true);
     try {
-      await resetAiTeacherConversationAction();
+      await resetAiTeacherConversationAction(extractFacts);
     } finally {
       setResetting(false);
     }

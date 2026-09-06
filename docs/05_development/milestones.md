@@ -2,9 +2,20 @@
 
 Version: 1.0
 
-Status: Official
+Status: Frozen planning snapshot — not real status (2026-09-05 audit)
 
 Last Updated: August 2026
+
+> **Every milestone below is still marked "Not Started," even though the
+> app now has a working Next.js/Prisma platform, full authentication, a
+> ~65-model schema, and dozens of shipped features** (lessons, quizzes,
+> missions, Speaking/Writing Labs, AI Teacher/Han, the leaderboard, an
+> avatar/HanCoins economy, an admin cost dashboard). This document was
+> never updated past its original template - for real, current status,
+> read `project/TASKS.md`, which is actively maintained and has been the
+> single source of truth for project status since 2026-08-08. Keep this
+> file only as a historical record of the original planned milestone
+> sequence, not as a status tracker.
 
 ---
 

@@ -112,29 +112,38 @@ The AI Teacher is a permanent companion.
 
 Han lives as a floating bubble available on every authenticated page — not
 a side panel, a non-modal dialog (Radix `Dialog`, `modal={false}`) that
-stays open across navigation. It has two response modes the learner picks
-in Settings:
-
-- **Text and Audio** — a normal chat, with each reply optionally read aloud.
-- **Audio only** — the default; the assistant's own text bubble is hidden
-  and every reply autoplays, matching a real spoken-conversation feel more
-  than a chat log. Han's voice is fixed to a single voice ("cedar"),
-  chosen for sounding the most natural in testing.
+stays open across navigation. It has **three** response modes the learner
+picks in Settings (corrected 2026-09-05 - this document previously said
+two): `TEXT_ONLY`, `TEXT_AND_AUDIO`, and `AUDIO_ONLY` (the default; the
+assistant's own text bubble is hidden and every reply autoplays). Han's
+voice is fixed to a single voice ("cedar"), chosen for sounding the most
+natural in testing.
 
 For a fuller, hands-free experience, Han also supports **live two-way
 voice conversation** — the learner speaks, Han responds by voice in real
 time, no typing or tapping "play" required (`han-voice-conversation.tsx`,
 `app/api/han/realtime`).
 
+**Added 2026-09-05, missing before:** Han also has its own dedicated
+primary-nav page (`/han`, `src/components/han/han-hub.tsx`) with four
+named entry points - **Han Tutor** (the same chat as the floating
+bubble), **Han Companion** (voice-only, with cross-session personal
+memory - a distinct mode, not just a label), **Han Vocabulary** (a
+standalone word-lookup tool), and **Han Class** (a locked "Coming soon"
+teaser). Tutor and Companion in particular ARE separately-branded,
+separately-reachable screens - see the correction to "Main Modes" below.
+
 ---
 
 # Main Modes (real implementation)
 
-Rather than the numbered list of six separate "modes" originally planned
-here, Han operates as one continuous chat/voice assistant whose behavior
-adapts to what the learner is doing and asking — the underlying
-capabilities below are all real and available through that single
-interface, not separate screens the learner switches between.
+**Correction (2026-09-05):** the claim below that Han is "one continuous
+chat/voice assistant... not separate screens the learner switches
+between" is no longer accurate as of the Han hub (see above) - Tutor and
+Companion are explicitly separate, named modes reached from their own
+hub. The underlying capabilities described below (tutoring, conversation
+partner, correction/feedback) are still real and mostly live inside Han
+Tutor specifically.
 
 **Tutoring and explanation** — the learner can ask Han to explain any
 grammar point, vocabulary word, or "why" question ("Why is 了 used here?",

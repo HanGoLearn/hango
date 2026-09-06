@@ -13,6 +13,7 @@ import {
   type VocabularyQuizAttemptInput,
 } from "@/lib/vocabulary-interactivity";
 import { TtsProviderError } from "@/lib/tts";
+import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 
 export type VocabularyAudioActionResult =
   { ok: true; url: string } | { ok: false; error: string };
@@ -24,6 +25,7 @@ export type VocabularyExamplesActionResult =
 function toErrorMessage(error: unknown): string {
   if (
     error instanceof VocabularyInteractivityRateLimitError ||
+    error instanceof DailyUsageCapExceededError ||
     error instanceof TtsProviderError
   ) {
     return error.message;

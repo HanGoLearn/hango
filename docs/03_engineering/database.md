@@ -6,6 +6,18 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** the generic "six domains" framing isn't
+> contradicted by anything real (the schema has grown to ~65 models across
+> many more areas than that, but no specific count was claimed here to be
+> wrong). Entirely silent on the real connection setup worth knowing:
+> `src/lib/db.ts` uses the `@prisma/adapter-pg` driver adapter with
+> `max: 20` pooled connections (raised from `pg`'s default of 10 on
+> 2026-08-30 after observed contention), and the database is currently
+> reached via Prisma Postgres's **direct**, unpooled endpoint rather than
+> its pooled one - a known, not-yet-applied optimization for the app's
+> serverless deployment shape (see `project/db-operations-optimization.md`
+> for detail).
+
 ---
 
 # Purpose

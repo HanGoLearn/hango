@@ -4,6 +4,12 @@ import { getTtsProvider } from "@/lib/tts";
 import { getStorageProvider } from "@/lib/storage";
 import { mergeWavAudio } from "@/lib/han-speech";
 import { contentAudioKey } from "@/lib/audio-content-key";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  estimateTtsCostUsd,
+  estimateTtsDurationSeconds,
+} from "@/lib/ai-usage";
 
 // Generation is cached per line/dialogue (see below) so this only throttles
 // the cold-cache path — repeated playback of already-generated audio never
@@ -43,10 +49,7 @@ function checkRateLimit(userId: string): void {
 const VOICES = ["cedar", "marin"] as const;
 
 type LessonDifficulty =
-  | "BEGINNER"
-  | "INTERMEDIATE"
-  | "UPPER_INTERMEDIATE"
-  | "ADVANCED";
+  "BEGINNER" | "INTERMEDIATE" | "UPPER_INTERMEDIATE" | "ADVANCED";
 
 // Pace scales with the lesson's level (2026-08-23, user request): "natural
 // conversational speed" is the whole point at Advanced, but the same
@@ -130,7 +133,10 @@ async function ensureLineAudioKey(
   // row with a fresh id, but the exact same Chinese text + voice + pace
   // resolves to the exact same key, so an already-generated file is reused
   // instead of re-paying OpenAI for identical words.
-  const key = contentAudioKey(`dialogue-audio/${voice}/${difficulty}`, line.chineseText);
+  const key = contentAudioKey(
+    `dialogue-audio/${voice}/${difficulty}`,
+    line.chineseText,
+  );
   if (await storage.exists(key)) {
     await db.dialogueLine.update({
       where: { id: line.id },
@@ -140,6 +146,7 @@ async function ensureLineAudioKey(
   }
 
   checkRateLimit(userId);
+  await checkDailyUsageCap(userId, "dialogue-audio");
 
   const tts = getTtsProvider();
   const result = await tts.synthesize(
@@ -147,6 +154,15 @@ async function ensureLineAudioKey(
     voice,
     buildDialogueLineInstructions(difficulty, line.chineseText),
   );
+  await recordAiUsage({
+    userId,
+    feature: "dialogue-audio",
+    provider: result.provider,
+    model: result.model,
+    estimatedCostUsd: estimateTtsCostUsd(line.chineseText),
+    durationSeconds: estimateTtsDurationSeconds(line.chineseText),
+    durationSource: "TEXT_LENGTH_ESTIMATE",
+  });
 
   await storage.upload(key, result.audio, result.contentType);
   await db.dialogueLine.update({

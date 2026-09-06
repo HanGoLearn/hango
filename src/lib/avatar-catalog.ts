@@ -66,18 +66,20 @@ export interface AnimalDefinition {
 
 /**
  * The 12 zodiac signs, plain versions only (no "jade rabbit"/"golden
- * monkey" styling - user's explicit correction). Only the first 3 are
- * available at launch; the other 9 exist here so the "coming soon" list is
- * real data, not a placeholder, and so unlocking one later is a single
- * `available: true` flip.
+ * monkey" styling - user's explicit correction). Rabbit/Monkey/Dog shipped
+ * at launch, Tiger unlocked 2026-08-31 once its art was ready; the
+ * remaining 8 exist here so the "coming soon" list is real data, not a
+ * placeholder, and so unlocking one later is a single `available: true`
+ * flip - no other code changes needed, AvatarDisplay/AnimalGrid already
+ * resolve any animal's files generically off its key.
  */
 export const ANIMALS: AnimalDefinition[] = [
   { key: "RABBIT", name: "Rabbit", available: true },
   { key: "MONKEY", name: "Monkey", available: true },
   { key: "DOG", name: "Dog", available: true },
-  { key: "RAT", name: "Rat", available: false },
+  { key: "TIGER", name: "Tiger", available: true },
   { key: "OX", name: "Ox", available: false },
-  { key: "TIGER", name: "Tiger", available: false },
+  { key: "RAT", name: "Rat", available: false },
   { key: "DRAGON", name: "Dragon", available: false },
   { key: "SNAKE", name: "Snake", available: false },
   { key: "HORSE", name: "Horse", available: false },

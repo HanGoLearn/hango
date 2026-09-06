@@ -6,6 +6,13 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** this document's "AI Conversation Extension"
+> and Simulation references describe the Simulation Engine as a real
+> system — it was never built (see `simulation_engine.md`). Also, "Slow
+> Speed" audio and a separate "Repeat Mode" playback control don't exist -
+> each dialogue line has exactly one cached audio file, no slow-speed
+> variant.
+
 ---
 
 # Purpose

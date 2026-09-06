@@ -2,9 +2,23 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (CI section added 2026-09-05)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the unit/component/integration/smoke test
+> tiers described below are real and match `package.json`/the real
+> `tests/` folder structure exactly (57 unit, 8 component, 38 integration,
+> 1 smoke file, as of this audit). What's missing: `.github/workflows/ci.yml`
+> (added 2026-09-05) - the project's first real CI, running the full
+> suite against a real Postgres service container on every push/PR. Its
+> header comment notes that before this, "all 98+ tests only ever ran if
+> someone remembered to run them by hand." The real pipeline has no
+> standalone formatting-check step and no end-to-end test tier - if this
+> document's "Continuous Integration" section lists either, it's
+> describing a plan that shipped differently: typecheck → lint →
+> test:unit → test:component → test:integration → test:smoke, nothing
+> more.
 
 ---
 

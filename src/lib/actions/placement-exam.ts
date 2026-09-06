@@ -21,6 +21,12 @@ import {
 } from "@/lib/placement-listening-audio";
 import { TtsProviderError } from "@/lib/tts";
 import { getAiProvider } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import {
   buildPlacementSpeakingEvaluationPrompt,
@@ -38,9 +44,37 @@ export type PlacementActionResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string };
 
+// Its own limiter, same copy-paste convention as speaking-data.ts's
+// checkScenarioRateLimit and every other AI-cost file in this codebase -
+// rate limiting isn't shared infrastructure here. This call had NO
+// limiter at all until the 2026-09-05 cost audit found it (1,800 tokens +
+// 45s timeout, the single most expensive per-call budget of any text
+// completion in the app) - window/max mirrors speaking-data.ts's own
+// precedent for a comparably costly full AI generation call.
+export class PlacementSpeakingGradingRateLimitError extends Error {}
+
+const GRADING_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const GRADING_RATE_LIMIT_MAX = 10;
+const recentGradingTimestamps = new Map<string, number[]>();
+
+function checkGradingRateLimit(userId: string): void {
+  const now = Date.now();
+  const timestamps = (recentGradingTimestamps.get(userId) ?? []).filter(
+    (t) => now - t < GRADING_RATE_LIMIT_WINDOW_MS,
+  );
+  if (timestamps.length >= GRADING_RATE_LIMIT_MAX) {
+    throw new PlacementSpeakingGradingRateLimitError(
+      "You've requested a lot of speaking evaluations recently. Please wait a bit before trying again.",
+    );
+  }
+  timestamps.push(now);
+  recentGradingTimestamps.set(userId, timestamps);
+}
+
 function toErrorMessage(error: unknown): string {
   if (
     error instanceof PlacementAudioRateLimitError ||
+    error instanceof DailyUsageCapExceededError ||
     error instanceof TtsProviderError
   ) {
     return error.message;
@@ -199,6 +233,8 @@ export async function gradePlacementSpeakingAction(
     .slice(0, 10);
 
   try {
+    checkGradingRateLimit(session.user.id);
+    await checkDailyUsageCap(session.user.id, "placement-grading");
     const result = await getAiProvider().complete({
       systemPrompt: buildPlacementSpeakingEvaluationPrompt(
         scenario,
@@ -211,11 +247,30 @@ export async function gradePlacementSpeakingAction(
       maxOutputTokens: 1_800,
       timeoutMs: 45_000,
     });
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: "placement-grading",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
+    });
     return {
       ok: true,
       value: parsePlacementSpeakingEvaluation(result.content),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof PlacementSpeakingGradingRateLimitError) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof DailyUsageCapExceededError) {
+      return { ok: false, error: error.message };
+    }
     return {
       ok: false,
       error: "Speaking evaluation is temporarily unavailable. Please try this level again.",

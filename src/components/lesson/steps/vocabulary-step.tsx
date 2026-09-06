@@ -27,8 +27,8 @@ import {
   buildVocabularyQuizOptions,
   buildFillBlankQuestion,
   buildSentenceOrderQuestion,
-  pickOrderExampleIndex,
   seededRandom,
+  planVocabularyQuestions,
   type VocabularyQuizField,
   type VocabularyQuizItem,
 } from "@/lib/content/vocabulary-quiz";
@@ -57,23 +57,30 @@ const DEFAULT_HAN_VOICE = "cedar";
  * (`recordVocabularyWordSeenAction`) to mark the word as seen for progress
  * tracking, without re-fetching its content.
  *
- * Difficulty-scaled question plan (user request, 2026-08-11): Beginner asks
- * meaning, reverse-translation, one "complete the sentence" pulled from the
- * word's hardest example, and one "put the sentence in order" — 4 total,
- * easy to hard, enough to show real learning instead of just the original 2.
- * Intermediate adds a second fill-blank from the word's easiest example — 5
- * total. Advanced adds a third fill-blank from a middle-difficulty example —
- * 6 total. Fill-blank/order questions only render once enough examples are
- * loaded, since they need real sentence text, not just the word list.
+ * Rhythm variation + quick test (2026-08-31, "no deberia ser mejor tener
+ * ritmo variado" - marketing/retention conversation comparing HanGo to
+ * Duolingo). The walkthrough used to ask every word the exact same fixed
+ * sequence, every lesson, every time - 24-36 questions per lesson just in
+ * this step. Two changes:
  *
- * Pinyin recognition swapped for sentence-ordering (2026-08-16, user
- * feedback): pinyin, meaning, and reverse-translation all tested the exact
- * same character<->meaning/sound association seconds apart with the answer
- * still on screen, and none of the 4 questions required the learner to
- * actually construct anything. The swap is a like-for-like count
- * replacement (still 4/5/6 total), so `vocabularyQuestionsPerWord()`
- * (points-system.ts) needed no change — see points_system.md Part 1.
+ * 1. Which questions a word gets, how many, and in what order is now
+ *    decided by `planVocabularyQuestions` (vocabulary-quiz.ts) - the same
+ *    function `reflection.ts`'s scoring calls, seeded only off
+ *    (lessonId, vocabularyItemId, difficulty, exampleCount), so client and
+ *    server always agree on what was legitimately asked without either
+ *    side trusting the other's report of it.
+ * 2. A learner can opt into a "quick test" - one meaning-only question per
+ *    word, all up front - instead of the full walkthrough. Scoring
+ *    80%+ skips straight to `onContinue()` with the real (not inflated)
+ *    score; scoring below that drops into the normal walkthrough, but only
+ *    for the words answered wrong, not all of them. Quick-test attempts use
+ *    their own `:quicktest` questionKey suffix (never `:meaning`), so they
+ *    can never collide with or double-count against a walkthrough attempt.
  */
+const QUICK_TEST_PASS_THRESHOLD = 0.8;
+
+type VocabularyMode = "choose" | "quick-test" | "walkthrough";
+
 export function VocabularyStep({
   vocabulary,
   difficulty,
@@ -86,10 +93,16 @@ export function VocabularyStep({
   onContinue: () => void;
 }) {
   const { showPinyin, showTranslation } = useLessonDisplayPrefs();
+  const [mode, setMode] = useState<VocabularyMode>("choose");
+  const [activeVocabulary, setActiveVocabulary] = useState(vocabulary);
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [answeredByQuestion, setAnsweredByQuestion] = useState<
     Record<string, string>
+  >({});
+  const [quickTestIndex, setQuickTestIndex] = useState(0);
+  const [quickTestAnswers, setQuickTestAnswers] = useState<
+    Record<string, { optionId: string; isCorrect: boolean }>
   >({});
   const seenWordIdsRef = useRef<Set<string>>(new Set());
   /**
@@ -103,9 +116,9 @@ export function VocabularyStep({
    */
   const pendingAttemptsRef = useRef<VocabularyQuizAttemptInput[]>([]);
 
-  const current = vocabulary[index];
+  const current = activeVocabulary[index];
   const currentItem = current?.vocabularyItem;
-  const isLast = index === vocabulary.length - 1;
+  const isLast = index === activeVocabulary.length - 1;
   const currentExamples = currentItem?.examples ?? [];
 
   function flushPendingAttempts() {
@@ -136,7 +149,10 @@ export function VocabularyStep({
   // Memoized: a stable reference is required so the option-shuffling
   // useMemo calls downstream (VocabularyQuizCheck/VocabularyFillBlankCheck)
   // actually skip recompute on re-render instead of seeing a "new" array
-  // every time and reshuffling anyway.
+  // every time and reshuffling anyway. Deliberately built from the *full*
+  // `vocabulary` list, not `activeVocabulary` - distractor variety for any
+  // question shouldn't shrink just because the walkthrough is only
+  // covering a quick-test-remediation subset of words.
   const quizItems: VocabularyQuizItem[] = useMemo(
     () =>
       vocabulary.map((v) => ({
@@ -148,7 +164,20 @@ export function VocabularyStep({
     [vocabulary],
   );
 
-  if (!currentItem) {
+  const plan = useMemo(
+    () =>
+      currentItem
+        ? planVocabularyQuestions(
+            currentItem.id,
+            lessonId,
+            difficulty,
+            currentExamples.length,
+          )
+        : [],
+    [currentItem, lessonId, difficulty, currentExamples.length],
+  );
+
+  if (vocabulary.length === 0) {
     return (
       <div className="flex flex-col gap-4">
         <SectionTitle>Vocabulary</SectionTitle>
@@ -180,71 +209,171 @@ export function VocabularyStep({
     pendingAttemptsRef.current.push({ vocabularyItemId, questionKey, isCorrect });
   }
 
+  function startWalkthrough(words: LessonWithContent["vocabulary"]) {
+    setActiveVocabulary(words);
+    setIndex(0);
+    setMode("walkthrough");
+  }
+
+  function finishQuickTest(
+    finalAnswers: Record<string, { optionId: string; isCorrect: boolean }>,
+  ) {
+    const attempts: VocabularyQuizAttemptInput[] = vocabulary.map((v) => ({
+      vocabularyItemId: v.vocabularyItem.id,
+      questionKey: `${v.vocabularyItem.id}:quicktest`,
+      isCorrect: finalAnswers[v.vocabularyItem.id]?.isCorrect ?? false,
+    }));
+    void recordVocabularyQuizAttemptsAction(lessonId, attempts);
+
+    const passedCount = attempts.filter((a) => a.isCorrect).length;
+    const passed = passedCount / vocabulary.length >= QUICK_TEST_PASS_THRESHOLD;
+
+    if (passed) {
+      onContinue();
+      return;
+    }
+    const missed = vocabulary.filter(
+      (v) => !finalAnswers[v.vocabularyItem.id]?.isCorrect,
+    );
+    startWalkthrough(missed);
+  }
+
   const cardStyle: CSSProperties = {
     animation: "card-slide-in var(--duration-slow) var(--ease-standard)",
     ["--card-slide-x" as string]: direction === "forward" ? "24px" : "-24px",
   };
 
-  // Fill-blank example indices, easiest to hardest — examples are authored
-  // in that order, so index 0 is always the simplest, the last is always
-  // the hardest.
-  const fillBlankIndices: number[] = [];
-  if (difficulty === "BEGINNER" && currentExamples.length >= 2) {
-    // Beginner gets one fill-blank, from the hardest of its 3 examples —
-    // the 4th and final question in the easy-to-hard progression (user
-    // request, 2026-08-11: 2 questions no longer showed real learning).
-    fillBlankIndices.push(currentExamples.length - 1);
-  }
-  if (difficulty !== "BEGINNER" && currentExamples.length >= 2) {
-    fillBlankIndices.push(0, currentExamples.length - 1);
-  }
-  if (difficulty === "ADVANCED" && currentExamples.length >= 3) {
-    fillBlankIndices.splice(
-      1,
-      0,
-      Math.floor((currentExamples.length - 1) / 2),
+  if (mode === "choose") {
+    return (
+      <div className="flex flex-col gap-4">
+        <SectionTitle>Vocabulary</SectionTitle>
+
+        <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
+          <Body className="max-w-[70%] font-display text-[1.15rem] italic">
+            &ldquo;Here are the words you&rsquo;ll need for this lesson.&rdquo;
+          </Body>
+          <div className="mt-2">
+            <HanSpeechButton
+              text="Here are the words you'll need for this lesson."
+              voice={DEFAULT_HAN_VOICE}
+              responseLanguage="English"
+            />
+          </div>
+          <HanMascot
+            pose="curious"
+            size={132}
+            className="pointer-events-none absolute -right-3 -bottom-3 drop-shadow-[0_12px_18px_rgba(0,0,0,0.25)]"
+          />
+        </div>
+
+        <div className="rounded-card bg-surface p-4">
+          <Body className="font-semibold">
+            Already know these {vocabulary.length} words?
+          </Body>
+          <Caption className="mt-1 text-text-muted">
+            Take a quick test - score {Math.round(QUICK_TEST_PASS_THRESHOLD * 100)}%+
+            and skip straight to Grammar. Anything you miss, you&rsquo;ll
+            practice properly right after.
+          </Caption>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button type="button" onClick={() => setMode("quick-test")}>
+              Quick test
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => startWalkthrough(vocabulary)}
+            >
+              Normal walkthrough
+            </Button>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  // One sentence-order question per word, always shown (replaces the old
-  // pinyin-recognition question) - picks an example fill-blank hasn't
-  // already claimed, so the two never quiz the same sentence.
-  const orderExampleIndex = pickOrderExampleIndex(
-    currentExamples.length,
-    fillBlankIndices,
-  );
+  if (mode === "quick-test") {
+    const qtEntry = vocabulary[quickTestIndex];
+    const qtItem = qtEntry?.vocabularyItem;
+    if (!qtItem) return null;
+    const isLastQt = quickTestIndex === vocabulary.length - 1;
+    const qtAnswer = quickTestAnswers[qtItem.id];
+
+    return (
+      <div className="flex flex-col gap-4">
+        <SectionTitle>Quick test</SectionTitle>
+        <div
+          className="flex items-center justify-center gap-1.5"
+          role="progressbar"
+          aria-valuenow={quickTestIndex + 1}
+          aria-valuemin={1}
+          aria-valuemax={vocabulary.length}
+          aria-label="Quick test progress"
+        >
+          {vocabulary.map((v, i) => (
+            <span
+              key={v.vocabularyItem.id}
+              className={cn(
+                "h-1.5 w-6 rounded-full transition-colors duration-base ease-standard",
+                i < quickTestIndex && "bg-secondary-500",
+                i === quickTestIndex && "bg-accent-500",
+                i > quickTestIndex && "bg-border",
+              )}
+            />
+          ))}
+        </div>
+
+        <VocabularyQuizCheck
+          key={qtItem.id}
+          question={`What does ${qtItem.chineseForm} mean?`}
+          items={quizItems}
+          currentItemId={qtItem.id}
+          field="meaning"
+          selectedOptionId={qtAnswer?.optionId}
+          onAnswer={(optionId, isCorrect) =>
+            setQuickTestAnswers((previous) => ({
+              ...previous,
+              [qtItem.id]: { optionId, isCorrect },
+            }))
+          }
+        />
+
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <Caption className="text-text-muted">
+            {quickTestIndex + 1} of {vocabulary.length}
+          </Caption>
+          <Button
+            type="button"
+            onClick={() => {
+              if (isLastQt) {
+                finishQuickTest(quickTestAnswers);
+              } else {
+                setQuickTestIndex(quickTestIndex + 1);
+              }
+            }}
+          >
+            {isLastQt ? "Finish quick test" : "Next"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentItem) return null;
 
   return (
     <div className="flex flex-col gap-4">
       <SectionTitle>Vocabulary</SectionTitle>
-
-      <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
-        <Body className="max-w-[70%] font-display text-[1.15rem] italic">
-          &ldquo;Here are the words you&rsquo;ll need for this lesson.&rdquo;
-        </Body>
-        <div className="mt-2">
-          <HanSpeechButton
-            text="Here are the words you'll need for this lesson."
-            voice={DEFAULT_HAN_VOICE}
-            responseLanguage="English"
-          />
-        </div>
-        <HanMascot
-          pose="curious"
-          size={132}
-          className="pointer-events-none absolute -right-3 -bottom-3 drop-shadow-[0_12px_18px_rgba(0,0,0,0.25)]"
-        />
-      </div>
 
       <div
         className="flex items-center justify-center gap-1.5"
         role="progressbar"
         aria-valuenow={index + 1}
         aria-valuemin={1}
-        aria-valuemax={vocabulary.length}
+        aria-valuemax={activeVocabulary.length}
         aria-label="Word progress"
       >
-        {vocabulary.map((v, i) => (
+        {activeVocabulary.map((v, i) => (
           <span
             key={v.vocabularyItem.id}
             className={cn(
@@ -323,79 +452,66 @@ export function VocabularyStep({
           />
         </div>
 
-        <VocabularyQuizCheck
-          question={`What does ${currentItem.chineseForm} mean?`}
-          items={quizItems}
-          currentItemId={currentItem.id}
-          field="meaning"
-          selectedOptionId={answeredByQuestion[`${currentItem.id}:meaning`]}
-          onAnswer={(optionId, isCorrect) =>
-            handleAnswer(
-              `${currentItem.id}:meaning`,
-              optionId,
-              isCorrect,
-              currentItem.id,
-            )
-          }
-        />
+        {plan.map((entry) => {
+          const selectedOptionId = answeredByQuestion[entry.key];
+          const onAnswer = (optionId: string, isCorrect: boolean) =>
+            handleAnswer(entry.key, optionId, isCorrect, currentItem.id);
 
-        <VocabularyQuizCheck
-          question={`Which word means "${currentItem.meaning}"?`}
-          items={quizItems}
-          currentItemId={currentItem.id}
-          field="chineseForm"
-          selectedOptionId={
-            answeredByQuestion[`${currentItem.id}:chineseForm`]
+          if (entry.type === "meaning") {
+            return (
+              <VocabularyQuizCheck
+                key={entry.key}
+                question={`What does ${currentItem.chineseForm} mean?`}
+                items={quizItems}
+                currentItemId={currentItem.id}
+                field="meaning"
+                selectedOptionId={selectedOptionId}
+                onAnswer={onAnswer}
+              />
+            );
           }
-          onAnswer={(optionId, isCorrect) =>
-            handleAnswer(
-              `${currentItem.id}:chineseForm`,
-              optionId,
-              isCorrect,
-              currentItem.id,
-            )
+          if (entry.type === "chineseForm") {
+            return (
+              <VocabularyQuizCheck
+                key={entry.key}
+                question={`Which word means "${currentItem.meaning}"?`}
+                items={quizItems}
+                currentItemId={currentItem.id}
+                field="chineseForm"
+                selectedOptionId={selectedOptionId}
+                onAnswer={onAnswer}
+              />
+            );
           }
-        />
-
-        {fillBlankIndices.map((exampleIndex, position) => (
-          <VocabularyFillBlankCheck
-            key={`${currentItem.id}:blank:${exampleIndex}`}
-            items={quizItems}
-            currentItemId={currentItem.id}
-            exampleText={currentExamples[exampleIndex]!.chineseText}
-            hint={position === 0 ? "Complete the sentence" : undefined}
-            selectedOptionId={
-              answeredByQuestion[`${currentItem.id}:blank:${exampleIndex}`]
-            }
-            onAnswer={(optionId, isCorrect) =>
-              handleAnswer(
-                `${currentItem.id}:blank:${exampleIndex}`,
-                optionId,
-                isCorrect,
-                currentItem.id,
-              )
-            }
-          />
-        ))}
-
-        {currentExamples[orderExampleIndex] && (
-          <VocabularySentenceOrderCheck
-            key={`${currentItem.id}:order`}
-            items={quizItems}
-            currentItemId={currentItem.id}
-            exampleText={currentExamples[orderExampleIndex]!.chineseText}
-            exampleTranslation={currentExamples[orderExampleIndex]!.translation}
-            answered={Boolean(answeredByQuestion[`${currentItem.id}:order`])}
-            onAnswer={(optionId, isCorrect) =>
-              handleAnswer(
-                `${currentItem.id}:order`,
-                optionId,
-                isCorrect,
-                currentItem.id,
-              )
-            }
-          />
-        )}
+          if (entry.type === "blank") {
+            const example = currentExamples[entry.exampleIndex!];
+            if (!example) return null;
+            return (
+              <VocabularyFillBlankCheck
+                key={entry.key}
+                items={quizItems}
+                currentItemId={currentItem.id}
+                exampleText={example.chineseText}
+                hint="Complete the sentence"
+                selectedOptionId={selectedOptionId}
+                onAnswer={onAnswer}
+              />
+            );
+          }
+          const orderExample = currentExamples[entry.exampleIndex!];
+          if (!orderExample) return null;
+          return (
+            <VocabularySentenceOrderCheck
+              key={entry.key}
+              items={quizItems}
+              currentItemId={currentItem.id}
+              exampleText={orderExample.chineseText}
+              exampleTranslation={orderExample.translation}
+              answered={Boolean(selectedOptionId)}
+              onAnswer={onAnswer}
+            />
+          );
+        })}
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-3">
@@ -410,7 +526,7 @@ export function VocabularyStep({
         </button>
 
         <Caption className="text-text-muted">
-          {index + 1} of {vocabulary.length}
+          {index + 1} of {activeVocabulary.length}
         </Caption>
 
         <Button

@@ -6,6 +6,14 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** largely a philosophy document, and broadly
+> still what the real AI prompts encode - low risk. Two omissions worth
+> knowing: it predates the 2026-08-31 "Han Companion" persona (a distinct,
+> warm-friend voice-only mode with personal memory - see
+> `ai_teaching_strategy.md`'s audit note), and it never mentions Spanish,
+> a real, heavily-used explanation-language option alongside English and
+> Chinese.
+
 ---
 
 # Purpose

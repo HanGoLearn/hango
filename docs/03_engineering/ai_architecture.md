@@ -2,9 +2,23 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (audit note added 2026-09-05)
 
-Last Updated: August 2026
+Last Updated: 2026-09-05
+
+> **2026-09-05 audit note:** the "AI Orchestrator" and six named "AI
+> Components" (Conversation/Evaluation/Recommendation/Content Generation/
+> Simulation/Memory Engine) below don't exist as modules - no
+> orchestrator, and no file or component named after any of those engines
+> anywhere in the codebase. What's real and does match the doc's
+> provider-abstraction intent: `src/lib/ai/index.ts`'s `getAiProvider()`
+> factory (OpenAI → Anthropic → Mock fallback chain), mirrored by
+> `getTtsProvider()`/`getSttProvider()` - business logic never imports a
+> vendor SDK directly. Missing entirely: the real AI-cost-tracking system
+> (`src/lib/ai-usage.ts`, added 2026-09-05) - every real paid call across
+> ~20 features is logged with an estimated cost, and a per-user daily USD
+> cap is enforced, configurable from an admin-only dashboard. See
+> `api.md`'s "AI cost tracking" section for the current shape.
 
 ---
 

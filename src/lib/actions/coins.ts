@@ -7,6 +7,7 @@ export interface UnseenCoinGain {
   id: string;
   amount: number;
   reason: string;
+  adminMessage: string | null;
 }
 
 /**
@@ -22,11 +23,23 @@ export async function getUnseenCoinGainsAction(): Promise<UnseenCoinGain[]> {
   const session = await auth();
   if (!session?.user?.id) return [];
 
-  return db.coinLedgerEntry.findMany({
-    where: { userId: session.user.id, seenAt: null, amount: { gt: 0 } },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, amount: true, reason: true },
-  });
+  return db.coinLedgerEntry
+    .findMany({
+      where: { userId: session.user.id, seenAt: null, amount: { gt: 0 } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        amount: true,
+        reason: true,
+        adminCoinGrant: { select: { message: true } },
+      },
+    })
+    .then((rows) =>
+      rows.map(({ adminCoinGrant, ...row }) => ({
+        ...row,
+        adminMessage: adminCoinGrant?.message ?? null,
+      })),
+    );
 }
 
 export async function markCoinGainsSeenAction(ids: string[]): Promise<void> {

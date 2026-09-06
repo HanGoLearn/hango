@@ -19,6 +19,7 @@ import { Chip } from "@/components/ui/chip";
 import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
 import { AchievementIcon } from "@/components/achievements/achievement-icon";
 import { AvatarDisplay } from "@/components/avatar/avatar-display";
+import { WordsOfTheDayCard } from "@/components/dashboard/words-of-the-day-card";
 import { CURRENT_MAX_GENERAL_LEVEL_POINTS } from "@/lib/points-system";
 import { getDailyHanTip } from "@/lib/han-tips";
 import { cn } from "@/lib/cn";
@@ -350,6 +351,15 @@ export default async function DashboardPage() {
             </div>
             <ProgressBar value={generalLevelPercent} />
           </Link>
+
+          {/* Words of the Day (2026-09-01) - the one sidebar entry that
+              works for a learner with zero points and zero rank yet: 3
+              words picked for their real level, shared with everyone else
+              at that level today (words-of-the-day.ts), zero AI cost to
+              show. Placed right after General Level, before the
+              Leaderboard/Achievements/Avatar teasers below - those reward
+              progress a brand-new learner doesn't have yet. */}
+          <WordsOfTheDayCard words={data.wordsOfTheDay} />
 
           {/* Leaderboard teaser (2026-08-29) - top 3 + "your rank" only;
               the full ranked list lives on its own page (getLeaderboardTop

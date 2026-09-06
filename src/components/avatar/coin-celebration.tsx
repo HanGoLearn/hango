@@ -10,6 +10,14 @@ import {
 } from "@/lib/actions/coins";
 import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
 import { Body, Caption } from "@/components/ui/typography";
+import { HanMascot } from "@/components/ui/han-mascot";
+import { Button } from "@/components/ui/button";
+import {
+  Modal,
+  ModalContent,
+  ModalDescription,
+  ModalTitle,
+} from "@/components/ui/modal";
 
 const REASON_LABELS: Record<string, string> = {
   lesson_completed: "Lesson completed",
@@ -54,7 +62,7 @@ export function CoinCelebration() {
   const current = queue[0] ?? null;
 
   useEffect(() => {
-    if (!current) return;
+    if (!current || current.adminMessage) return;
     const timer = setTimeout(() => {
       void markCoinGainsSeenAction([current.id]);
       setQueue((q) => q.slice(1));
@@ -68,6 +76,34 @@ export function CoinCelebration() {
     setQueue((q) => q.slice(1));
   };
 
+  if (current?.adminMessage) {
+    return (
+      <Modal
+        open
+        onOpenChange={(open) => {
+          if (!open) dismiss();
+        }}
+      >
+        <ModalContent className="flex max-w-lg flex-col items-center gap-3 text-center">
+          <HanMascot pose="celebrating" size={100} />
+          <div className="flex items-center gap-2 text-accent-300">
+            <HanCoinsIcon size={30} />
+            <span className="font-display text-page-title font-semibold">
+              +{current.amount.toLocaleString("es-CO")}
+            </span>
+          </div>
+          <ModalTitle>¡Recibiste HanCoins!</ModalTitle>
+          <ModalDescription className="whitespace-pre-wrap text-body">
+            {current.adminMessage}
+          </ModalDescription>
+          <Button type="button" onClick={dismiss}>
+            Continuar
+          </Button>
+        </ModalContent>
+      </Modal>
+    );
+  }
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center px-4 md:bottom-6">
       <AnimatePresence>
@@ -76,7 +112,9 @@ export function CoinCelebration() {
             type="button"
             key={current.id}
             onClick={dismiss}
-            initial={reduceMotion ? undefined : { opacity: 0, y: 12, scale: 0.95 }}
+            initial={
+              reduceMotion ? undefined : { opacity: 0, y: 12, scale: 0.95 }
+            }
             animate={reduceMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0, y: 12, scale: 0.95 }}
             transition={{ duration: 0.25, ease: "easeOut" }}

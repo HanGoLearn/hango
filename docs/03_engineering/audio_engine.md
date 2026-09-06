@@ -6,6 +6,13 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** the real TTS/STT stack matches this
+> document's provider-abstraction pattern well (`src/lib/tts/providers/`,
+> `src/lib/speech/providers/`, both OpenAI-backed with a free Mock
+> fallback). The "ElevenLabs Integration" section is unimplemented - no
+> reference to ElevenLabs exists anywhere in the codebase; treat it as a
+> possible-future option, not a real integration point today.
+
 ---
 
 # Purpose

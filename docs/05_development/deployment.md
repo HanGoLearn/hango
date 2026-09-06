@@ -2,9 +2,17 @@
 
 Version: 1.0
 
-Status: Official
+Status: Official (describes a plan, not a shipped deployment - see audit note)
 
 Last Updated: August 2026
+
+> **2026-09-05 audit note:** no environment config, deploy step, or
+> hosting setup anywhere in the repo matches what's described below. The
+> only real deployment artifact is `vercel.json` (a single cron entry for
+> the weekly leaderboard payout) - Vercel is never named in this document
+> at all, and there's no evidence a real Staging or Production environment
+> has ever existed. Treat this as a deployment plan to execute against,
+> not a description of infrastructure that's already running.
 
 ---
 

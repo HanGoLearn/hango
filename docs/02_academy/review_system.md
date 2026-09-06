@@ -6,6 +6,15 @@ Status: Official
 
 Last Updated: August 2026
 
+> **2026-09-05 audit note:** this document describes a personalized,
+> spaced-repetition review system with forgetting-pattern detection and
+> Simulation/Mission review - largely aspirational. The Simulation Engine
+> it references was never built (see `simulation_engine.md`). The real
+> system (`src/lib/review-data.ts`) builds a queue of at most 2 items each
+> from 4 fixed types (Vocabulary, Grammar, Mistake, Dialogue) using a flat
+> time-based cooldown, with no spaced-repetition algorithm or per-learner
+> adaptivity.
+
 ---
 
 # Purpose

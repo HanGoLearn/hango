@@ -10,6 +10,27 @@ import { getOrGenerateScenarioCompletion } from "@/lib/scenario-completion";
 const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
+// Partial mock (2026-09-05 cost/DB audit fix regression test) - defaults to
+// calling straight through to the real recomputeGeneralLevelPoints (set
+// below, inside the factory, where `actual` is in scope), so every existing
+// test still exercises the real function exactly as before. Only the new
+// "retries after a partial failure" test below overrides it, once, via
+// mockRejectedValueOnce - achievements/grantCoins are never mocked, so they
+// still run for real against the real database in every test here.
+const { recomputeGeneralLevelPointsMock } = vi.hoisted(() => ({
+  recomputeGeneralLevelPointsMock: vi.fn(),
+}));
+vi.mock("@/lib/general-level", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/general-level")>();
+  recomputeGeneralLevelPointsMock.mockImplementation(
+    actual.recomputeGeneralLevelPoints,
+  );
+  return {
+    ...actual,
+    recomputeGeneralLevelPoints: recomputeGeneralLevelPointsMock,
+  };
+});
+
 const testEmails: string[] = [];
 const testDomainIds: string[] = [];
 
@@ -124,5 +145,53 @@ describe("Scenario completion (integration, real database)", () => {
     // result, and an unchanged score must not re-upsert/re-recompute.
     const second = await getOrGenerateScenarioCompletion(user.id, scenario.id);
     expect(second).toEqual(result);
+  });
+
+  it("retries the whole reward chain after a partial failure, instead of skipping it forever (2026-09-05 fix)", async () => {
+    const user = await createTestUser(
+      `scenario-completion-partial-failure-${Date.now()}@hango.dev`,
+    );
+    const { scenario, lesson } = await createTestScenario();
+    await db.lessonReflectionReport.create({
+      data: {
+        userId: user.id,
+        lessonId: lesson.id,
+        vocabularyCovered: 0,
+        vocabularyTotal: 0,
+        vocabularyScore: 80,
+        comprehensionScore: 80,
+        grammarScore: 80,
+        speakingScore: 80,
+        totalScore: 80,
+        hanNarrative: "Well done.",
+        strengths: [],
+        improvements: [],
+      },
+    });
+
+    recomputeGeneralLevelPointsMock.mockRejectedValueOnce(
+      new Error("simulated transient failure"),
+    );
+    await expect(
+      getOrGenerateScenarioCompletion(user.id, scenario.id),
+    ).rejects.toThrow("simulated transient failure");
+
+    // The completion row exists (the upsert already committed) but rewards
+    // were never confirmed - before this fix, this state meant the reward
+    // chain would never run again for this scenario.
+    const afterFailure = await db.scenarioCompletion.findUnique({
+      where: { userId_scenarioId: { userId: user.id, scenarioId: scenario.id } },
+    });
+    expect(afterFailure).not.toBeNull();
+    expect(afterFailure!.rewardsGrantedAt).toBeNull();
+
+    const result = await getOrGenerateScenarioCompletion(user.id, scenario.id);
+    expect(result).not.toBeNull();
+    expect(recomputeGeneralLevelPointsMock).toHaveBeenCalledTimes(2);
+
+    const afterRetry = await db.scenarioCompletion.findUnique({
+      where: { userId_scenarioId: { userId: user.id, scenarioId: scenario.id } },
+    });
+    expect(afterRetry!.rewardsGrantedAt).not.toBeNull();
   });
 });

@@ -1,5 +1,11 @@
 import { auth } from "@/lib/auth";
 import { getAiProvider } from "@/lib/ai";
+import { estimateCostUsd } from "@/lib/ai/cost";
+import {
+  recordAiUsage,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+} from "@/lib/ai-usage";
 import type { RolePlayContext } from "@/lib/ai-context";
 import {
   buildTextConversationAssessmentPrompt,
@@ -63,6 +69,7 @@ export async function POST(request: Request): Promise<Response> {
     );
 
   try {
+    await checkDailyUsageCap(session.user.id, "han-realtime-assessment");
     const result = await getAiProvider().complete({
       systemPrompt: buildTextConversationAssessmentPrompt(
         rolePlay,
@@ -89,6 +96,19 @@ export async function POST(request: Request): Promise<Response> {
       // after completion, so keep enough headroom for visible output.
       maxOutputTokens: 3_000,
       timeoutMs: 30_000,
+    });
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: "han-realtime-assessment",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
     });
     const parsedAssessment = parseTextConversationAssessment(result.content);
     const stabilizedAssessment = parsedAssessment
@@ -127,7 +147,10 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(assessment, {
       headers: { "cache-control": "private, no-store" },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DailyUsageCapExceededError) {
+      return Response.json({ error: error.message }, { status: 429 });
+    }
     return Response.json(
       { error: "Conversation assessment is temporarily unavailable" },
       { status: 503 },
