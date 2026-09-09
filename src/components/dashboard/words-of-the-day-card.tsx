@@ -57,7 +57,10 @@ export function WordsOfTheDayCard({ words }: { words: WordOfTheDay[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-panel bg-elevated p-5">
+    <div
+      data-activity-surface="HAN_VOCABULARY"
+      className="flex flex-col gap-3 rounded-panel bg-elevated p-5"
+    >
       <div className="flex items-center gap-2">
         <HanAvatar pose="curious" size={28} />
         <Caption className="font-semibold uppercase tracking-wide text-text-muted">

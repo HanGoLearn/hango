@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Lock, Loader2 } from "lucide-react";
-import { PageTitle, SectionTitle, Body, Caption } from "@/components/ui/typography";
+import {
+  PageTitle,
+  SectionTitle,
+  Body,
+  Caption,
+} from "@/components/ui/typography";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,7 +50,13 @@ const CLASS_BENEFITS = [
   "Practice content generated fresh by AI",
 ];
 
-function BenefitList({ items, muted = false }: { items: string[]; muted?: boolean }) {
+function BenefitList({
+  items,
+  muted = false,
+}: {
+  items: string[];
+  muted?: boolean;
+}) {
   return (
     <ul className="flex flex-col gap-1.5">
       {items.map((item) => (
@@ -192,7 +203,9 @@ function HanVocabularyView() {
           disabled={loading || !input.trim()}
           className="shrink-0 gap-1.5"
         >
-          {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+          {loading && (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          )}
           {loading ? "Looking up..." : "Explain"}
         </Button>
       </div>
@@ -250,7 +263,16 @@ export function HanHub() {
 
   if (view !== "hub") {
     return (
-      <div className="flex h-full flex-col gap-4">
+      <div
+        data-activity-surface={
+          view === "tutor"
+            ? "HAN_TUTOR"
+            : view === "companion"
+              ? "HAN_COMPANION"
+              : "HAN_VOCABULARY"
+        }
+        className="flex h-full flex-col gap-4"
+      >
         <Button
           type="button"
           variant="tertiary"
@@ -263,7 +285,11 @@ export function HanHub() {
         <div className="flex items-center gap-2">
           <HanAvatar
             pose={
-              view === "companion" ? "heart" : view === "vocabulary" ? "curious" : "curious"
+              view === "companion"
+                ? "heart"
+                : view === "vocabulary"
+                  ? "curious"
+                  : "curious"
             }
             size={32}
           />
@@ -283,7 +309,7 @@ export function HanHub() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-activity-surface="GENERAL" className="flex flex-col gap-6">
       <PageTitle>Han</PageTitle>
       <Body className="max-w-prose text-text-secondary">
         Han isn&apos;t one thing - pick the kind of help you need right now.
@@ -291,8 +317,17 @@ export function HanHub() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
         <div className="flex flex-col gap-4">
-          <button type="button" onClick={openTutor} className="text-left">
-            <Card interactive size="lg" className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
+          <button
+            type="button"
+            data-activity-surface="HAN_TUTOR"
+            onClick={openTutor}
+            className="text-left"
+          >
+            <Card
+              interactive
+              size="lg"
+              className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6"
+            >
               <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
                 <HanAvatar pose="curious" size={48} />
                 <SectionTitle>Han Tutor</SectionTitle>
@@ -301,8 +336,17 @@ export function HanHub() {
             </Card>
           </button>
 
-          <button type="button" onClick={openCompanion} className="text-left">
-            <Card interactive size="lg" className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6">
+          <button
+            type="button"
+            data-activity-surface="HAN_COMPANION"
+            onClick={openCompanion}
+            className="text-left"
+          >
+            <Card
+              interactive
+              size="lg"
+              className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-6"
+            >
               <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
                 <HanAvatar pose="heart" size={48} />
                 <SectionTitle>Han Companion</SectionTitle>
@@ -311,13 +355,18 @@ export function HanHub() {
             </Card>
           </button>
 
-          <Card size="lg" className="flex flex-col gap-3 bg-elevated sm:flex-row sm:items-start sm:gap-6">
+          <Card
+            size="lg"
+            className="flex flex-col gap-3 bg-elevated sm:flex-row sm:items-start sm:gap-6"
+          >
             <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
               <span className="flex size-12 items-center justify-center rounded-full bg-surface text-text-muted">
                 <Lock className="size-5" aria-hidden="true" />
               </span>
               <div className="flex flex-col gap-0.5">
-                <SectionTitle className="text-text-muted">Han Class</SectionTitle>
+                <SectionTitle className="text-text-muted">
+                  Han Class
+                </SectionTitle>
                 <Caption className="font-semibold uppercase tracking-wide text-text-muted">
                   Coming soon
                 </Caption>
@@ -327,7 +376,12 @@ export function HanHub() {
           </Card>
         </div>
 
-        <button type="button" onClick={openVocabulary} className="text-left">
+        <button
+          type="button"
+          data-activity-surface="HAN_VOCABULARY"
+          onClick={openVocabulary}
+          className="text-left"
+        >
           <Card
             interactive
             size="lg"

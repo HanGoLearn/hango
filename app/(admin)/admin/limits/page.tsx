@@ -1,4 +1,5 @@
-import { AlertTriangle, Bot, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Bot, ShieldCheck, UserRoundCog } from "lucide-react";
 import { AiUsageCapInput } from "@/components/admin/ai-usage-cap-input";
 import { AdminStatCard } from "@/components/admin/admin-stat-card";
 import { getAiUsageSummary } from "@/lib/admin-ai-usage";
@@ -23,18 +24,32 @@ export default async function AdminLimitsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <p className="font-interface text-caption font-semibold uppercase tracking-[0.12em] text-primary-400">
-          Control de costos
-        </p>
-        <h1 className="mt-1 font-display text-page-title font-semibold">
-          Límites y uso de IA
-        </h1>
-        <p className="mt-1 max-w-3xl font-interface text-supporting text-text-secondary">
-          Costo estimado por cada función de OpenAI, TTS y transcripción. El
-          límite diario se aplica individualmente a cada usuario y función.
-        </p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="font-interface text-caption font-semibold uppercase tracking-[0.12em] text-primary-400">
+            Control de costos
+          </p>
+          <h1 className="mt-1 font-display text-page-title font-semibold">
+            Límites y uso de IA
+          </h1>
+          <p className="mt-1 max-w-3xl font-interface text-supporting text-text-secondary">
+            Costo estimado por cada función de OpenAI, TTS y transcripción. El
+            límite diario se aplica individualmente a cada usuario y función.
+          </p>
+        </div>
+        <Link
+          href="/admin/users"
+          className="inline-flex w-fit items-center gap-2 rounded-control border border-border-strong px-4 py-2 font-interface text-supporting font-semibold text-text-primary transition-colors hover:bg-elevated"
+        >
+          <UserRoundCog className="size-4" aria-hidden="true" />
+          Asignar límite a un usuario
+        </Link>
       </div>
+
+      <p className="rounded-card border border-info-500/30 bg-info-500/10 px-4 py-3 font-interface text-supporting text-text-secondary">
+        Estos son los límites generales. Una excepción configurada desde la
+        ficha 360° de un usuario tiene prioridad y no modifica a los demás.
+      </p>
 
       <section className="grid gap-4 sm:grid-cols-3">
         <AdminStatCard

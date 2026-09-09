@@ -19,12 +19,13 @@ const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
 
 /**
  * Theme toggle (2026-08-21) - reads/writes a plain cookie directly, no
- * server action, so switching feels instant, while `app/layout.tsx` reads
- * the same cookie server-side for a correct first paint - no flash of the
- * wrong theme, no `next-themes` dependency needed (every route here is
- * already dynamic/DB-backed per request, so a plain cookie read beats what
- * a client-side library can offer - see
- * project/learning-journey-optimization.md).
+ * server action, so switching feels instant. `app/layout.tsx` used to read
+ * this same cookie server-side for a correct first paint, but that was a
+ * Dynamic API on the root layout forcing every route (including the static
+ * public marketing pages) out of static rendering - as of 2026-09-08 the
+ * first-paint side reads the cookie via a `beforeInteractive` inline
+ * script instead (same no-flash guarantee, no server dynamic cost). This
+ * component's own client-side cookie read/write is unaffected either way.
  *
  * Sync'd via `useSyncExternalStore`, same shape as
  * `lesson-display-prefs.tsx`'s established pattern for this exact

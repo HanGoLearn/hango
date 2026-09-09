@@ -55,7 +55,7 @@ export function MissionRuntime({
 
   if (report) {
     return (
-      <div className="flex flex-col gap-4">
+      <div data-activity-surface="MISSIONS" className="flex flex-col gap-4">
         <MissionReportDisplay report={report} />
         <div className="flex gap-2">
           <Button
@@ -75,7 +75,7 @@ export function MissionRuntime({
 
   if (attemptId) {
     return (
-      <div className="flex flex-col gap-4">
+      <div data-activity-surface="MISSIONS" className="flex flex-col gap-4">
         <MissionChat attemptId={attemptId} />
         <Button
           type="button"
@@ -90,7 +90,7 @@ export function MissionRuntime({
   }
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Card data-activity-surface="MISSIONS" className="flex flex-col gap-3">
       <CardTitle>{mission.title}</CardTitle>
       {mission.context && (
         <Body className="text-text-secondary">{mission.context}</Body>

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import Script from "next/script";
 import { Inter, Noto_Sans_SC, Fraunces } from "next/font/google";
 import "./globals.css";
 import "@/lib/env/server";
 import { clientEnv } from "@/lib/env/client";
-import { THEME_COOKIE_NAME, isThemePreference } from "@/lib/theme";
+import { THEME_COOKIE_NAME } from "@/lib/theme";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -61,30 +61,41 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+// Sets `data-theme` on <html> before first paint, client-side, from the
+// same cookie ThemeToggle writes (2026-09-08 optimization pass). This used
+// to be a server-side `cookies()` read in this exact layout - correct, but
+// it's a Dynamic API on the ROOT layout, which forces every route in the
+// app (including the public marketing homepage, which has no per-user data
+// at all) out of static rendering. Moving it to a `beforeInteractive`
+// inline script keeps the same no-flash-of-wrong-theme guarantee (this
+// strategy is injected into <head> and runs before the page paints - the
+// standard next-themes technique) while letting the marketing page be
+// served static/cached again. Targets `documentElement` (<html>), never an
+// inner wrapper: Radix Dialog/DropdownMenu/Select/Tooltip all portal to
+// `document.body`, which only reliably inherits CSS custom properties set
+// on a real DOM ancestor - <html> is one, an inner React-tree wrapper is
+// not. "system" intentionally sets no attribute - globals.css's
+// `prefers-color-scheme` fallback handles it with zero JS either way.
+const THEME_INIT_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )${THEME_COOKIE_NAME}=([^;]*)/);var v=m?decodeURIComponent(m[1]):null;if(v==="light"||v==="dark"){document.documentElement.setAttribute("data-theme",v);}}catch(e){}})();`;
+
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cookieStore = await cookies();
-  const rawTheme = cookieStore.get(THEME_COOKIE_NAME)?.value;
-  const theme = isThemePreference(rawTheme) ? rawTheme : "system";
-
   return (
     <html
       lang="en"
-      // "system" renders no attribute at all - globals.css's
-      // `prefers-color-scheme` fallback handles it with zero client JS.
-      // This attribute must stay on <html> specifically (never move to an
-      // inner wrapper): Radix Dialog/DropdownMenu/Select/Tooltip all portal
-      // to `document.body`, which is only guaranteed to inherit CSS custom
-      // properties set on an actual DOM ancestor - <html> is one, an inner
-      // React-tree wrapper is not (portals escape the React tree, not the
-      // real DOM tree, but they still escape any wrapper below <html>).
-      {...(theme === "system" ? {} : { "data-theme": theme })}
       className={`${inter.variable} ${notoSansSC.variable} ${fraunces.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

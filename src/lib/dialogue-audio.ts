@@ -6,9 +6,9 @@ import { mergeWavAudio } from "@/lib/han-speech";
 import { contentAudioKey } from "@/lib/audio-content-key";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   estimateTtsCostUsd,
   estimateTtsDurationSeconds,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 
 // Generation is cached per line/dialogue (see below) so this only throttles
@@ -146,13 +146,15 @@ async function ensureLineAudioKey(
   }
 
   checkRateLimit(userId);
-  await checkDailyUsageCap(userId, "dialogue-audio");
-
   const tts = getTtsProvider();
-  const result = await tts.synthesize(
-    line.chineseText,
-    voice,
-    buildDialogueLineInstructions(difficulty, line.chineseText),
+  const result = await trackAiOperation(
+    { userId, feature: "dialogue-audio", provider: tts.name },
+    () =>
+      tts.synthesize(
+        line.chineseText,
+        voice,
+        buildDialogueLineInstructions(difficulty, line.chineseText),
+      ),
   );
   await recordAiUsage({
     userId,

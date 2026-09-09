@@ -4,7 +4,7 @@ import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
+  trackAiOperation,
   DailyUsageCapExceededError,
 } from "@/lib/ai-usage";
 import {
@@ -30,9 +30,14 @@ export interface WritingLessonOption {
 }
 
 /** Every published lesson with writing tasks, for the Writing Lab's lesson picker (same pattern as Speaking Lab's, 2026-08-08). */
-export async function getWritingLessonOptions(): Promise<WritingLessonOption[]> {
+export async function getWritingLessonOptions(): Promise<
+  WritingLessonOption[]
+> {
   const lessons = await db.lesson.findMany({
-    where: { status: "PUBLISHED", writingTasks: { some: { status: "PUBLISHED" } } },
+    where: {
+      status: "PUBLISHED",
+      writingTasks: { some: { status: "PUBLISHED" } },
+    },
     orderBy: { order: "asc" },
     include: { scenarioLevel: { include: { scenario: true } } },
   });
@@ -54,12 +59,18 @@ export async function getWritingTasks(lessonId?: string) {
     lessonId ??
     (
       await db.lesson.findFirst({
-        where: { status: "PUBLISHED", writingTasks: { some: { status: "PUBLISHED" } } },
+        where: {
+          status: "PUBLISHED",
+          writingTasks: { some: { status: "PUBLISHED" } },
+        },
         // Matches getWritingLessonOptions()'s ordering exactly (scenario
         // order first, then lesson order) - that function sorts by lesson
         // order in the DB query but then re-sorts by scenario order in JS,
         // so "the first option" is scenario-order-first, not lesson-order-first.
-        orderBy: [{ scenarioLevel: { scenario: { order: "asc" } } }, { order: "asc" }],
+        orderBy: [
+          { scenarioLevel: { scenario: { order: "asc" } } },
+          { order: "asc" },
+        ],
         select: { id: true },
       })
     )?.id;
@@ -74,7 +85,11 @@ export async function getWritingTasks(lessonId?: string) {
 /** Standalone pool of Translation Challenge texts - not scoped to any lesson (Writing Lab redesign, 2026-08-08 round 2). */
 export async function getTranslationChallenges() {
   return db.writingTask.findMany({
-    where: { status: "PUBLISHED", type: "TRANSLATION_CHALLENGE", lessonId: null },
+    where: {
+      status: "PUBLISHED",
+      type: "TRANSLATION_CHALLENGE",
+      lessonId: null,
+    },
     orderBy: { order: "asc" },
   });
 }
@@ -151,13 +166,21 @@ async function generateFeedback(
   referenceAnswer?: string | null,
 ): Promise<WritingFeedback> {
   try {
-    await checkDailyUsageCap(userId, "writing-feedback");
     const provider = getAiProvider();
-    const result = await provider.complete({
-      systemPrompt: buildWritingFeedbackPrompt(taskType, prompt, submittedText, referenceAnswer),
-      messages: [{ role: "user", content: submittedText }],
-      maxOutputTokens: 500,
-    });
+    const result = await trackAiOperation(
+      { userId, feature: "writing-feedback", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildWritingFeedbackPrompt(
+            taskType,
+            prompt,
+            submittedText,
+            referenceAnswer,
+          ),
+          messages: [{ role: "user", content: submittedText }],
+          maxOutputTokens: 500,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "writing-feedback",
@@ -194,7 +217,9 @@ export async function submitWritingAttempt(userId: string, attemptId: string) {
   checkRateLimit(userId);
   const attempt = await assertOwnedAttempt(userId, attemptId);
   if (!attempt.taskId) {
-    throw new Error("This attempt has no task - use submitCustomWriting() for Custom Writing.");
+    throw new Error(
+      "This attempt has no task - use submitCustomWriting() for Custom Writing.",
+    );
   }
   const task = await db.writingTask.findUniqueOrThrow({
     where: { id: attempt.taskId },
@@ -269,19 +294,24 @@ export async function submitCustomWriting(
     throw new WritingInputError("Response can't be empty.");
   }
   if (text.length > MAX_CUSTOM_WRITING_LENGTH) {
-    throw new WritingInputError(`Response is too long (max ${MAX_CUSTOM_WRITING_LENGTH} characters).`);
+    throw new WritingInputError(
+      `Response is too long (max ${MAX_CUSTOM_WRITING_LENGTH} characters).`,
+    );
   }
   checkRateLimit(userId);
 
   let feedback: WritingFeedback;
   try {
-    await checkDailyUsageCap(userId, "writing-feedback");
     const provider = getAiProvider();
-    const result = await provider.complete({
-      systemPrompt: buildCustomWritingFeedbackPrompt(characteristics, text),
-      messages: [{ role: "user", content: text }],
-      maxOutputTokens: 500,
-    });
+    const result = await trackAiOperation(
+      { userId, feature: "writing-feedback", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildCustomWritingFeedbackPrompt(characteristics, text),
+          messages: [{ role: "user", content: text }],
+          maxOutputTokens: 500,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "writing-feedback",

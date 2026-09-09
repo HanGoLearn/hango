@@ -6,9 +6,9 @@ import { contentAudioKey } from "@/lib/audio-content-key";
 import { recordVocabularyInteraction } from "@/lib/reflection";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   estimateTtsCostUsd,
   estimateTtsDurationSeconds,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 
 // Shared by both audio generation (TTS) and example generation (AI text) -
@@ -44,9 +44,11 @@ async function synthesizeAndStore(
   key: string,
   text: string,
 ): Promise<string> {
-  await checkDailyUsageCap(userId, "vocabulary-audio");
   const tts = getTtsProvider();
-  const result = await tts.synthesize(text, VOICE);
+  const result = await trackAiOperation(
+    { userId, feature: "vocabulary-audio", provider: tts.name },
+    () => tts.synthesize(text, VOICE),
+  );
   await recordAiUsage({
     userId,
     feature: "vocabulary-audio",

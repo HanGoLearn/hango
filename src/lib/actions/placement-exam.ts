@@ -24,8 +24,8 @@ import { getAiProvider } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   DailyUsageCapExceededError,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import {
@@ -41,8 +41,7 @@ import {
 } from "@/lib/placement-credit";
 
 export type PlacementActionResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+  { ok: true; value: T } | { ok: false; error: string };
 
 // Its own limiter, same copy-paste convention as speaking-data.ts's
 // checkScenarioRateLimit and every other AI-cost file in this codebase -
@@ -89,11 +88,17 @@ function toErrorMessage(error: unknown): string {
 }
 
 export async function startPlacementExamAction(): Promise<
-  PlacementActionResult<{ sessionId: string; question: PlacementQuestionView | null }>
+  PlacementActionResult<{
+    sessionId: string;
+    question: PlacementQuestionView | null;
+  }>
 > {
   const session = await auth();
   if (!session?.user?.id) {
-    return { ok: false, error: "You need to be signed in to start the placement exam." };
+    return {
+      ok: false,
+      error: "You need to be signed in to start the placement exam.",
+    };
   }
   try {
     const sessionId = await startPlacementSession(session.user.id);
@@ -134,7 +139,11 @@ export async function submitPlacementAnswerAction(
     return { ok: false, error: "You need to be signed in for this." };
   }
   try {
-    const { isCorrect } = await submitPlacementAnswer(sessionId, questionId, answer);
+    const { isCorrect } = await submitPlacementAnswer(
+      sessionId,
+      questionId,
+      answer,
+    );
     return await advanceAfterAttempt(sessionId, isCorrect);
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) };
@@ -234,19 +243,30 @@ export async function gradePlacementSpeakingAction(
 
   try {
     checkGradingRateLimit(session.user.id);
-    await checkDailyUsageCap(session.user.id, "placement-grading");
-    const result = await getAiProvider().complete({
-      systemPrompt: buildPlacementSpeakingEvaluationPrompt(
-        scenario,
-        safeTranscript,
-        safeConfidences,
-      ),
-      messages: [
-        { role: "user", content: "Grade this placement speaking attempt now." },
-      ],
-      maxOutputTokens: 1_800,
-      timeoutMs: 45_000,
-    });
+    const provider = getAiProvider();
+    const result = await trackAiOperation(
+      {
+        userId: session.user.id,
+        feature: "placement-grading",
+        provider: provider.name,
+      },
+      () =>
+        provider.complete({
+          systemPrompt: buildPlacementSpeakingEvaluationPrompt(
+            scenario,
+            safeTranscript,
+            safeConfidences,
+          ),
+          messages: [
+            {
+              role: "user",
+              content: "Grade this placement speaking attempt now.",
+            },
+          ],
+          maxOutputTokens: 1_800,
+          timeoutMs: 45_000,
+        }),
+    );
     await recordAiUsage({
       userId: session.user.id,
       feature: "placement-grading",
@@ -273,7 +293,8 @@ export async function gradePlacementSpeakingAction(
     }
     return {
       ok: false,
-      error: "Speaking evaluation is temporarily unavailable. Please try this level again.",
+      error:
+        "Speaking evaluation is temporarily unavailable. Please try this level again.",
     };
   }
 }
@@ -301,7 +322,10 @@ export async function applyPlacementCreditAction(
       speakingCreditedLevel,
       speakingAttempts,
     );
-    return { ok: true, value: { creditedLessonCount: result?.creditedLessonCount ?? 0 } };
+    return {
+      ok: true,
+      value: { creditedLessonCount: result?.creditedLessonCount ?? 0 },
+    };
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) };
   }

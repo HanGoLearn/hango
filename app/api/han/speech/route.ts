@@ -4,6 +4,7 @@ import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
   checkDailyUsageCap,
+  trackAiOperation,
   estimateTtsCostUsd,
   estimateTtsDurationSeconds,
   DailyUsageCapExceededError,
@@ -22,6 +23,15 @@ import {
 
 const OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech";
 const MAX_SPEECH_CHARACTERS = 4_000;
+
+class HanSpeechProviderError extends Error {
+  readonly code: "provider_rate_limited" | "provider_http_error";
+
+  constructor(readonly rateLimited: boolean) {
+    super("Han's voice is temporarily unavailable");
+    this.code = rateLimited ? "provider_rate_limited" : "provider_http_error";
+  }
+}
 
 // Same cache-miss-only throttle shape as every other TTS surface in the app
 // (welcome-audio.ts, dialogue-audio.ts, etc.) - this route previously had
@@ -125,11 +135,21 @@ export async function POST(request: Request): Promise<Response> {
 
   let spokenText = removePinyinForSpeech(text);
   try {
-    const oralScript = await getAiProvider().complete({
-      systemPrompt: oralScriptPrompt(responseLanguage, conversational),
-      messages: [{ role: "user", content: text }],
-      maxOutputTokens: 260,
-    });
+    const provider = getAiProvider();
+    const oralScript = await trackAiOperation(
+      {
+        userId: session.user.id,
+        feature: "han-speech",
+        provider: provider.name,
+        capAlreadyChecked: true,
+      },
+      () =>
+        provider.complete({
+          systemPrompt: oralScriptPrompt(responseLanguage, conversational),
+          messages: [{ role: "user", content: text }],
+          maxOutputTokens: 260,
+        }),
+    );
     await recordAiUsage({
       userId: session.user.id,
       feature: "han-speech",
@@ -149,27 +169,46 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const segments = splitSpeechByLanguage(spokenText, responseLanguage);
-  const responses = await Promise.all(
-    segments.map((segment) =>
-      fetch(OPENAI_SPEECH_URL, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${serverEnv.OPENAI_API_KEY}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini-tts",
-          voice,
-          input: segment.text,
-          response_format: "wav",
-          instructions: segmentSpeechInstructions(segment.language),
-        }),
-      }),
-    ),
-  );
-
-  if (responses.some((response) => !response.ok)) {
-    const rateLimited = responses.some((response) => response.status === 429);
+  let responses: Response[];
+  try {
+    responses = await trackAiOperation(
+      {
+        userId: session.user.id,
+        feature: "han-speech",
+        provider: "openai",
+        model: "gpt-4o-mini-tts",
+        capAlreadyChecked: true,
+      },
+      async () => {
+        const generated = await Promise.all(
+          segments.map((segment) =>
+            fetch(OPENAI_SPEECH_URL, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${serverEnv.OPENAI_API_KEY}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini-tts",
+                voice,
+                input: segment.text,
+                response_format: "wav",
+                instructions: segmentSpeechInstructions(segment.language),
+              }),
+            }),
+          ),
+        );
+        if (generated.some((response) => !response.ok)) {
+          throw new HanSpeechProviderError(
+            generated.some((response) => response.status === 429),
+          );
+        }
+        return generated;
+      },
+    );
+  } catch (error) {
+    const rateLimited =
+      error instanceof HanSpeechProviderError && error.rateLimited;
     return Response.json(
       { error: "Han's voice is temporarily unavailable" },
       { status: rateLimited ? 429 : 502 },

@@ -49,6 +49,9 @@ model User {
   quizAttempts           QuizAttempt[]
   aiConversation         AiConversation?
   aiUsageLogs            AiUsageLog[]
+  aiUsageUserCaps        AiUsageUserCap[]
+  aiOperationLogs        AiOperationLog[]
+  activitySessions       LearnerActivitySession[]
   speakingSessions       SpeakingSession[]
   writingAttempts        WritingAttempt[]
   missionAttempts        MissionAttempt[]
@@ -500,6 +503,16 @@ model LessonReflectionReport {
   strengths          Json
   improvements       Json
   createdAt          DateTime @default(now())
+  /// Same pattern as ScenarioCompletion.rewardsGrantedAt (2026-09-08 fix) -
+  /// checkReflectionAchievements/grantCoins used to run only once, right
+  /// after this row's own create; if either one didn't complete (a crash,
+  /// a thrown error), a later cache-hit read of this same report never
+  /// retried them - the achievement/coin grant was lost forever. Null here
+  /// means "rewards not confirmed yet, retry on next read"; both calls are
+  /// self-idempotent (skipDuplicates), so retrying is always safe. Existing
+  /// rows were backfilled to non-null (treated as already settled) rather
+  /// than guessed at - see the migration.
+  rewardsGrantedAt   DateTime?
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -883,6 +896,10 @@ model ExerciseAttempt {
   exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
 
   @@index([userId, exerciseId])
+  /// review-data.ts's spaced-repetition queue query (2026-09-08 optimization
+  /// pass) filters {userId, isCorrect: false} and sorts by createdAt - the
+  /// index above doesn't cover it (it's keyed on exerciseId, not isCorrect).
+  @@index([userId, isCorrect, createdAt])
 }
 
 /// Used by MULTIPLE_CHOICE, TRUE_FALSE, and MATCHING; unused by the other
@@ -1289,6 +1306,74 @@ enum AiUsageDurationSource {
   TEXT_LENGTH_ESTIMATE
 }
 
+enum AiOperationOutcome {
+  SUCCESS
+  FAILURE
+  BLOCKED_CAP
+}
+
+/// Operational reliability telemetry for paid AI/TTS/STT calls. Deliberately
+/// contains no prompt, transcript, audio, provider response, or raw error
+/// message. AiUsageLog remains the accounting record for completed calls;
+/// this separate table can also represent failures and cap blocks, which have
+/// no trustworthy cost row.
+model AiOperationLog {
+  id        String             @id @default(cuid())
+  userId    String
+  feature   String
+  provider  String?
+  model     String?
+  outcome   AiOperationOutcome
+  errorCode String?
+  latencyMs Int?
+  createdAt DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([feature, outcome, createdAt])
+  @@index([provider, model, createdAt])
+  @@index([userId, createdAt])
+}
+
+enum LearnerActivitySurface {
+  GENERAL
+  LEARNING_JOURNEY
+  HAN_TUTOR
+  HAN_COMPANION
+  SPEAKING_LAB
+  WRITING_LAB
+  MISSIONS
+  HAN_VOCABULARY
+  PLACEMENT
+}
+
+/// One logical browser session can have one row per product surface. The
+/// client sends monotonic totals, so a retry cannot double-count time. Time
+/// advances only while the document is visible and the learner interacted
+/// recently; this is engagement time, never provider-billed audio duration.
+model LearnerActivitySession {
+  id               String                 @id @default(cuid())
+  userId           String
+  clientSessionId  String
+  surface          LearnerActivitySurface
+  path             String
+  startedAt        DateTime
+  lastActiveAt     DateTime
+  activeSeconds    Int                    @default(0)
+  interactionCount Int                    @default(0)
+  lastSequence     Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientSessionId, surface])
+  @@index([lastActiveAt])
+  @@index([surface, lastActiveAt])
+  @@index([userId, lastActiveAt])
+}
+
 /// Configurable daily spend cap per feature (2026-09-05 cost audit), read by
 /// checkDailyUsageCap() before a paid call and edited from the admin AI-usage
 /// dashboard. A feature with no row here falls back to DEFAULT_DAILY_CAP_USD
@@ -1297,6 +1382,21 @@ model AiUsageCap {
   feature       String   @id
   dailyLimitUsd Float
   updatedAt     DateTime @updatedAt
+}
+
+/// Optional per-user exception to the general AiUsageCap. A value of zero
+/// explicitly blocks the feature; a positive value replaces the general daily
+/// limit. No row means the user inherits the general feature limit.
+model AiUsageUserCap {
+  userId        String
+  feature       String
+  dailyLimitUsd Float
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, feature])
+  @@index([feature])
 }
 
 enum AnnouncementType {
@@ -1422,7 +1522,14 @@ model SpeakingSession {
   scenario Scenario?         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   attempts SpeakingAttempt[]
 
-  @@index([userId, startedAt])
+  // Replaces the old @@index([userId, startedAt]) (2026-09-08 optimization
+  // pass) - nothing in the codebase queries by startedAt; every real lookup
+  // filters by completionState+completedAt (admin analytics) or
+  // userId+completionState (achievements, admin dashboard, lab-points.ts,
+  // the last of which also sorts by completedAt - a prefix of the index
+  // below).
+  @@index([userId, completionState, completedAt])
+  @@index([completionState, completedAt])
 }
 
 /// `audioFilePath` is a storage key, not file bytes (docs/03_engineering/
@@ -1486,6 +1593,12 @@ model WritingTask {
   lesson   Lesson?          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   scenario Scenario?        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   attempts WritingAttempt[]
+
+  /// Only content model in this section with no index at all (2026-09-08
+  /// optimization pass) - writing-data.ts filters {status, lessonId} twice;
+  /// matches the sibling convention (Exercise/Quiz/Mission/Dialogue all
+  /// index lessonId alone).
+  @@index([lessonId])
 }
 
 /// `draft` is the live, autosaved text (11.4); `submittedResponse` is a
@@ -1516,6 +1629,10 @@ model WritingAttempt {
   rewrites  WritingAttempt[] @relation("Rewrites")
 
   @@index([userId, taskId])
+  /// writing-data.ts, lab-points.ts, and dashboard-data.ts all filter
+  /// {userId, submittedAt} and sort by submittedAt (2026-09-08 optimization
+  /// pass) - the index above is keyed on taskId, not submittedAt.
+  @@index([userId, submittedAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -1825,6 +1942,10 @@ model CoinLedgerEntry {
   @@unique([userId, sourceKey])
   @@index([userId, createdAt])
   @@index([createdAt])
+  /// getUnseenCoinGainsAction (actions/coins.ts, 2026-09-08 optimization
+  /// pass) filters {userId, seenAt: null} and sorts by createdAt - neither
+  /// index above covers the seenAt equality check.
+  @@index([userId, seenAt, createdAt])
 }
 
 /// What a learner has purchased. `accessoryKey` refers to the code-defined

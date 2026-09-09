@@ -4,7 +4,7 @@ import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
+  trackAiOperation,
   DailyUsageCapExceededError,
 } from "@/lib/ai-usage";
 import { buildMissionSystemPrompt } from "@/lib/mission-prompt";
@@ -15,10 +15,8 @@ import {
   type MissionTranscriptMessage,
   type MissionReport,
 } from "@/lib/mission-evaluation";
-import {
-  recordProgressEvidence,
-  getLessonCompetencyIds,
-} from "@/lib/progress-evidence";
+import { getLessonCompetencyIds } from "@/lib/progress-evidence";
+import { normalizeDifficulty } from "@/lib/competency-progress";
 
 // Same limits as the AI Teacher chat (ai-teacher-data.ts) - this is another
 // free-form chat backed by a paid AI call per message, so it needs the same
@@ -112,7 +110,6 @@ export async function sendMissionMessage(
     );
   }
   checkRateLimit(userId);
-  await checkDailyUsageCap(userId, "mission-chat");
 
   const attempt = await assertOwnedAttempt(userId, attemptId);
   const mission = await getMissionWithConditions(attempt.missionId);
@@ -130,11 +127,15 @@ export async function sendMissionMessage(
   });
 
   const provider = getAiProvider();
-  const result = await provider.complete({
-    systemPrompt,
-    messages: [...transcript, { role: "user", content: message }],
-    maxOutputTokens: 300,
-  });
+  const result = await trackAiOperation(
+    { userId, feature: "mission-chat", provider: provider.name },
+    () =>
+      provider.complete({
+        systemPrompt,
+        messages: [...transcript, { role: "user", content: message }],
+        maxOutputTokens: 300,
+      }),
+  );
   await recordAiUsage({
     userId,
     feature: "mission-chat",
@@ -189,22 +190,25 @@ export async function endMissionAttempt(userId: string, attemptId: string) {
   let report: MissionReport;
   try {
     checkEndRateLimit(userId);
-    await checkDailyUsageCap(userId, "mission-report");
     const provider = getAiProvider();
-    const result = await provider.complete({
-      systemPrompt: buildMissionEvaluationPrompt(
-        {
-          title: mission.title,
-          objective: mission.objective,
-          learnerRole: mission.learnerRole ?? "learner",
-          aiRole: mission.aiRole ?? "conversation partner",
-          successConditions: successConditionDescriptions,
-        },
-        transcript,
-      ),
-      messages: [{ role: "user", content: "Evaluate this mission." }],
-      maxOutputTokens: 500,
-    });
+    const result = await trackAiOperation(
+      { userId, feature: "mission-report", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildMissionEvaluationPrompt(
+            {
+              title: mission.title,
+              objective: mission.objective,
+              learnerRole: mission.learnerRole ?? "learner",
+              aiRole: mission.aiRole ?? "conversation partner",
+              successConditions: successConditionDescriptions,
+            },
+            transcript,
+          ),
+          messages: [{ role: "user", content: "Evaluate this mission." }],
+          maxOutputTokens: 500,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "mission-report",
@@ -230,19 +234,13 @@ export async function endMissionAttempt(userId: string, attemptId: string) {
     report = defaultMissionReport(successConditionDescriptions);
   }
 
-  const updated = await db.missionAttempt.update({
-    where: { id: attemptId },
-    data: {
-      completionState: "COMPLETED",
-      completedAt: new Date(),
-      report: report as unknown as Prisma.InputJsonValue,
-    },
-  });
-
   // Only lesson-scoped missions produce evidence - Competency has no
   // scenario-level link (see progress-evidence.ts), so the scenario's
   // final mission doesn't attribute evidence anywhere.
-  const competencyIds = await getLessonCompetencyIds(mission.lessonId, "MISSION");
+  const competencyIds = await getLessonCompetencyIds(
+    mission.lessonId,
+    "MISSION",
+  );
   const result =
     (report.communicationSuccess +
       report.taskCompletion +
@@ -250,14 +248,37 @@ export async function endMissionAttempt(userId: string, attemptId: string) {
       report.grammarUsage +
       report.clarity) /
     500;
-  await recordProgressEvidence(
-    userId,
-    competencyIds,
-    "MISSION",
-    result,
-    mission.difficulty,
-    updated.id,
-  );
+  const difficulty = normalizeDifficulty("MISSION", mission.difficulty);
+
+  // Marking the attempt COMPLETED and recording its evidence used to be two
+  // separate writes (2026-09-08 optimization pass) - a failure between them
+  // left the attempt COMPLETED (the idempotency guard above then blocks any
+  // retry) with its evidence permanently lost. Batched in one transaction
+  // now: both succeed or neither does.
+  const [updated] = await db.$transaction([
+    db.missionAttempt.update({
+      where: { id: attemptId },
+      data: {
+        completionState: "COMPLETED",
+        completedAt: new Date(),
+        report: report as unknown as Prisma.InputJsonValue,
+      },
+    }),
+    ...(competencyIds.length > 0
+      ? [
+          db.progressEvidence.createMany({
+            data: competencyIds.map((competencyId) => ({
+              userId,
+              competencyId,
+              source: "MISSION" as const,
+              result,
+              difficulty,
+              relatedActivityId: attemptId,
+            })),
+          }),
+        ]
+      : []),
+  ]);
 
   return updated;
 }

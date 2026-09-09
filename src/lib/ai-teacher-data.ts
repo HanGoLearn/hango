@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getAiProvider } from "@/lib/ai";
 import { AiProviderError, type AiMessageInput } from "@/lib/ai/provider";
 import { estimateCostUsd } from "@/lib/ai/cost";
-import { recordAiUsage, checkDailyUsageCap } from "@/lib/ai-usage";
+import { recordAiUsage, trackAiOperation } from "@/lib/ai-usage";
 import {
   buildSystemPrompt,
   detectHanResponseLanguage,
@@ -162,10 +162,32 @@ async function extractAndSaveLearnerFacts(
       role: m.role === "USER" ? "user" : "assistant",
       content: m.content,
     }));
-    const result = await getAiProvider().complete({
-      systemPrompt: buildLearnerFactsExtractionPrompt(transcript),
-      messages: [{ role: "user", content: "Extract the facts." }],
-      maxOutputTokens: 400,
+    const provider = getAiProvider();
+    const result = await trackAiOperation(
+      {
+        userId,
+        feature: "learner-fact-extraction",
+        provider: provider.name,
+      },
+      () =>
+        provider.complete({
+          systemPrompt: buildLearnerFactsExtractionPrompt(transcript),
+          messages: [{ role: "user", content: "Extract the facts." }],
+          maxOutputTokens: 400,
+        }),
+    );
+    await recordAiUsage({
+      userId,
+      feature: "learner-fact-extraction",
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      estimatedCostUsd: estimateCostUsd(
+        result.model,
+        result.inputTokens,
+        result.outputTokens,
+      ),
     });
     const facts = parseLearnerFacts(result.content);
     if (facts.length === 0) return;
@@ -229,7 +251,10 @@ export async function resetConversation(
   );
   if (messagesToDelete.length === 0) return;
 
-  if (extractFacts && messagesToDelete.length >= MIN_MESSAGES_FOR_FACT_EXTRACTION) {
+  if (
+    extractFacts &&
+    messagesToDelete.length >= MIN_MESSAGES_FOR_FACT_EXTRACTION
+  ) {
     void extractAndSaveLearnerFacts(userId, conversation.id, messagesToDelete);
   }
 
@@ -356,46 +381,50 @@ export async function sendAiTeacherMessage(
     );
   }
   checkRateLimit(userId);
-  await checkDailyUsageCap(userId, "ai-teacher-chat");
 
   const appIntent = !context.rolePlay
     ? detectHanAppContextIntent(trimmed, context.currentPageName)
     : null;
 
-  const [profile, competencyProgress, rawEvidence, onDemandAppContext, learnerFacts] =
-    await Promise.all([
-      db.learnerProfile.findUnique({
-        where: { userId },
-        select: {
-          currentLevel: true,
-          explanationLanguage: true,
-          aiConversationStorageEnabled: true,
-          generalLevelPoints: true,
-          displayName: true,
-        },
-      }),
-      getCompetencyProgress(userId),
-      getRawProgressEvidence(userId),
-      appIntent
-        ? getHanOnDemandAppContext(userId, trimmed, context.currentPageName)
-        : Promise.resolve(null),
-      // Han Companion's personal memory (2026-08-31, fixed same day) - only
-      // Companion (mode === "PRACTICE", no role-play) ever reads this.
-      // Originally gated on `!context.rolePlay` alone, which also matches
-      // Han Tutor (also not role-play) - a real user report caught Tutor
-      // "remembering" a past conversation across sessions, breaking the
-      // already-agreed "Tutor always resets fresh" rule. Mirrors the same
-      // `mode === "PRACTICE" && !context.rolePlay` condition ai-context.ts
-      // uses to decide immersion Practice instructions.
-      mode === "PRACTICE" && !context.rolePlay
-        ? db.learnerFact.findMany({
-            where: { userId },
-            orderBy: { updatedAt: "desc" },
-            take: 8,
-            select: { fact: true },
-          })
-        : Promise.resolve([]),
-    ]);
+  const [
+    profile,
+    competencyProgress,
+    rawEvidence,
+    onDemandAppContext,
+    learnerFacts,
+  ] = await Promise.all([
+    db.learnerProfile.findUnique({
+      where: { userId },
+      select: {
+        currentLevel: true,
+        explanationLanguage: true,
+        aiConversationStorageEnabled: true,
+        generalLevelPoints: true,
+        displayName: true,
+      },
+    }),
+    getCompetencyProgress(userId),
+    getRawProgressEvidence(userId),
+    appIntent
+      ? getHanOnDemandAppContext(userId, trimmed, context.currentPageName)
+      : Promise.resolve(null),
+    // Han Companion's personal memory (2026-08-31, fixed same day) - only
+    // Companion (mode === "PRACTICE", no role-play) ever reads this.
+    // Originally gated on `!context.rolePlay` alone, which also matches
+    // Han Tutor (also not role-play) - a real user report caught Tutor
+    // "remembering" a past conversation across sessions, breaking the
+    // already-agreed "Tutor always resets fresh" rule. Mirrors the same
+    // `mode === "PRACTICE" && !context.rolePlay` condition ai-context.ts
+    // uses to decide immersion Practice instructions.
+    mode === "PRACTICE" && !context.rolePlay
+      ? db.learnerFact.findMany({
+          where: { userId },
+          orderBy: { updatedAt: "desc" },
+          take: 8,
+          select: { fact: true },
+        })
+      : Promise.resolve([]),
+  ]);
   // The 10 most recent results, derived from the same rows
   // getCompetencyProgress already fetched (via getRawProgressEvidence)
   // instead of a second, separately-ordered/bounded query
@@ -447,11 +476,15 @@ export async function sendAiTeacherMessage(
   );
 
   const provider = getAiProvider();
-  const result = await provider.complete({
-    systemPrompt,
-    messages: [...history, { role: "user", content: trimmed }],
-    maxOutputTokens: 800,
-  });
+  const result = await trackAiOperation(
+    { userId, feature: "ai-teacher-chat", provider: provider.name },
+    () =>
+      provider.complete({
+        systemPrompt,
+        messages: [...history, { role: "user", content: trimmed }],
+        maxOutputTokens: 800,
+      }),
+  );
 
   await recordAiUsage({
     userId,

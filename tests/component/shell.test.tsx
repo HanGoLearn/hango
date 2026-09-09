@@ -183,8 +183,10 @@ describe("AiTeacherBubble", () => {
     expect(
       screen.getByRole("button", { name: "Close Han" }),
     ).toBeInTheDocument();
+    // AiTeacherChat is lazy-loaded (2026-09-08 optimization pass) - its
+    // "Speak to Han" button isn't in the DOM until that chunk resolves.
     expect(
-      screen.getByRole("button", { name: "Speak to Han" }),
+      await screen.findByRole("button", { name: "Speak to Han" }),
     ).toBeInTheDocument();
   });
 
@@ -203,13 +205,16 @@ describe("AiTeacherBubble", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
 
     expect(screen.queryByText("Old conversation")).not.toBeInTheDocument();
+    // AiTeacherChat is lazy-loaded (2026-09-08 optimization pass) - wait for
+    // its chunk before asserting on content/effects it owns.
     expect(
-      screen.getByText(/Ask Han anything about this lesson/),
+      await screen.findByText(/Ask Han anything about this lesson/),
     ).toBeInTheDocument();
     expect(resetAiTeacherConversationAction).toHaveBeenCalledTimes(1);
 
     await userEvent.click(screen.getByRole("button", { name: "Close Han" }));
     await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
+    await screen.findByText(/Ask Han anything about this lesson/);
     expect(resetAiTeacherConversationAction).toHaveBeenCalledTimes(2);
   });
 
@@ -236,7 +241,9 @@ describe("AiTeacherBubble", () => {
       </AiTeacherProvider>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
-    expect(screen.getByText("No active lesson context")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No active lesson context"),
+    ).toBeInTheDocument();
   });
 
   it("never sends a stale Speaking role-play through the floating Han tutor", async () => {
@@ -256,7 +263,10 @@ describe("AiTeacherBubble", () => {
       screen.getByRole("button", { name: "Inject Speaking context" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "Message Han" }), "Hola");
+    await userEvent.type(
+      await screen.findByRole("textbox", { name: "Message Han" }),
+      "Hola",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(sendAiTeacherMessageAction).toHaveBeenCalledWith(

@@ -8,6 +8,18 @@ const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
 const DAY_MS = 86_400_000;
 const BOGOTA_OFFSET_MS = 5 * 60 * 60 * 1000;
 
+const ACTIVITY_SURFACE_LABELS = {
+  GENERAL: "Navegación general",
+  LEARNING_JOURNEY: "Learning Journey",
+  HAN_TUTOR: "Han Tutor",
+  HAN_COMPANION: "Han Companion",
+  SPEAKING_LAB: "Speaking Lab",
+  WRITING_LAB: "Writing Lab",
+  MISSIONS: "Missions",
+  HAN_VOCABULARY: "HanVocabulary",
+  PLACEMENT: "Placement",
+} as const;
+
 export type AnalyticsPeriod = 7 | 30 | 90;
 
 function bogotaDayNumber(date: Date): number {
@@ -31,21 +43,45 @@ function unionSize(...sets: Set<string>[]): number {
   return new Set(sets.flatMap((set) => [...set])).size;
 }
 
-export async function getAdminAnalytics(period: AnalyticsPeriod) {
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1]! + sorted[middle]!) / 2
+    : sorted[middle]!;
+}
+
+/**
+ * `excludeUserId` replaces a `user: { email: { not: ADMIN_EMAIL } } }` join
+ * on every activity table below (2026-09-08 optimization pass) - the
+ * caller (the admin page, which already resolved the logged-in
+ * administrator's id via requireAdministrator() to even reach this page)
+ * passes it in directly, turning an unindexable per-row join against User
+ * into a plain filter on each table's own indexed userId column. The two
+ * direct `db.user.findMany` cohort queries still filter by ADMIN_EMAIL - a
+ * `{not: ...}` on User's own (small, uniquely-indexed) email column was
+ * never the join-cost problem this pass targets.
+ */
+export async function getAdminAnalytics(
+  period: AnalyticsPeriod,
+  excludeUserId: string,
+) {
   const now = new Date();
   const periodStart = dayStart(period - 1);
   const previousStart = dayStart(period * 2 - 1);
   const retentionStart = dayStart(120);
   const todayStart = dayStart(0);
   const fourteenDaysAgo = dayStart(13);
+  const activityStart = new Date(
+    Math.min(previousStart.getTime(), retentionStart.getTime()),
+  );
 
   const [
     cohortUsers,
     retentionUsers,
     allOnboardedProfiles,
-    dailyLogins,
-    retentionLogins,
-    recentLogins,
+    activitySessions,
     lessonStarts,
     lessonCompletions,
     scenarioCompletions,
@@ -89,34 +125,24 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
     db.learnerProfile.findMany({
       where: {
         onboardingCompletedAt: { not: null },
-        user: { email: { not: ADMIN_EMAIL } },
+        userId: { not: excludeUserId },
       },
       select: { userId: true },
     }),
-    db.coinLedgerEntry.findMany({
+    db.learnerActivitySession.findMany({
       where: {
-        reason: "daily_login",
-        createdAt: { gte: periodStart },
-        user: { email: { not: ADMIN_EMAIL } },
+        lastActiveAt: { gte: activityStart },
+        userId: { not: excludeUserId },
       },
-      select: { userId: true, createdAt: true },
-    }),
-    db.coinLedgerEntry.findMany({
-      where: {
-        reason: "daily_login",
-        createdAt: { gte: retentionStart },
-        user: { email: { not: ADMIN_EMAIL } },
+      select: {
+        userId: true,
+        clientSessionId: true,
+        surface: true,
+        startedAt: true,
+        lastActiveAt: true,
+        activeSeconds: true,
+        interactionCount: true,
       },
-      select: { userId: true, createdAt: true },
-    }),
-    db.coinLedgerEntry.findMany({
-      where: {
-        reason: "daily_login",
-        createdAt: { gte: fourteenDaysAgo },
-        user: { email: { not: ADMIN_EMAIL } },
-      },
-      distinct: ["userId"],
-      select: { userId: true },
     }),
     db.learnerLessonProgress.findMany({
       where: { startedAt: { gte: periodStart } },
@@ -164,7 +190,7 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
       by: ["userId", "feature"],
       where: {
         createdAt: { gte: periodStart },
-        user: { email: { not: ADMIN_EMAIL } },
+        userId: { not: excludeUserId },
       },
       _sum: { estimatedCostUsd: true },
       _count: { _all: true },
@@ -182,7 +208,7 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
       ],
       where: {
         createdAt: { gte: periodStart },
-        user: { email: { not: ADMIN_EMAIL } },
+        userId: { not: excludeUserId },
       },
       _sum: {
         estimatedCostUsd: true,
@@ -196,7 +222,7 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
       by: ["userId", "feature"],
       where: {
         createdAt: { gte: todayStart },
-        user: { email: { not: ADMIN_EMAIL } },
+        userId: { not: excludeUserId },
       },
       _sum: { estimatedCostUsd: true },
       _count: { _all: true },
@@ -205,28 +231,28 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
     db.coinLedgerEntry.findMany({
       where: {
         createdAt: { gte: periodStart },
-        user: { email: { not: ADMIN_EMAIL } },
+        userId: { not: excludeUserId },
       },
       select: { userId: true, amount: true, reason: true },
     }),
     db.learnerAvatar.findMany({
-      where: { user: { email: { not: ADMIN_EMAIL } } },
+      where: { userId: { not: excludeUserId } },
       select: { userId: true },
     }),
     db.learnerAccessoryOwnership.findMany({
-      where: { user: { email: { not: ADMIN_EMAIL } } },
+      where: { userId: { not: excludeUserId } },
       distinct: ["userId"],
       select: { userId: true },
     }),
     db.achievement.findMany({
-      where: { user: { email: { not: ADMIN_EMAIL } } },
+      where: { userId: { not: excludeUserId } },
       distinct: ["userId"],
       select: { userId: true },
     }),
     db.learnerProfile.count({
       where: {
         generalLevelPoints: { gt: 0 },
-        user: { email: { not: ADMIN_EMAIL } },
+        userId: { not: excludeUserId },
       },
     }),
     db.learnerLessonCompletion.count({
@@ -307,11 +333,11 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
       index === 0 ? 100 : percent(set.size, funnelSets[index - 1]!.size),
   }));
 
-  const loginsByUser = new Map<string, Set<number>>();
-  for (const login of retentionLogins) {
-    const days = loginsByUser.get(login.userId) ?? new Set<number>();
-    days.add(bogotaDayNumber(login.createdAt));
-    loginsByUser.set(login.userId, days);
+  const activityDaysByUser = new Map<string, Set<number>>();
+  for (const activity of activitySessions) {
+    const days = activityDaysByUser.get(activity.userId) ?? new Set<number>();
+    days.add(bogotaDayNumber(activity.lastActiveAt));
+    activityDaysByUser.set(activity.userId, days);
   }
   const currentDay = bogotaDayNumber(now);
   const retention = ([1, 7, 30] as const).map((day) => {
@@ -319,7 +345,9 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
       (user) => currentDay - bogotaDayNumber(user.createdAt) >= day,
     );
     const returned = eligible.filter((user) =>
-      loginsByUser.get(user.id)?.has(bogotaDayNumber(user.createdAt) + day),
+      activityDaysByUser
+        .get(user.id)
+        ?.has(bogotaDayNumber(user.createdAt) + day),
     ).length;
     return {
       day,
@@ -329,26 +357,106 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
     };
   });
 
-  const activeDaysByUser = new Map<string, Set<number>>();
-  for (const login of dailyLogins) {
-    const days = activeDaysByUser.get(login.userId) ?? new Set<number>();
-    days.add(bogotaDayNumber(login.createdAt));
-    activeDaysByUser.set(login.userId, days);
+  const currentActivitySessions = activitySessions.filter(
+    (session) => session.lastActiveAt >= periodStart,
+  );
+  const currentActiveDaysByUser = new Map<string, Set<number>>();
+  for (const activity of currentActivitySessions) {
+    const days =
+      currentActiveDaysByUser.get(activity.userId) ?? new Set<number>();
+    days.add(bogotaDayNumber(activity.lastActiveAt));
+    currentActiveDaysByUser.set(activity.userId, days);
   }
-  const activeUsers = activeDaysByUser.size;
-  const returningUsers = [...activeDaysByUser.values()].filter(
+  const activeUsers = currentActiveDaysByUser.size;
+  const returningUsers = [...currentActiveDaysByUser.values()].filter(
     (days) => days.size >= 2,
   ).length;
-  const highlyEngagedUsers = [...activeDaysByUser.values()].filter(
+  const highlyEngagedUsers = [...currentActiveDaysByUser.values()].filter(
     (days) => days.size >= 4,
   ).length;
-  const recentLoginIds = new Set(recentLogins.map((row) => row.userId));
+  const recentActivityIds = new Set(
+    activitySessions
+      .filter((row) => row.lastActiveAt >= fourteenDaysAgo)
+      .map((row) => row.userId),
+  );
   const onboardedUserIds = new Set(
     allOnboardedProfiles.map((profile) => profile.userId),
   );
   const dormantUsers = allOnboardedProfiles.filter(
-    (profile) => !recentLoginIds.has(profile.userId),
+    (profile) => !recentActivityIds.has(profile.userId),
   ).length;
+  const currentLogicalSessions = new Map<string, number>();
+  for (const row of currentActivitySessions) {
+    const key = `${row.userId}:${row.clientSessionId}`;
+    currentLogicalSessions.set(
+      key,
+      (currentLogicalSessions.get(key) ?? 0) + row.activeSeconds,
+    );
+  }
+  const totalActiveSeconds = [...currentLogicalSessions.values()].reduce(
+    (total, seconds) => total + seconds,
+    0,
+  );
+  const previousActivitySessions = activitySessions.filter(
+    (row) =>
+      row.lastActiveAt >= previousStart && row.lastActiveAt < periodStart,
+  );
+  const previousActiveSeconds = previousActivitySessions.reduce(
+    (total, row) => total + row.activeSeconds,
+    0,
+  );
+  const activeTimeChange =
+    previousActiveSeconds > 0
+      ? Math.round(
+          ((totalActiveSeconds - previousActiveSeconds) /
+            previousActiveSeconds) *
+            1000,
+        ) / 10
+      : null;
+  const activityBySurface = new Map<
+    string,
+    {
+      users: Set<string>;
+      sessions: Set<string>;
+      activeSeconds: number;
+      interactions: number;
+    }
+  >();
+  for (const row of currentActivitySessions) {
+    const summary = activityBySurface.get(row.surface) ?? {
+      users: new Set<string>(),
+      sessions: new Set<string>(),
+      activeSeconds: 0,
+      interactions: 0,
+    };
+    summary.users.add(row.userId);
+    summary.sessions.add(`${row.userId}:${row.clientSessionId}`);
+    summary.activeSeconds += row.activeSeconds;
+    summary.interactions += row.interactionCount;
+    activityBySurface.set(row.surface, summary);
+  }
+  const surfaceActivity = [...activityBySurface.entries()]
+    .map(([surface, summary]) => ({
+      surface,
+      label:
+        ACTIVITY_SURFACE_LABELS[
+          surface as keyof typeof ACTIVITY_SURFACE_LABELS
+        ] ?? surface,
+      users: summary.users.size,
+      sessions: summary.sessions.size,
+      activeSeconds: summary.activeSeconds,
+      interactions: summary.interactions,
+    }))
+    .sort((a, b) => b.activeSeconds - a.activeSeconds);
+  const dau = uniqueUsers(
+    activitySessions.filter((row) => row.lastActiveAt >= todayStart),
+  );
+  const wau = uniqueUsers(
+    activitySessions.filter((row) => row.lastActiveAt >= dayStart(6)),
+  );
+  const mau = uniqueUsers(
+    activitySessions.filter((row) => row.lastActiveAt >= dayStart(29)),
+  );
   const onboardedAvatarOwners = avatarOwners.filter((owner) =>
     onboardedUserIds.has(owner.userId),
   ).length;
@@ -495,8 +603,8 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
       completions: 0,
     });
   }
-  for (const row of dailyLogins) {
-    trendMap.get(bogotaDayNumber(row.createdAt))?.active.add(row.userId);
+  for (const row of currentActivitySessions) {
+    trendMap.get(bogotaDayNumber(row.lastActiveAt))?.active.add(row.userId);
   }
   const completionDates = [
     ...lessonCompletions.map((row) => row.completedAt),
@@ -645,7 +753,7 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
           {
             severity: "info" as const,
             title: "Usuarios que podrían necesitar reactivación",
-            detail: `${dormantUsers} usuarios con onboarding completo no registran acceso en los últimos 14 días.`,
+            detail: `${dormantUsers} usuarios con onboarding completo no registran actividad visible e interactuada en los últimos 14 días.`,
             href: "/admin/users?status=onboarded",
           },
         ]
@@ -659,6 +767,17 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
     funnel,
     retention,
     trend,
+    activity: {
+      dau,
+      wau,
+      mau,
+      logicalSessions: currentLogicalSessions.size,
+      totalActiveSeconds,
+      medianActiveSeconds: median([...currentLogicalSessions.values()]),
+      previousActiveSeconds,
+      activeTimeChange,
+      surfaces: surfaceActivity,
+    },
     engagement: {
       activeUsers,
       returningUsers,
@@ -698,11 +817,11 @@ export async function getAdminAnalytics(period: AnalyticsPeriod) {
     alerts,
     methodology: {
       activity:
-        "Activo significa que el AppShell entregó el bono daily_login ese día; es un proxy de acceso, no tiempo estudiado.",
+        "Actividad cuenta intervalos de hasta 15 segundos solo cuando HanGo está visible y hubo interacción en el último minuto. Una pausa de 30 minutos inicia una sesión nueva.",
       retention:
-        "D1, D7 y D30 miden regreso en el día calendario exacto desde el registro, usando daily_login en hora de Bogotá.",
+        "D1, D7 y D30 miden actividad visible e interactuada en el día calendario exacto desde el registro, usando hora de Bogotá.",
       separation:
-        "Han Tutor y Han Companion se cuentan por funciones exclusivas. han-speech es voz compartida y no se atribuye a ninguno. Learning Journey Speaking no se suma a Speaking Lab sin un marcador de origen independiente.",
+        "Han Tutor y Han Companion se mantienen separados: Tutor solo se reconoce dentro de su panel lateral y Companion por /han. Speaking Lab usa su ruta propia; Learning Journey Speaking permanece en Learning Journey y no se suma a Speaking Lab.",
     },
   };
 }

@@ -29,6 +29,9 @@ describe("AdminShell", () => {
       "bg-primary-500",
     );
     expect(
+      screen.getByRole("link", { name: "Operaciones IA" }),
+    ).toHaveAttribute("href", "/admin/operations");
+    expect(
       screen.queryByRole("link", { name: "Speaking Lab" }),
     ).not.toBeInTheDocument();
     expect(

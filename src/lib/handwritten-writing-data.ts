@@ -17,7 +17,7 @@ import {
   HANDWRITTEN_EVALUATION_MODEL,
 } from "@/lib/handwritten-writing-evaluator";
 import { estimateCostUsd } from "@/lib/ai/cost";
-import { recordAiUsage, checkDailyUsageCap } from "@/lib/ai-usage";
+import { recordAiUsage, trackAiOperation } from "@/lib/ai-usage";
 
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_SUBMISSIONS = 4;
@@ -69,12 +69,14 @@ async function evaluateAndPersist(
   images: { mimeType: string; bytes: ArrayBuffer }[],
 ): Promise<HandwrittenSubmissionResult> {
   checkRateLimit(userId);
-  await checkDailyUsageCap(userId, "handwritten-writing");
-  const { result, transcription, usage } = await evaluateHandwrittenWriting(
-    userId,
-    level,
-    topic,
-    images,
+  const { result, transcription, usage } = await trackAiOperation(
+    {
+      userId,
+      feature: "handwritten-writing",
+      provider: "openai",
+      model: HANDWRITTEN_EVALUATION_MODEL,
+    },
+    () => evaluateHandwrittenWriting(userId, level, topic, images),
   );
   // Recorded regardless of readable/unreadable - the vision call itself
   // already happened and cost money either way.

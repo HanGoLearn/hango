@@ -6,9 +6,9 @@ import { mergeWavAudio } from "@/lib/han-speech";
 import { contentAudioKey } from "@/lib/audio-content-key";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   estimateTtsCostUsd,
   estimateTtsDurationSeconds,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 
 // Mirrors dialogue-audio.ts's rate limit exactly - same abuse/cost
@@ -101,13 +101,15 @@ async function ensureLineAudioKey(
   }
 
   checkRateLimit(userId);
-  await checkDailyUsageCap(userId, "placement-listening-audio");
-
   const tts = getTtsProvider();
-  const result = await tts.synthesize(
-    line.chineseText,
-    voice,
-    pacingInstructionsForLevel(hskLevel),
+  const result = await trackAiOperation(
+    { userId, feature: "placement-listening-audio", provider: tts.name },
+    () =>
+      tts.synthesize(
+        line.chineseText,
+        voice,
+        pacingInstructionsForLevel(hskLevel),
+      ),
   );
   await recordAiUsage({
     userId,

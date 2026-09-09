@@ -5,8 +5,8 @@ import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   DailyUsageCapExceededError,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 import {
   buildSpeakingConversationFeedbackPrompt,
@@ -67,30 +67,32 @@ export async function getFreeTopicPracticeFeedbackAction(
   }
 
   try {
-    await checkDailyUsageCap(session.user.id, "free-topic-feedback");
     const provider = getAiProvider();
-    const result = await provider.complete({
-      systemPrompt: buildSpeakingConversationFeedbackPrompt(
-        {
-          learnerRole: "yourself",
-          aiRole: "conversation partner",
-          objective: `Have a natural spoken conversation about: ${topic}`,
-        },
-        transcript,
-        sanitizeSpeakingTurnEvidence(speakingEvidence),
-      ),
-      messages: [{ role: "user", content: "Evaluate the conversation above." }],
-      // Same prompt shape (and same generous budget) as reflection.ts's
-      // lesson Speaking step scoring: GPT-5's reasoning tokens count
-      // against this budget, and the full rubric + up to 6 mistakes need
-      // more room than an ordinary chat reply. A smaller budget here
-      // previously caused the JSON to get cut off mid-response, which
-      // parseSpeakingConversationFeedback silently turned into
-      // DEFAULT_SPEAKING_FEEDBACK (flat 50s, generic notes) - a real bug,
-      // not intentional (user report, 2026-08-08).
-      maxOutputTokens: 1_600,
-      timeoutMs: 45_000,
-    });
+    const result = await trackAiOperation(
+      {
+        userId: session.user.id,
+        feature: "free-topic-feedback",
+        provider: provider.name,
+      },
+      () =>
+        provider.complete({
+          systemPrompt: buildSpeakingConversationFeedbackPrompt(
+            {
+              learnerRole: "yourself",
+              aiRole: "conversation partner",
+              objective: `Have a natural spoken conversation about: ${topic}`,
+            },
+            transcript,
+            sanitizeSpeakingTurnEvidence(speakingEvidence),
+          ),
+          messages: [
+            { role: "user", content: "Evaluate the conversation above." },
+          ],
+          // GPT-5 reasoning and the full rubric need this headroom.
+          maxOutputTokens: 1_600,
+          timeoutMs: 45_000,
+        }),
+    );
     await recordAiUsage({
       userId: session.user.id,
       feature: "free-topic-feedback",

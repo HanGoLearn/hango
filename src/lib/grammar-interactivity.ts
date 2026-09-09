@@ -6,9 +6,9 @@ import { contentAudioKey } from "@/lib/audio-content-key";
 import { getExercisesForGrammarPoint } from "@/lib/content/exercise";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   estimateTtsCostUsd,
   estimateTtsDurationSeconds,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 
 // Shared across every generation path here (audio, explanation, examples,
@@ -41,9 +41,11 @@ async function synthesizeAndStore(
   key: string,
   text: string,
 ): Promise<string> {
-  await checkDailyUsageCap(userId, "grammar-audio");
   const tts = getTtsProvider();
-  const result = await tts.synthesize(text, VOICE);
+  const result = await trackAiOperation(
+    { userId, feature: "grammar-audio", provider: tts.name },
+    () => tts.synthesize(text, VOICE),
+  );
   await recordAiUsage({
     userId,
     feature: "grammar-audio",

@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminStatCard } from "@/components/admin/admin-stat-card";
+import { requireAdministrator } from "@/lib/admin-auth";
 import { getAdminAnalytics, type AnalyticsPeriod } from "@/lib/admin-analytics";
 
 type SearchParams = Promise<{ period?: string }>;
@@ -27,6 +28,15 @@ function usd(value: number) {
 
 function number(value: number) {
   return value.toLocaleString("es-CO");
+}
+
+function duration(seconds: number) {
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  const minutes = seconds / 60;
+  if (minutes < 60) {
+    return `${minutes.toLocaleString("es-CO", { maximumFractionDigits: 1 })} min`;
+  }
+  return `${(minutes / 60).toLocaleString("es-CO", { maximumFractionDigits: 1 })} h`;
 }
 
 function rateLabel(row: {
@@ -75,7 +85,10 @@ export default async function AdminAnalyticsPage({
   const period: AnalyticsPeriod = [7, 30, 90].includes(parsedPeriod)
     ? (parsedPeriod as AnalyticsPeriod)
     : 30;
-  const analytics = await getAdminAnalytics(period);
+  // Free cache() hit (2026-09-08 optimization pass) - admin/layout.tsx
+  // already resolved this for the same request.
+  const administrator = await requireAdministrator();
+  const analytics = await getAdminAnalytics(period, administrator.id);
   const maxTrendValue = Math.max(
     1,
     ...analytics.trend.flatMap((day) => [day.activeUsers, day.completions]),
@@ -104,7 +117,7 @@ export default async function AdminAnalyticsPage({
         <AdminStatCard
           label={`Usuarios activos · ${period} días`}
           value={number(analytics.engagement.activeUsers)}
-          detail="Accesos únicos detectados"
+          detail="Actividad visible e interactuada"
           icon={<Activity className="size-5" aria-hidden="true" />}
         />
         <AdminStatCard
@@ -137,6 +150,108 @@ export default async function AdminAnalyticsPage({
         />
       </section>
 
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <article className="rounded-panel border border-border bg-surface p-5">
+          <div className="flex items-center gap-2">
+            <Activity className="size-5 text-primary-400" aria-hidden="true" />
+            <h2 className="font-display text-section-title font-semibold">
+              Sesiones reales de actividad
+            </h2>
+          </div>
+          <p className="mt-1 font-interface text-caption text-text-muted">
+            Solo intervalos con la pestaña visible e interacción reciente.
+          </p>
+          <dl className="mt-5 grid grid-cols-3 gap-3 font-interface">
+            <Metric label="DAU" value={number(analytics.activity.dau)} />
+            <Metric label="WAU" value={number(analytics.activity.wau)} />
+            <Metric label="MAU" value={number(analytics.activity.mau)} />
+          </dl>
+          <dl className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
+            <Metric
+              label={`Sesiones · ${period} días`}
+              value={number(analytics.activity.logicalSessions)}
+            />
+            <Metric
+              label="Duración activa mediana"
+              value={duration(analytics.activity.medianActiveSeconds)}
+            />
+            <Metric
+              label="Tiempo activo total"
+              value={duration(analytics.activity.totalActiveSeconds)}
+            />
+            <Metric
+              label="Frente al periodo anterior"
+              value={
+                analytics.activity.activeTimeChange === null
+                  ? "Sin base comparable"
+                  : `${analytics.activity.activeTimeChange >= 0 ? "+" : ""}${analytics.activity.activeTimeChange}%`
+              }
+              tone={
+                analytics.activity.activeTimeChange === null
+                  ? undefined
+                  : analytics.activity.activeTimeChange < 0
+                    ? "negative"
+                    : "positive"
+              }
+            />
+          </dl>
+        </article>
+
+        <article className="min-w-0 overflow-hidden rounded-panel border border-border bg-surface">
+          <div className="border-b border-border px-5 py-4">
+            <h2 className="font-display text-section-title font-semibold">
+              Tiempo por experiencia
+            </h2>
+            <p className="font-interface text-caption text-text-muted">
+              Comparación sin mezclar los sistemas de conversación y práctica.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-left font-interface text-supporting">
+              <thead className="bg-elevated text-caption uppercase tracking-wide text-text-muted">
+                <tr>
+                  <th className="px-5 py-3">Experiencia</th>
+                  <th className="px-4 py-3 text-right">Usuarios</th>
+                  <th className="px-4 py-3 text-right">Sesiones</th>
+                  <th className="px-4 py-3 text-right">Interacciones</th>
+                  <th className="px-5 py-3 text-right">Tiempo activo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.activity.surfaces.map((surface) => (
+                  <tr key={surface.surface} className="border-t border-border">
+                    <td className="px-5 py-3 font-semibold">{surface.label}</td>
+                    <td className="px-4 py-3 text-right">
+                      {number(surface.users)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {number(surface.sessions)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {number(surface.interactions)}
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold">
+                      {duration(surface.activeSeconds)}
+                    </td>
+                  </tr>
+                ))}
+                {!analytics.activity.surfaces.length && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-5 py-10 text-center text-text-muted"
+                    >
+                      La medición comenzará con la próxima interacción de un
+                      estudiante.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <article className="min-w-0 rounded-panel border border-border bg-surface p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -145,7 +260,7 @@ export default async function AdminAnalyticsPage({
                 Pulso diario
               </h2>
               <p className="font-interface text-caption text-text-muted">
-                Accesos únicos y actividades realmente completadas.
+                Usuarios con actividad visible y actividades completadas.
               </p>
             </div>
             <div className="flex gap-3 font-interface text-caption text-text-secondary">

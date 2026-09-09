@@ -1,17 +1,35 @@
 import { Suspense, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/shell/sidebar";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { TopBar } from "@/components/shell/top-bar";
 import { AiTeacherBubble } from "@/components/shell/ai-teacher-bubble";
 import { AiTeacherProvider } from "@/components/ai-teacher/ai-teacher-provider";
-import { AchievementCelebration } from "@/components/achievements/achievement-celebration";
-import { CoinCelebration } from "@/components/avatar/coin-celebration";
 import { AnnouncementCenter } from "@/components/announcements/announcement-center";
+import { ActivityTracker } from "@/components/analytics/activity-tracker";
 import { auth } from "@/lib/auth";
 import { getStudyStreak } from "@/lib/dashboard-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
 import { getAvatarPageData } from "@/lib/avatar-data";
 import { grantDailyLoginCoins } from "@/lib/coins";
+
+// Dynamically loaded (2026-09-08 optimization pass) - these are rare-event
+// overlays (an achievement unlocking, coins landing), not visible on most
+// page loads, but were statically imported into this shell that wraps
+// every authenticated page. `ssr: false` isn't allowed here (AppShell is a
+// Server Component) - this still code-splits them into their own chunk
+// fetched separately from the main shell bundle, which is the part that
+// mattered (their `motion` animation dependency was the bulk of the cost).
+const AchievementCelebration = dynamic(() =>
+  import("@/components/achievements/achievement-celebration").then(
+    (mod) => mod.AchievementCelebration,
+  ),
+);
+const CoinCelebration = dynamic(() =>
+  import("@/components/avatar/coin-celebration").then(
+    (mod) => mod.CoinCelebration,
+  ),
+);
 
 export interface AppShellProps {
   children: ReactNode;
@@ -72,6 +90,7 @@ export async function AppShell({ children }: AppShellProps) {
       initialVoice={hanPreferences.voice}
       initialExplanationLanguage={hanPreferences.explanationLanguage}
     >
+      <ActivityTracker />
       <div className="flex h-dvh flex-col">
         <Suspense fallback={<TopBarSkeleton />}>
           <TopBarData

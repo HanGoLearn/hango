@@ -7,26 +7,27 @@ import {
 } from "@/lib/ai-usage";
 
 export const FEATURE_LABELS: Record<AiUsageFeature, string> = {
-  "ai-teacher-chat": "Han Teacher/Companion chat",
-  "vocabulary-lookup": "Han Vocabulary lookup",
-  "mission-chat": "Mission chat",
-  "mission-report": "Mission report",
-  "speaking-feedback": "Speaking Lab feedback",
-  "speaking-scenario": "Speaking Lab custom scenario",
-  "lesson-reflection": "Lesson reflection report",
-  "writing-feedback": "Writing Lab feedback",
-  "placement-grading": "Placement exam speaking grading",
-  "free-topic-feedback": "Free-topic practice feedback",
-  "handwritten-writing": "Handwritten writing evaluation",
-  "welcome-audio": "Welcome to Chinese audio",
-  "dialogue-audio": "Lesson dialogue audio",
-  "grammar-audio": "Grammar example audio",
-  "vocabulary-audio": "Vocabulary word/example audio",
-  "placement-listening-audio": "Placement listening audio",
-  "han-speech": "Han's spoken voice",
-  "han-teacher-transcribe": "Han Teacher/Companion transcription",
-  "speaking-transcribe": "Speaking Lab transcription",
-  "han-realtime-assessment": "Live voice conversation planner",
+  "ai-teacher-chat": "Chat de Han Tutor y Companion",
+  "learner-fact-extraction": "Memoria de Han Companion",
+  "vocabulary-lookup": "Búsqueda de HanVocabulary",
+  "mission-chat": "Conversación de Mission",
+  "mission-report": "Evaluación final de Mission",
+  "speaking-feedback": "Evaluación de Speaking Lab",
+  "speaking-scenario": "Escenario personalizado de Speaking Lab",
+  "lesson-reflection": "Reflexión final de la lección",
+  "writing-feedback": "Evaluación de Writing Lab",
+  "placement-grading": "Evaluación oral de Placement",
+  "free-topic-feedback": "Evaluación de práctica libre",
+  "handwritten-writing": "Evaluación de escritura a mano",
+  "welcome-audio": "Audio de introducción al chino",
+  "dialogue-audio": "Audio de diálogos de lección",
+  "grammar-audio": "Audio de ejemplos de gramática",
+  "vocabulary-audio": "Audio de vocabulario y ejemplos",
+  "placement-listening-audio": "Audio de escucha de Placement",
+  "han-speech": "Voz generada de Han",
+  "han-teacher-transcribe": "Transcripción de Han Tutor y Companion",
+  "speaking-transcribe": "Transcripción de Speaking Lab",
+  "han-realtime-assessment": "Evaluación de conversación por voz",
 };
 
 export interface FeatureUsageSummary {
@@ -74,9 +75,15 @@ export async function getAiUsageSummary(): Promise<FeatureUsageSummary[]> {
     }),
   ]);
 
-  const capByFeature = new Map(caps.map((cap) => [cap.feature, cap.dailyLimitUsd]));
-  const todayByFeature = new Map(todayGroups.map((group) => [group.feature, group]));
-  const monthByFeature = new Map(monthGroups.map((group) => [group.feature, group]));
+  const capByFeature = new Map(
+    caps.map((cap) => [cap.feature, cap.dailyLimitUsd]),
+  );
+  const todayByFeature = new Map(
+    todayGroups.map((group) => [group.feature, group]),
+  );
+  const monthByFeature = new Map(
+    monthGroups.map((group) => [group.feature, group]),
+  );
 
   return AI_USAGE_FEATURES.map((feature) => ({
     feature,
@@ -90,6 +97,20 @@ export async function getAiUsageSummary(): Promise<FeatureUsageSummary[]> {
 }
 
 export class InvalidDailyCapError extends Error {}
+export class InvalidUserAiUsageCapError extends Error {}
+
+export type UserAiUsageCapMode = "GENERAL" | "CUSTOM" | "BLOCKED";
+
+export interface UserAiUsageLimitSummary {
+  feature: AiUsageFeature;
+  label: string;
+  mode: UserAiUsageCapMode;
+  generalLimitUsd: number;
+  customLimitUsd: number | null;
+  effectiveLimitUsd: number;
+  todayCostUsd: number;
+  todayCallCount: number;
+}
 
 export async function setDailyUsageCap(
   feature: AiUsageFeature,
@@ -105,6 +126,102 @@ export async function setDailyUsageCap(
   await db.aiUsageCap.upsert({
     where: { feature },
     create: { feature, dailyLimitUsd },
+    update: { dailyLimitUsd },
+  });
+}
+
+export async function getUserAiUsageLimits(
+  userId: string,
+): Promise<UserAiUsageLimitSummary[]> {
+  const [caps, overrides, todayGroups] = await Promise.all([
+    db.aiUsageCap.findMany(),
+    db.aiUsageUserCap.findMany({ where: { userId } }),
+    db.aiUsageLog.groupBy({
+      by: ["feature"],
+      where: { userId, createdAt: { gte: startOfTodayUtc() } },
+      _sum: { estimatedCostUsd: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const capByFeature = new Map(
+    caps.map((cap) => [cap.feature, cap.dailyLimitUsd]),
+  );
+  const overrideByFeature = new Map(
+    overrides.map((override) => [override.feature, override.dailyLimitUsd]),
+  );
+  const todayByFeature = new Map(
+    todayGroups.map((group) => [group.feature, group]),
+  );
+
+  return AI_USAGE_FEATURES.map((feature) => {
+    const generalLimitUsd = capByFeature.get(feature) ?? DEFAULT_DAILY_CAP_USD;
+    const customLimitUsd = overrideByFeature.get(feature) ?? null;
+    return {
+      feature,
+      label: FEATURE_LABELS[feature],
+      mode:
+        customLimitUsd === null
+          ? "GENERAL"
+          : customLimitUsd === 0
+            ? "BLOCKED"
+            : "CUSTOM",
+      generalLimitUsd,
+      customLimitUsd,
+      effectiveLimitUsd: customLimitUsd ?? generalLimitUsd,
+      todayCostUsd: todayByFeature.get(feature)?._sum.estimatedCostUsd ?? 0,
+      todayCallCount: todayByFeature.get(feature)?._count._all ?? 0,
+    };
+  });
+}
+
+export async function setUserAiUsageCap(input: {
+  userId: string;
+  feature: AiUsageFeature;
+  mode: UserAiUsageCapMode;
+  dailyLimitUsd?: number;
+}): Promise<void> {
+  if (
+    !AI_USAGE_FEATURES.includes(input.feature) ||
+    !(["GENERAL", "CUSTOM", "BLOCKED"] as string[]).includes(input.mode)
+  ) {
+    throw new InvalidUserAiUsageCapError("La configuración no es válida.");
+  }
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true, role: true },
+  });
+  if (!user || user.role === "ADMINISTRATOR") {
+    throw new InvalidUserAiUsageCapError("El usuario no es válido.");
+  }
+
+  if (input.mode === "GENERAL") {
+    await db.aiUsageUserCap.deleteMany({
+      where: { userId: input.userId, feature: input.feature },
+    });
+    return;
+  }
+
+  const dailyLimitUsd = input.mode === "BLOCKED" ? 0 : input.dailyLimitUsd;
+  if (
+    dailyLimitUsd === undefined ||
+    !Number.isFinite(dailyLimitUsd) ||
+    dailyLimitUsd < 0 ||
+    (input.mode === "CUSTOM" && dailyLimitUsd <= 0)
+  ) {
+    throw new InvalidUserAiUsageCapError(
+      "Ingresa un límite diario mayor que cero.",
+    );
+  }
+
+  await db.aiUsageUserCap.upsert({
+    where: {
+      userId_feature: { userId: input.userId, feature: input.feature },
+    },
+    create: {
+      userId: input.userId,
+      feature: input.feature,
+      dailyLimitUsd,
+    },
     update: { dailyLimitUsd },
   });
 }

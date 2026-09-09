@@ -12,15 +12,22 @@ vi.mock("@/lib/db", () => ({ db: { user: { findUnique: findUser } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { setDailyUsageCapMock } = vi.hoisted(() => ({
+const { setDailyUsageCapMock, setUserAiUsageCapMock } = vi.hoisted(() => ({
   setDailyUsageCapMock: vi.fn(),
+  setUserAiUsageCapMock: vi.fn(),
 }));
 vi.mock("@/lib/admin-ai-usage", () => {
   class InvalidDailyCapError extends Error {}
-  return { setDailyUsageCap: setDailyUsageCapMock, InvalidDailyCapError };
+  class InvalidUserAiUsageCapError extends Error {}
+  return {
+    setDailyUsageCap: setDailyUsageCapMock,
+    setUserAiUsageCap: setUserAiUsageCapMock,
+    InvalidDailyCapError,
+    InvalidUserAiUsageCapError,
+  };
 });
 
-const { updateDailyUsageCapAction } =
+const { updateDailyUsageCapAction, updateUserAiUsageCapAction } =
   await import("@/lib/actions/admin-ai-usage");
 
 beforeEach(() => {
@@ -85,5 +92,58 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
 
     expect(result).toEqual({ ok: true });
     expect(setDailyUsageCapMock).toHaveBeenCalledWith("welcome-audio", 2);
+  });
+
+  it("sets a custom limit for only the selected learner", async () => {
+    auth.mockResolvedValueOnce({
+      user: { id: "admin-1", role: "ADMINISTRATOR" },
+    });
+    findUser.mockResolvedValueOnce({
+      id: "admin-1",
+      email: "arean.mendoza@unmsm.edu.pe",
+      name: "Arean",
+      role: "ADMINISTRATOR",
+    });
+    setUserAiUsageCapMock.mockResolvedValueOnce(undefined);
+
+    const result = await updateUserAiUsageCapAction(
+      "learner-1",
+      "han-speech",
+      "CUSTOM",
+      0.25,
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(setUserAiUsageCapMock).toHaveBeenCalledWith({
+      userId: "learner-1",
+      feature: "han-speech",
+      mode: "CUSTOM",
+      dailyLimitUsd: 0.25,
+    });
+  });
+
+  it("rejects an unknown per-user limit mode", async () => {
+    auth.mockResolvedValueOnce({
+      user: { id: "admin-1", role: "ADMINISTRATOR" },
+    });
+    findUser.mockResolvedValueOnce({
+      id: "admin-1",
+      email: "arean.mendoza@unmsm.edu.pe",
+      name: "Arean",
+      role: "ADMINISTRATOR",
+    });
+
+    const result = await updateUserAiUsageCapAction(
+      "learner-1",
+      "han-speech",
+      "EVERYONE",
+      0.25,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Tipo de límite desconocido.",
+    });
+    expect(setUserAiUsageCapMock).not.toHaveBeenCalled();
   });
 });

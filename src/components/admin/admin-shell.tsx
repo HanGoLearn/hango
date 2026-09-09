@@ -9,6 +9,7 @@ import {
   Gauge,
   Megaphone,
   ShieldCheck,
+  ShieldAlert,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -24,6 +25,11 @@ const navigation = [
     icon: Megaphone,
   },
   { href: "/admin/limits", label: "Límites de IA", icon: Gauge },
+  {
+    href: "/admin/operations",
+    label: "Operaciones IA",
+    icon: ShieldAlert,
+  },
 ];
 
 export function AdminShell({

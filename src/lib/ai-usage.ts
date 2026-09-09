@@ -12,6 +12,7 @@ import { estimateCostUsd, getTokenPricingUsdPerMillion } from "@/lib/ai/cost";
  */
 export const AI_USAGE_FEATURES = [
   "ai-teacher-chat",
+  "learner-fact-extraction",
   "vocabulary-lookup",
   "mission-chat",
   "mission-report",
@@ -35,10 +36,115 @@ export const AI_USAGE_FEATURES = [
 
 export type AiUsageFeature = (typeof AI_USAGE_FEATURES)[number];
 
+export interface TrackAiOperationInput {
+  userId: string;
+  feature: AiUsageFeature;
+  provider?: string;
+  model?: string;
+  /** Multi-provider workflows may perform their single cap check before any step. */
+  capAlreadyChecked?: boolean;
+}
+
 /** Falls back to this when a feature has no row in AiUsageCap yet. */
 export const DEFAULT_DAILY_CAP_USD = 1;
 
 export class DailyUsageCapExceededError extends Error {}
+
+function normalizedOperationalErrorCode(error: unknown): string {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "timeout";
+  }
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && /^[a-z0-9_-]{1,50}$/u.test(code)) {
+      return code;
+    }
+  }
+  return "unknown";
+}
+
+function resultIdentity(value: unknown): {
+  provider?: string;
+  model?: string;
+} {
+  if (!value || typeof value !== "object") return {};
+  const candidate = value as { provider?: unknown; model?: unknown };
+  return {
+    provider:
+      typeof candidate.provider === "string" ? candidate.provider : undefined,
+    model: typeof candidate.model === "string" ? candidate.model : undefined,
+  };
+}
+
+function safeLatencyMs(startedAt: number): number {
+  return Math.max(0, Math.min(3_600_000, Math.round(Date.now() - startedAt)));
+}
+
+async function recordAiOperationBestEffort(input: {
+  userId: string;
+  feature: AiUsageFeature;
+  provider?: string;
+  model?: string;
+  outcome: "SUCCESS" | "FAILURE" | "BLOCKED_CAP";
+  errorCode?: string;
+  latencyMs?: number;
+}): Promise<void> {
+  if (input.provider === "mock") return;
+  try {
+    await db.aiOperationLog.create({
+      data: {
+        userId: input.userId,
+        feature: input.feature,
+        provider: input.provider ?? null,
+        model: input.model ?? null,
+        outcome: input.outcome,
+        errorCode: input.errorCode ?? null,
+        latencyMs: input.latencyMs ?? null,
+      },
+    });
+  } catch {
+    // Observability must never turn a successful learner operation into an
+    // error or replace the provider's real failure with a logging failure.
+  }
+}
+
+/**
+ * Wraps one real provider call. It records only operational metadata and
+ * rethrows the original error unchanged so existing learner fallbacks keep
+ * working. Cost accounting remains recordAiUsage()'s separate responsibility.
+ */
+export async function trackAiOperation<T>(
+  input: TrackAiOperationInput,
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (!input.capAlreadyChecked) {
+    await checkDailyUsageCap(input.userId, input.feature, {
+      provider: input.provider,
+      model: input.model,
+    });
+  }
+  const startedAt = Date.now();
+  try {
+    const result = await operation();
+    const identity = resultIdentity(result);
+    await recordAiOperationBestEffort({
+      ...input,
+      provider: identity.provider ?? input.provider,
+      model: identity.model ?? input.model,
+      outcome: "SUCCESS",
+      latencyMs: safeLatencyMs(startedAt),
+    });
+    return result;
+  } catch (error) {
+    await recordAiOperationBestEffort({
+      ...input,
+      outcome: "FAILURE",
+      errorCode: normalizedOperationalErrorCode(error),
+      latencyMs: safeLatencyMs(startedAt),
+    });
+    throw error;
+  }
+}
 
 interface RecordAiUsageInput {
   userId: string;
@@ -163,19 +269,38 @@ function startOfTodayUtc(): Date {
 export async function checkDailyUsageCap(
   userId: string,
   feature: AiUsageFeature,
+  identity: { provider?: string; model?: string } = {},
 ): Promise<void> {
-  const [cap, usage] = await Promise.all([
+  const [userCap, cap, usage] = await Promise.all([
+    db.aiUsageUserCap.findUnique({
+      where: { userId_feature: { userId, feature } },
+    }),
     db.aiUsageCap.findUnique({ where: { feature } }),
     db.aiUsageLog.aggregate({
       where: { userId, feature, createdAt: { gte: startOfTodayUtc() } },
       _sum: { estimatedCostUsd: true },
     }),
   ]);
-  const limit = cap?.dailyLimitUsd ?? DEFAULT_DAILY_CAP_USD;
+  const limit =
+    userCap?.dailyLimitUsd ?? cap?.dailyLimitUsd ?? DEFAULT_DAILY_CAP_USD;
   const spentToday = usage._sum.estimatedCostUsd ?? 0;
   if (spentToday >= limit) {
+    const errorCode = userCap
+      ? limit === 0
+        ? "user_feature_blocked"
+        : "user_cap_exceeded"
+      : "daily_cap_exceeded";
+    await recordAiOperationBestEffort({
+      userId,
+      feature,
+      ...identity,
+      outcome: "BLOCKED_CAP",
+      errorCode,
+    });
     throw new DailyUsageCapExceededError(
-      "You've reached today's usage limit for this feature. Please try again tomorrow.",
+      limit === 0
+        ? "This feature isn't available for your account."
+        : "You've reached today's usage limit for this feature. Please try again tomorrow.",
     );
   }
 }

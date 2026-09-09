@@ -9,6 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminStatCard } from "@/components/admin/admin-stat-card";
+import { requireAdministrator } from "@/lib/admin-auth";
 import { getAdminOverview } from "@/lib/admin-dashboard";
 
 const dateFormatter = new Intl.DateTimeFormat("es-CO", {
@@ -26,7 +27,10 @@ function usd(value: number) {
 }
 
 export default async function AdminOverviewPage() {
-  const overview = await getAdminOverview();
+  // Free cache() hit (2026-09-08 optimization pass) - admin/layout.tsx
+  // already resolved this for the same request.
+  const administrator = await requireAdministrator();
+  const overview = await getAdminOverview(administrator.id);
 
   return (
     <div className="flex flex-col gap-7">

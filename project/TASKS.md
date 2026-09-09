@@ -5113,22 +5113,16 @@ content, achievements, auth, the placement exam engine.
   literalmente cortado a la mitad, etc. — 15 moderados en `01_product`/
   `04_design`/`06_marketing`, 18 menores). 14 confirmados ya precisos, sin
   tocar.
-- [ ] **Parte 2** (DB/Prisma) en pausa — encontró 2 bugs reales del mismo
-  tipo que el ya arreglado en `scenario-completion.ts` (guardas de
-  idempotencia mal ubicadas en `mission-data.ts` y `reflection.ts` que
-  pueden perder evidencia de progreso para siempre tras un fallo parcial),
-  más 6 índices de base de datos faltantes y el hallazgo de que la DB usa
-  el endpoint directo de Prisma Postgres en vez del pooled. Pausada a
-  propósito hasta que termine el trabajo de Codex en el panel de admin
-  (ambas partes tocarían `prisma/schema.prisma`).
-- [ ] Codex está construyendo la versión completa del panel de
-  administrador (resumen general, vista por usuario, límites por función
-  con minutos/costo reales) a partir de la arquitectura acordada — en
-  progreso, ya extendió `AiUsageLog` con seguimiento real de duración.
+- [x] **Parte 2** (DB/Prisma), retomada y cerrada en la pasada de
+  optimización del 2026-09-08 (ver esa sección más abajo): los 2 bugs de
+  idempotencia (`mission-data.ts`, `reflection.ts`) arreglados, 5/6
+  índices aplicados (el sexto se descartó — sin consulta real que lo
+  necesite), endpoint pooled investigado y descartado (ver detalle abajo).
+- [x] Codex completó el panel de administrador (resumen general, analítica,
+  operaciones de IA, límites por usuario, actividad real) — ver las
+  secciones "Entrega 1" a "Entrega 5B" más abajo.
 - [ ] El CI (`.github/workflows/ci.yml`) nunca corrió en GitHub real — el
   primer push real es la prueba real.
-- [ ] Nada de esta sesión se ha subido a git todavía (ni la auditoría, ni
-  el sistema de costo de IA, ni el panel).
 
 ## Private admin back-office — Entrega 1 (2026-09-05) — ✅ Complete
 
@@ -5210,3 +5204,171 @@ content, achievements, auth, the placement exam engine.
   invariant test pass. The separate mutable AI-usage integration suite remains
   prepared but was not rerun against the shared database because it creates
   temporary users and modifies global feature-cap rows.
+
+## Admin real activity sessions — Entrega 3 (2026-09-06) — ✅ Complete
+
+- [x] Added an authenticated, invisible activity tracker to the learner shell.
+  It sends cumulative 15-second heartbeats only after real interaction, while
+  the document is visible, and stops counting after one minute without input.
+  A 30-minute idle gap starts a new logical browser session.
+- [x] Added monotonic sequence/total handling and bounded server validation so
+  retries cannot double-count, stale heartbeats cannot move totals backward,
+  and implausible client totals are rejected.
+- [x] Added explicit surface attribution. Han Tutor uses markers on its lateral
+  panel and full-page view; Han Companion, HanVocabulary, Missions, Speaking
+  Lab, Writing Lab, Placement and Learning Journey remain independently
+  measurable. The `/han` selection hub is neutral, and Learning Journey
+  Speaking is never counted as Speaking Lab.
+- [x] `/admin/analytics` now uses real activity sessions instead of
+  `daily_login` as the access proxy for DAU/WAU/MAU, D1/D7/D30, returning and
+  dormant learners, and its daily active trend. Added logical-session count,
+  active-duration median/total/change and a per-experience comparison table.
+- [x] Added `LearnerActivitySession` plus indexed user/date/surface access.
+  Migration `20260906103000_add_learner_activity_sessions` was applied to the
+  configured PostgreSQL database; Prisma reported all 50 migrations applied.
+- [x] Prisma format/validation/client generation, typecheck, scoped ESLint,
+  9/9 focused local tests and the real-database read-only analytics invariant
+  test pass. Activity metrics are intentionally non-retroactive and begin with
+  the first learner interaction after this deployment.
+
+## Admin user 360° — Entrega 4 (2026-09-06) — ✅ Complete
+
+- [x] Expanded `/admin/users/[userId]` into an operational learner view with
+  real 30-day/all-time activity, active days, study streak, onboarding and
+  verification state, pedagogical preferences, declared/demonstrated level,
+  avatar and learning goals.
+- [x] Added separate learning counts for lessons, scenarios, quizzes,
+  HanVocabulary, Missions, Speaking Lab and Writing Lab; the most recent
+  Placement result and recent achievements are visible without changing any
+  learner-facing system.
+- [x] Added per-user monthly AI cost grouped by function, with request, token,
+  audio-minute and estimated-cost totals. Recent calls show provider, model,
+  historical rate/method and duration evidence from Entrega 2B.
+- [x] Added an opt-in-aware, collapsed recent Han text history. Role-play and
+  oral-practice messages are excluded. Because the persisted text thread is
+  shared by Han Tutor and Han Companion, the admin UI labels it as shared and
+  never invents per-system attribution.
+- [x] User-list last access now uses real `LearnerActivitySession` evidence
+  instead of the `daily_login` reward proxy. No schema or migration changes
+  were required.
+- [x] Scoped ESLint, typecheck, diff check, and 3/3 real-database back-office
+  integration tests pass, including independent Tutor, Companion and Speaking
+  Lab activity totals. Test isolation was hardened so real active announcements
+  do not invalidate the announcement test and are never modified by cleanup.
+
+## Admin AI reliability operations — Entrega 5 (2026-09-08) — ✅ Complete
+
+- [x] Added `/admin/operations` and “Operaciones IA” to the isolated admin
+  shell, with 7/30/90-day filters, overall success rate, provider errors,
+  daily-cap blocks, affected users, p50/p95 latency and a daily operational
+  pulse.
+- [x] Added per-feature and per-provider/model reliability tables, normalized
+  error-code counts, actionable alerts for elevated failure/latency/cap use,
+  and the 20 most recent incidents linked to the existing user 360° view.
+- [x] Added `AiOperationLog` as a separate, additive operational record while
+  preserving `AiUsageLog` as completed-call cost accounting. The new table
+  stores only function, outcome, provider/model when known, normalized code,
+  latency and timestamp—never prompts, responses, transcripts, audio or raw
+  provider errors.
+- [x] Instrumented every paid AI/TTS/STT surface, including Han Tutor and Han
+  Companion chat/transcription/speech, Companion memory extraction, live voice
+  assessment, Learning Journey interactions and reflection, Placement,
+  Missions, Speaking Lab, Writing Lab and HanVocabulary. Existing fallbacks and
+  daily caps remain intact; best-effort telemetry cannot break learner flows.
+- [x] Applied migration `20260908090000_add_ai_operation_logs`. Metrics are
+  intentionally non-retroactive and begin with calls made after this delivery.
+- [x] Prisma format/validation/client generation, typecheck, scoped ESLint,
+  3/3 focused unit/component tests, the new real-database integration test and
+  a 78/78 regression across 10 affected integration suites all pass.
+
+## Admin per-user AI limits — Entrega 5B (2026-09-08) — ✅ Complete
+
+- [x] Preserved every existing general per-feature limit and added optional
+  per-user exceptions with three explicit states: inherit the general limit,
+  use a custom positive daily amount, or block the feature for that learner.
+- [x] Added the controls to each learner's 360° admin view with today's spend,
+  request count, general limit and effective configuration. `/admin/limits`
+  now explains precedence and links directly to user selection.
+- [x] Added `AiUsageUserCap` with a composite user/feature key and cascading
+  cleanup. `checkDailyUsageCap` resolves user override → general feature cap →
+  default cap, and operational logs distinguish individual blocks/custom-cap
+  exhaustion from general-cap exhaustion.
+- [x] Translated the 21 internal AI feature labels in admin views, including
+  “Conversación de Mission”, “Evaluación final de Mission”, “Voz generada de
+  Han” and “Evaluación de conversación por voz”.
+- [x] Applied migration `20260908100000_add_user_ai_usage_caps`; Prisma reports
+  all 52 migrations current. Typecheck, scoped ESLint, 6/6 authorization/action
+  tests and 12/12 real-database limit/cost tests pass.
+
+## Full-app optimization pass (2026-09-08) — ✅ Complete
+
+Closes out Parte 2 of the earlier audit plus a new latency pass, at the
+user's explicit request ("optimiza todo lo que tenemos... costos de
+demora y también de prisma"). Every fix below has its own before/after
+test verification, not just a read-through.
+
+- [x] **Reward-chain idempotency bugs** (same class already fixed once in
+  `scenario-completion.ts` via `rewardsGrantedAt`):
+  `mission-data.ts`'s `endMissionAttempt` now writes the completion state
+  and its `ProgressEvidence` rows in one `db.$transaction` instead of two
+  separate writes. `reflection.ts`'s `getOrGenerateLessonReflectionReport`
+  gained its own `rewardsGrantedAt` marker (migration
+  `20260908110000_add_lesson_reflection_rewards_granted_at`) so a partial
+  failure between creating the report and granting achievements/coins gets
+  retried on the next view instead of silently losing the reward forever.
+  Placement-credited reports are marked settled at creation (they never
+  owed this reward chain to begin with). 21/21 mission/reflection/
+  placement-credit integration tests pass.
+- [x] **5 of 6 missing indexes applied** (migration
+  `20260908120000_add_missing_query_indexes`): `ExerciseAttempt`,
+  `WritingAttempt`, `WritingTask`, `CoinLedgerEntry` gained indexes
+  matching their real query shapes; `SpeakingSession`'s unused
+  `(userId, startedAt)` index replaced with two that match real usage.
+  `ProgressEvidence`'s originally-recommended index was **dropped** after
+  verifying the only real query against that table doesn't need it — would
+  have been pure write overhead. 47/47 affected integration tests pass.
+- [x] **Admin dashboard join anti-pattern**: `admin-dashboard.ts`,
+  `admin-analytics.ts`, `admin-ai-operations.ts` used a
+  `user: { email: { not: ADMIN_EMAIL } } }` join on every activity table
+  (20 call sites) to exclude the admin's own usage from every metric.
+  Replaced with a plain `userId: { not: excludeUserId }` filter, resolved
+  once per page via the already-cached `requireAdministrator()` and passed
+  in as a parameter — turns an unindexable per-row join into a plain
+  indexed-column filter, and keeps the data functions auth-free (they no
+  longer import next-auth, so integration tests can call them directly).
+  Verified with 2 new safety-net tests written *before* the refactor
+  (attach marker-tagged fake activity to the real admin account, confirm
+  it's excluded) — both passed against the old join-based code, then again
+  against the new code. 7/7 admin integration tests pass.
+- [x] **Prisma connection endpoint investigated, current setup confirmed
+  correct**: the earlier Parte 2 finding recommending a switch to the
+  pooled endpoint was wrong. Per Prisma's own guidance, the pooled
+  endpoint pairs with the `@prisma/adapter-ppg` edge driver; this app uses
+  `@prisma/adapter-pg` (`src/lib/db.ts`), for which the **direct** endpoint
+  is the documented recommendation. No change made — correcting the record
+  instead of applying a bad fix.
+- [x] **Marketing homepage is static-eligible again**: `app/layout.tsx`
+  read the theme cookie via `cookies()` in the ROOT layout, which forced
+  *every* route — including the public, no-per-user-data marketing
+  homepage — out of static rendering. Replaced with a `beforeInteractive`
+  inline script that sets `data-theme` on the client before paint (same
+  no-flash guarantee, the standard next-themes technique, zero visual
+  change). Verified via raw HTML: the server no longer emits `data-theme`
+  on `<html>`, and the script is present and running.
+- [x] **Code-splitting for the always-mounted app shell**:
+  `AiTeacherChat` (which statically pulled in the ~1980-line
+  `HanVoiceConversation` regardless of whether voice is used) is now
+  `next/dynamic(..., {ssr:false})`-loaded from `ai-teacher-bubble.tsx`,
+  only fetched when a learner actually opens Han. `AchievementCelebration`
+  and `CoinCelebration` in `app-shell.tsx` are similarly code-split
+  (`ssr:false` isn't legal in that Server Component, but plain `dynamic()`
+  still splits the chunk). 4 test assertions in `shell.test.tsx` updated
+  to await the now-async chunk load; 26/26 component tests pass.
+- [ ] **Image compression not done**: `public/avatar/*.png` (30MB) and
+  `public/mascot/*.png` (15MB) are unpostprocessed exports, some over 1.8MB
+  each for flat character art `next/image` then has to resize on every
+  cold cache hit. `hancoins-icon.png` is 1254×1254 for a ~24px icon. Pure
+  asset-pipeline work (pngquant/oxipng or WebP masters), zero code change
+  — the only item from this pass not yet done.
+- [x] Full `tsc --noEmit` and `eslint .` (whole project, not just changed
+  files) pass with zero errors after every step above.

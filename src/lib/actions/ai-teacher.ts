@@ -13,7 +13,7 @@ import {
 } from "@/lib/ai-teacher-data";
 import {
   DailyUsageCapExceededError,
-  checkDailyUsageCap,
+  trackAiOperation,
   recordAiUsage,
   estimateSttCostUsd,
   estimateAudioDurationSecondsFromBytes,
@@ -179,11 +179,15 @@ export async function transcribeHanMessageAction(
   }
 
   try {
-    await checkDailyUsageCap(session.user.id, "han-teacher-transcribe");
-    const result = await getSttProvider().transcribe(
-      Buffer.from(await audio.arrayBuffer()),
-      audio.type,
-      "han-multilingual",
+    const stt = getSttProvider();
+    const audioBuffer = Buffer.from(await audio.arrayBuffer());
+    const result = await trackAiOperation(
+      {
+        userId: session.user.id,
+        feature: "han-teacher-transcribe",
+        provider: stt.name,
+      },
+      () => stt.transcribe(audioBuffer, audio.type, "han-multilingual"),
     );
     const estimatedDurationSeconds = estimateAudioDurationSecondsFromBytes(
       audio.size,

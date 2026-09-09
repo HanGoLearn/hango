@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
-import { recordAiUsage, checkDailyUsageCap } from "@/lib/ai-usage";
+import { recordAiUsage, trackAiOperation } from "@/lib/ai-usage";
 import { hskNumberForPoints } from "@/lib/points-system";
 import { createTtlCache } from "@/lib/ttl-cache";
 import {
@@ -61,16 +61,20 @@ const generateVocabularyLookup = createTtlCache(
     hskLevel: number,
     explanationLanguage: string,
   ): Promise<VocabularyLookupResult | null> => {
-    await checkDailyUsageCap(userId, "vocabulary-lookup");
-    const result = await getAiProvider().complete({
-      systemPrompt: buildVocabularyLookupPrompt(
-        normalizedInput,
-        hskLevel,
-        explanationLanguage,
-      ),
-      messages: [{ role: "user", content: normalizedInput }],
-      maxOutputTokens: 900,
-    });
+    const provider = getAiProvider();
+    const result = await trackAiOperation(
+      { userId, feature: "vocabulary-lookup", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildVocabularyLookupPrompt(
+            normalizedInput,
+            hskLevel,
+            explanationLanguage,
+          ),
+          messages: [{ role: "user", content: normalizedInput }],
+          maxOutputTokens: 900,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "vocabulary-lookup",

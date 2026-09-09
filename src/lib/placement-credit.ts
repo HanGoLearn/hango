@@ -236,6 +236,12 @@ export async function applyPlacementCredit(
           improvements: [
             "Complete this lesson yourself to confirm or improve this score.",
           ],
+          // Placement credit never owes the lesson_completed coin grant or
+          // reflection achievements (this path bypasses
+          // getOrGenerateLessonReflectionReport's reward chain entirely) -
+          // marked settled at creation so a later read there doesn't treat
+          // this as a pending, never-yet-retried reward and grant it late.
+          rewardsGrantedAt: new Date(),
         },
         update: {},
       }),

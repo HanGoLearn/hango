@@ -4,9 +4,9 @@ import { getStorageProvider } from "@/lib/storage";
 import { contentAudioKey } from "@/lib/audio-content-key";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
   estimateTtsCostUsd,
   estimateTtsDurationSeconds,
+  trackAiOperation,
 } from "@/lib/ai-usage";
 
 /**
@@ -103,9 +103,11 @@ export async function getOrGenerateWelcomeAudioUrl(
   }
 
   checkRateLimit(userId);
-  await checkDailyUsageCap(userId, "welcome-audio");
   const tts = getTtsProvider();
-  const result = await tts.synthesize(text, VOICE);
+  const result = await trackAiOperation(
+    { userId, feature: "welcome-audio", provider: tts.name },
+    () => tts.synthesize(text, VOICE),
+  );
   await recordAiUsage({
     userId,
     feature: "welcome-audio",

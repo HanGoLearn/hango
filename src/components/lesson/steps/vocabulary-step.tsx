@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Check, ChevronLeft, X } from "lucide-react";
 import {
   SectionTitle,
@@ -36,10 +42,7 @@ import { cn } from "@/lib/cn";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 
 type ScenarioDifficulty =
-  | "BEGINNER"
-  | "INTERMEDIATE"
-  | "UPPER_INTERMEDIATE"
-  | "ADVANCED";
+  "BEGINNER" | "INTERMEDIATE" | "UPPER_INTERMEDIATE" | "ADVANCED";
 
 const DEFAULT_HAN_VOICE = "cedar";
 
@@ -179,7 +182,10 @@ export function VocabularyStep({
 
   if (vocabulary.length === 0) {
     return (
-      <div className="flex flex-col gap-4">
+      <div
+        data-activity-surface="HAN_VOCABULARY"
+        className="flex flex-col gap-4"
+      >
         <SectionTitle>Vocabulary</SectionTitle>
         <Body>No vocabulary in this lesson.</Body>
         <Button type="button" onClick={onContinue} className="self-start">
@@ -206,7 +212,11 @@ export function VocabularyStep({
       ...previous,
       [questionKey]: optionId,
     }));
-    pendingAttemptsRef.current.push({ vocabularyItemId, questionKey, isCorrect });
+    pendingAttemptsRef.current.push({
+      vocabularyItemId,
+      questionKey,
+      isCorrect,
+    });
   }
 
   function startWalkthrough(words: LessonWithContent["vocabulary"]) {
@@ -245,7 +255,10 @@ export function VocabularyStep({
 
   if (mode === "choose") {
     return (
-      <div className="flex flex-col gap-4">
+      <div
+        data-activity-surface="HAN_VOCABULARY"
+        className="flex flex-col gap-4"
+      >
         <SectionTitle>Vocabulary</SectionTitle>
 
         <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
@@ -271,9 +284,10 @@ export function VocabularyStep({
             Already know these {vocabulary.length} words?
           </Body>
           <Caption className="mt-1 text-text-muted">
-            Take a quick test - score {Math.round(QUICK_TEST_PASS_THRESHOLD * 100)}%+
-            and skip straight to Grammar. Anything you miss, you&rsquo;ll
-            practice properly right after.
+            Take a quick test - score{" "}
+            {Math.round(QUICK_TEST_PASS_THRESHOLD * 100)}%+ and skip straight to
+            Grammar. Anything you miss, you&rsquo;ll practice properly right
+            after.
           </Caption>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <Button type="button" onClick={() => setMode("quick-test")}>
@@ -300,7 +314,10 @@ export function VocabularyStep({
     const qtAnswer = quickTestAnswers[qtItem.id];
 
     return (
-      <div className="flex flex-col gap-4">
+      <div
+        data-activity-surface="HAN_VOCABULARY"
+        className="flex flex-col gap-4"
+      >
         <SectionTitle>Quick test</SectionTitle>
         <div
           className="flex items-center justify-center gap-1.5"
@@ -362,7 +379,7 @@ export function VocabularyStep({
   if (!currentItem) return null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-activity-surface="HAN_VOCABULARY" className="flex flex-col gap-4">
       <SectionTitle>Vocabulary</SectionTitle>
 
       <div
@@ -386,7 +403,11 @@ export function VocabularyStep({
         ))}
       </div>
 
-      <div key={currentItem.id} style={cardStyle} className="flex flex-col gap-3">
+      <div
+        key={currentItem.id}
+        style={cardStyle}
+        className="flex flex-col gap-3"
+      >
         <div className="relative overflow-hidden rounded-panel bg-elevated px-6 py-7 text-center">
           <div className="absolute top-3 right-3">
             <AudioPlayButton

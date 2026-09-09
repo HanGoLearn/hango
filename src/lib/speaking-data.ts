@@ -10,7 +10,7 @@ import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
+  trackAiOperation,
   estimateSttCostUsd,
   DailyUsageCapExceededError,
 } from "@/lib/ai-usage";
@@ -123,19 +123,22 @@ async function generateFeedback(
   transcript: string,
 ): Promise<SpeakingFeedback> {
   try {
-    await checkDailyUsageCap(userId, "speaking-feedback");
     const provider = getAiProvider();
-    const result = await provider.complete({
-      systemPrompt: buildSpeakingFeedbackPrompt(
-        activityType,
-        prompt,
-        transcript,
-      ),
-      messages: [
-        { role: "user", content: transcript || "(no speech detected)" },
-      ],
-      maxOutputTokens: 300,
-    });
+    const result = await trackAiOperation(
+      { userId, feature: "speaking-feedback", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildSpeakingFeedbackPrompt(
+            activityType,
+            prompt,
+            transcript,
+          ),
+          messages: [
+            { role: "user", content: transcript || "(no speech detected)" },
+          ],
+          maxOutputTokens: 300,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "speaking-feedback",
@@ -187,9 +190,11 @@ export async function submitRecording(
   let transcript = "";
   let confidence: number | null = null;
   try {
-    await checkDailyUsageCap(userId, "speaking-transcribe");
     const stt = getSttProvider();
-    const result = await stt.transcribe(audio, mimeType, "mandarin");
+    const result = await trackAiOperation(
+      { userId, feature: "speaking-transcribe", provider: stt.name },
+      () => stt.transcribe(audio, mimeType, "mandarin"),
+    );
     await recordAiUsage({
       userId,
       feature: "speaking-transcribe",
@@ -389,17 +394,20 @@ export async function generateCustomScenario(
   checkScenarioRateLimit(userId);
 
   try {
-    await checkDailyUsageCap(userId, "speaking-scenario");
     const provider = getAiProvider();
-    const result = await provider.complete({
-      systemPrompt: buildCustomScenarioPrompt(
-        trimmed,
-        hskLevelForPoints(learnerLevel ?? 0),
-        knownFacts,
-      ),
-      messages: [{ role: "user", content: trimmed }],
-      maxOutputTokens: 400,
-    });
+    const result = await trackAiOperation(
+      { userId, feature: "speaking-scenario", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildCustomScenarioPrompt(
+            trimmed,
+            hskLevelForPoints(learnerLevel ?? 0),
+            knownFacts,
+          ),
+          messages: [{ role: "user", content: trimmed }],
+          maxOutputTokens: 400,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "speaking-scenario",

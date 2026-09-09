@@ -3,7 +3,7 @@ import { getAiProvider } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
+  trackAiOperation,
   DailyUsageCapExceededError,
 } from "@/lib/ai-usage";
 import type { RolePlayContext } from "@/lib/ai-context";
@@ -69,34 +69,43 @@ export async function POST(request: Request): Promise<Response> {
     );
 
   try {
-    await checkDailyUsageCap(session.user.id, "han-realtime-assessment");
-    const result = await getAiProvider().complete({
-      systemPrompt: buildTextConversationAssessmentPrompt(
-        rolePlay,
-        latestLearnerTranscript,
-        phase,
-        transcript,
-        previouslyRemainingPracticeTargets,
-        continueUntilTimeLimit,
-        minimumLearnerTurns !== null && maximumLearnerTurns !== null
-          ? {
-              minimum: Math.min(minimumLearnerTurns, maximumLearnerTurns),
-              maximum: Math.max(minimumLearnerTurns, maximumLearnerTurns),
-            }
-          : undefined,
-      ),
-      messages: [
-        {
-          role: "user",
-          content: "Assess the transcript and return the required JSON now.",
-        },
-      ],
-      // gpt-5-mini uses part of this budget for reasoning before emitting
-      // the compact JSON. Timed continuation also plans a safe next turn
-      // after completion, so keep enough headroom for visible output.
-      maxOutputTokens: 3_000,
-      timeoutMs: 30_000,
-    });
+    const provider = getAiProvider();
+    const result = await trackAiOperation(
+      {
+        userId: session.user.id,
+        feature: "han-realtime-assessment",
+        provider: provider.name,
+      },
+      () =>
+        provider.complete({
+          systemPrompt: buildTextConversationAssessmentPrompt(
+            rolePlay,
+            latestLearnerTranscript,
+            phase,
+            transcript,
+            previouslyRemainingPracticeTargets,
+            continueUntilTimeLimit,
+            minimumLearnerTurns !== null && maximumLearnerTurns !== null
+              ? {
+                  minimum: Math.min(minimumLearnerTurns, maximumLearnerTurns),
+                  maximum: Math.max(minimumLearnerTurns, maximumLearnerTurns),
+                }
+              : undefined,
+          ),
+          messages: [
+            {
+              role: "user",
+              content:
+                "Assess the transcript and return the required JSON now.",
+            },
+          ],
+          // gpt-5-mini uses part of this budget for reasoning before emitting
+          // the compact JSON. Timed continuation also plans a safe next turn
+          // after completion, so keep enough headroom for visible output.
+          maxOutputTokens: 3_000,
+          timeoutMs: 30_000,
+        }),
+    );
     await recordAiUsage({
       userId: session.user.id,
       feature: "han-realtime-assessment",

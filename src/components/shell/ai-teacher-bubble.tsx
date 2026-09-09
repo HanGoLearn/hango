@@ -1,12 +1,27 @@
 "use client";
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
-import { AiTeacherChat } from "@/components/ai-teacher/ai-teacher-chat";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
+
+// Dynamically loaded, ssr:false (2026-09-08 optimization pass) - this
+// bubble is unconditionally part of AppShell (every authenticated page),
+// but AiTeacherChat statically imports HanVoiceConversation (~1980 lines
+// plus ~10 more voice/WebRTC modules) whether or not the learner ever opens
+// Han. Radix's Dialog.Content isn't mounted while `open` is false, so this
+// chunk is only fetched the first time the learner actually opens the
+// bubble, not on every page load.
+const AiTeacherChat = dynamic(
+  () =>
+    import("@/components/ai-teacher/ai-teacher-chat").then(
+      (mod) => mod.AiTeacherChat,
+    ),
+  { ssr: false },
+);
 
 /**
  * Single floating entry point for Han, identical on every screen size
@@ -43,6 +58,7 @@ export function AiTeacherBubble() {
     >
       <DialogPrimitive.Trigger
         aria-label="Open Han"
+        data-activity-surface="HAN_TUTOR"
         className="fixed right-4 bottom-20 z-40 size-14 rounded-full shadow-modal transition-transform duration-fast ease-standard hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 md:bottom-4"
       >
         {/* Fills the trigger edge-to-edge (2026-08-21) - previously a
@@ -53,6 +69,7 @@ export function AiTeacherBubble() {
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Content
+          data-activity-surface="HAN_TUTOR"
           onInteractOutside={(event) => {
             // Han is part of the persistent app shell. A navigation click is
             // intentionally allowed to reach the page behind this non-modal

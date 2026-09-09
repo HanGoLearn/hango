@@ -5,7 +5,7 @@ import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
   recordAiUsage,
-  checkDailyUsageCap,
+  trackAiOperation,
   DailyUsageCapExceededError,
 } from "@/lib/ai-usage";
 import {
@@ -313,6 +313,7 @@ async function computeSpeakingScore(
   feedback: SpeakingConversationFeedback | null;
 }> {
   if (!lesson.mission) return { score: null, feedback: null };
+  const mission = lesson.mission;
 
   const { transcript, speakingEvidence } = await getSpeakingTranscriptForLesson(
     userId,
@@ -323,35 +324,39 @@ async function computeSpeakingScore(
     return { score: null, feedback: null };
 
   try {
-    await checkDailyUsageCap(userId, "lesson-reflection");
-    const result = await getAiProvider().complete({
-      systemPrompt: buildSpeakingConversationFeedbackPrompt(
-        {
-          learnerRole: lesson.mission.learnerRole ?? "the learner",
-          aiRole: lesson.mission.aiRole ?? "the AI",
-          objective: lesson.mission.objective,
-          taughtVocabulary: lesson.vocabulary.map(
-            (item) => item.vocabularyItem.chineseForm,
+    const provider = getAiProvider();
+    const result = await trackAiOperation(
+      { userId, feature: "lesson-reflection", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildSpeakingConversationFeedbackPrompt(
+            {
+              learnerRole: mission.learnerRole ?? "the learner",
+              aiRole: mission.aiRole ?? "the AI",
+              objective: mission.objective,
+              taughtVocabulary: lesson.vocabulary.map(
+                (item) => item.vocabularyItem.chineseForm,
+              ),
+              taughtGrammar: lesson.grammarPoints.map(
+                (item) =>
+                  `${item.grammarPoint.name}: ${item.grammarPoint.structure}`,
+              ),
+              successConditions: mission.successConditions.map(
+                (condition) => condition.description,
+              ),
+            },
+            transcript,
+            speakingEvidence,
           ),
-          taughtGrammar: lesson.grammarPoints.map(
-            (item) =>
-              `${item.grammarPoint.name}: ${item.grammarPoint.structure}`,
-          ),
-          successConditions: lesson.mission.successConditions.map(
-            (condition) => condition.description,
-          ),
-        },
-        transcript,
-        speakingEvidence,
-      ),
-      messages: [{ role: "user", content: "Evaluate this conversation." }],
-      // GPT-5 reasoning tokens count against this budget. The full rubric and
-      // mistake list need more room than an ordinary chat reply.
-      maxOutputTokens: 1_600,
-      // Reflection is a background-quality evaluation, not an interactive
-      // chat turn, so allow it to finish without slowing Han elsewhere.
-      timeoutMs: 45_000,
-    });
+          messages: [{ role: "user", content: "Evaluate this conversation." }],
+          // GPT-5 reasoning tokens count against this budget. The full rubric and
+          // mistake list need more room than an ordinary chat reply.
+          maxOutputTokens: 1_600,
+          // Reflection is a background-quality evaluation, not an interactive
+          // chat turn, so allow it to finish without slowing Han elsewhere.
+          timeoutMs: 45_000,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "lesson-reflection",
@@ -522,6 +527,26 @@ export async function getOrGenerateLessonReflectionReport(
     !hasNonEnglishCachedNarrative
   ) {
     await syncLessonSpeakingEvidence(userId, lessonId, existing.speakingScore);
+    // Same rewardsGrantedAt pattern as scenario-completion.ts (2026-09-08
+    // fix) - the first-ever creation below could create this row and then
+    // die (or throw from syncLessonSpeakingEvidence above, which isn't
+    // wrapped in a try/catch like these two calls are) before ever reaching
+    // checkReflectionAchievements/grantCoins, and a cache hit never used to
+    // retry them. Gated on the marker (not run on every cache hit) so an
+    // already-settled report costs nothing extra to re-view.
+    if (existing.totalScore !== null && !existing.rewardsGrantedAt) {
+      await checkReflectionAchievements(userId, existing.totalScore);
+      await grantCoins(
+        userId,
+        starsForScore(existing.totalScore),
+        "lesson_completed",
+        `lesson:${lessonId}`,
+      );
+      await db.lessonReflectionReport.update({
+        where: { id: existing.id },
+        data: { rewardsGrantedAt: new Date() },
+      });
+    }
     return {
       vocabularyCovered: existing.vocabularyCovered,
       vocabularyTotal: existing.vocabularyTotal,
@@ -603,19 +628,23 @@ export async function getOrGenerateLessonReflectionReport(
 
   let narrative = parseHanReflectionNarrative("");
   try {
-    await checkDailyUsageCap(userId, "lesson-reflection");
-    const result = await getAiProvider().complete({
-      systemPrompt: buildHanReflectionNarrativePrompt(lesson.title, {
-        vocabularyCovered,
-        vocabularyTotal: vocabularyItemIds.length,
-        vocabularyScore,
-        comprehensionScore,
-        grammarScore,
-        speakingScore: speaking.score,
-      }),
-      messages: [{ role: "user", content: "Write the note." }],
-      maxOutputTokens: 500,
-    });
+    const provider = getAiProvider();
+    const result = await trackAiOperation(
+      { userId, feature: "lesson-reflection", provider: provider.name },
+      () =>
+        provider.complete({
+          systemPrompt: buildHanReflectionNarrativePrompt(lesson.title, {
+            vocabularyCovered,
+            vocabularyTotal: vocabularyItemIds.length,
+            vocabularyScore,
+            comprehensionScore,
+            grammarScore,
+            speakingScore: speaking.score,
+          }),
+          messages: [{ role: "user", content: "Write the note." }],
+          maxOutputTokens: 500,
+        }),
+    );
     await recordAiUsage({
       userId,
       feature: "lesson-reflection",
@@ -671,6 +700,15 @@ export async function getOrGenerateLessonReflectionReport(
     "lesson_completed",
     `lesson:${lessonId}`,
   );
+  // Written last, on purpose (2026-09-08 fix, same pattern as
+  // ScenarioCompletion.rewardsGrantedAt) - if anything above throws, this
+  // line never runs, so the cache-hit branch above correctly retries
+  // checkReflectionAchievements/grantCoins next time instead of silently
+  // never granting them.
+  await db.lessonReflectionReport.update({
+    where: { id: created.id },
+    data: { rewardsGrantedAt: new Date() },
+  });
 
   return {
     vocabularyCovered: created.vocabularyCovered,
