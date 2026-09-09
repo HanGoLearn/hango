@@ -50,7 +50,10 @@ export type PlacementActionResult<T> =
 // 45s timeout, the single most expensive per-call budget of any text
 // completion in the app) - window/max mirrors speaking-data.ts's own
 // precedent for a comparably costly full AI generation call.
-export class PlacementSpeakingGradingRateLimitError extends Error {}
+// Not exported (2026-09-08 build fix) - a "use server" file may only
+// export async functions; this error class is only ever thrown/caught
+// within this same file, so it never needed to leave it.
+class PlacementSpeakingGradingRateLimitError extends Error {}
 
 const GRADING_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const GRADING_RATE_LIMIT_MAX = 10;
