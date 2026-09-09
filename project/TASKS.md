@@ -5153,9 +5153,10 @@ content, achievements, auth, the placement exam engine.
 - [x] Admin overview overflow follow-up (2026-09-06): “Registros recientes”
   now constrains every row to the card, truncates long account names inside a
   flexible column, and keeps the date in a fixed non-wrapping column.
-- [ ] Full production build is currently blocked by pre-existing unrelated
-  `placement-exam.ts` Server Action exports and unavailable Google Fonts; the
-  new admin files themselves pass typecheck and scoped lint.
+- [x] Full production build fixed (2026-09-08, see the optimization-pass
+  section below) — `placement-exam.ts` was exporting a class from a
+  `"use server"` file, illegal and a hard Turbopack build failure
+  cascading into 16 errors. `npm run build` now exits 0.
 
 ## Admin product intelligence — Entrega 2 (2026-09-06) — ✅ Complete
 
@@ -5372,3 +5373,19 @@ test verification, not just a read-through.
   — the only item from this pass not yet done.
 - [x] Full `tsc --noEmit` and `eslint .` (whole project, not just changed
   files) pass with zero errors after every step above.
+- [x] **Fixed the pre-existing production build failure** (unrelated to
+  everything else in this pass, found only because the user asked whether
+  pushing today's work could break what's currently live): `next build`
+  had never actually been run end-to-end this whole time — `tsc`/`eslint`/
+  the dev server all stayed green because none of them catch this class of
+  error. `placement-exam.ts` exported a plain error class from a
+  `"use server"` file (only async functions are legal there), a hard
+  Turbopack failure cascading into 16 build errors on every placement
+  action. If Vercel auto-deploys `master`, every deployment since this bug
+  was introduced (pre-2026-09-05) has likely been failing silently,
+  meaning production may have been stuck on a stale pre-Han-Companion/
+  HanCoins build. Fixed by no longer exporting the class (it was only ever
+  used inside that same file). `npm run build` now exits 0; confirmed the
+  homepage renders as static (○) as intended by this pass's earlier fix.
+  **Worth checking on Vercel's dashboard that the next deployment actually
+  succeeds.**
