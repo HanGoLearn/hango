@@ -3,30 +3,30 @@ import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Body, Caption, CardTitle } from "@/components/ui/typography";
 import type { SpeakingFeedback } from "@/lib/speaking-feedback";
+import type { SpeakingLabMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 // DESIGN_TASKS.md Phase 6, Option A: each dimension gets its own color
 // instead of a uniform primary-500 bar, same "colorful scorecard" language
 // as the nav badges (Phase 3) and lesson exercises (Phase 5).
+type DimensionKey = keyof SpeakingLabMessages["feedback"]["dimensions"];
+
 const DIMENSIONS: {
-  key: keyof SpeakingFeedback;
-  label: string;
+  key: DimensionKey;
   indicatorClassName: string;
 }[] = [
   {
     key: "pronunciation",
-    label: "Pronunciation",
     indicatorClassName: "bg-primary-500",
   },
-  { key: "fluency", label: "Fluency", indicatorClassName: "bg-secondary-500" },
-  { key: "accuracy", label: "Accuracy", indicatorClassName: "bg-accent-500" },
+  { key: "fluency", indicatorClassName: "bg-secondary-500" },
+  { key: "accuracy", indicatorClassName: "bg-accent-500" },
   {
     key: "complexity",
-    label: "Complexity",
     indicatorClassName: "bg-info-500",
   },
   {
     key: "communicationEffectiveness",
-    label: "Communication effectiveness",
     indicatorClassName: "bg-success-500",
   },
 ];
@@ -34,9 +34,11 @@ const DIMENSIONS: {
 export function SpeakingFeedbackDisplay({
   transcript,
   feedback,
+  messages,
 }: {
   transcript: string;
   feedback: SpeakingFeedback;
+  messages: SpeakingLabMessages["feedback"];
 }) {
   return (
     // Scorecard pattern (design_system.md) - border-none/bg-elevated/
@@ -45,10 +47,8 @@ export function SpeakingFeedbackDisplay({
     // Dashboard's General Level/Competency Summary already draw.
     <Card className="flex flex-col gap-4 rounded-panel border-none bg-elevated p-5 shadow-none">
       <div className="flex flex-col gap-1">
-        <Caption>What we heard</Caption>
-        <Body className="font-chinese">
-          {transcript || "(no speech detected)"}
-        </Body>
+        <Caption>{messages.heard}</Caption>
+        <Body className="font-chinese">{transcript || messages.noSpeech}</Body>
       </div>
 
       {typeof feedback.toneScore === "number" && (
@@ -57,29 +57,34 @@ export function SpeakingFeedbackDisplay({
               50/100/300/500/700 are defined) - was silently inert.
               accent-300 is the step re-tuned per theme specifically for
               direct text/icon use on a page/surface-adjacent background. */}
-          <Waves className="size-6 shrink-0 text-accent-300" aria-hidden="true" />
+          <Waves
+            className="size-6 shrink-0 text-accent-300"
+            aria-hidden="true"
+          />
           <div className="flex flex-col gap-0.5">
             <Body className="font-semibold text-text-primary">
-              Tone match: {feedback.toneScore}%
+              {formatMessage(messages.toneMatch, {
+                score: feedback.toneScore,
+              })}
             </Body>
             <Caption className="text-text-secondary">
-              Calculated directly from your recording&apos;s pitch, not a guess from your transcript.
+              {messages.toneExplanation}
             </Caption>
           </div>
         </div>
       )}
       {feedback.toneScore === null && (
         <Caption className="text-text-secondary">
-          Tone match couldn&apos;t be measured — not enough voiced audio in the recording.
+          {messages.toneUnavailable}
         </Caption>
       )}
 
       <div className="flex flex-col gap-2">
-        {DIMENSIONS.map(({ key, label, indicatorClassName }) => (
+        {DIMENSIONS.map(({ key, indicatorClassName }) => (
           <ProgressBar
             key={key}
             value={feedback[key] as number}
-            label={label}
+            label={messages.dimensions[key]}
             className="h-3"
             indicatorClassName={indicatorClassName}
           />
@@ -87,12 +92,12 @@ export function SpeakingFeedbackDisplay({
       </div>
 
       <div className="flex flex-col gap-1">
-        <CardTitle className="text-body">Feedback</CardTitle>
+        <CardTitle className="text-body">{messages.feedback}</CardTitle>
         <Body className="text-text-secondary">{feedback.notes}</Body>
       </div>
 
       <div className="flex flex-col gap-1">
-        <Caption>Recommended next step</Caption>
+        <Caption>{messages.recommendedNext}</Caption>
         <Body>{feedback.recommendedNextStep}</Body>
       </div>
     </Card>

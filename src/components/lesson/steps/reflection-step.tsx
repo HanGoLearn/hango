@@ -34,6 +34,8 @@ import type { SpeakingConversationFeedback } from "@/lib/reflection-prompt";
 import { REFLECTION_PASS_SCORE, starsForScore } from "@/lib/points-system";
 import type { StreakResult } from "@/lib/study-streak";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 const DEFAULT_HAN_VOICE = "cedar";
 
@@ -54,6 +56,7 @@ export function ReflectionStep({
   lesson: LessonWithContent;
   onContinue: () => void;
 }) {
+  const messages = useLessonMessages();
   const [state, setState] = useState<ReportState>({ status: "loading" });
 
   useEffect(() => {
@@ -73,19 +76,18 @@ export function ReflectionStep({
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Reflection</SectionTitle>
+      <SectionTitle>{messages.reflection.title}</SectionTitle>
 
       {state.status === "loading" && (
         <div className="flex items-center gap-2 rounded-panel border border-border bg-surface px-4 py-6 text-text-secondary">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          <Body>Putting your report together...</Body>
+          <Body>{messages.reflection.loading}</Body>
         </div>
       )}
 
       {state.status === "error" && (
         <Body className="text-error-500" role="alert">
-          Couldn&apos;t put together your report right now. You can still finish
-          the lesson below.
+          {messages.reflection.error}
         </Body>
       )}
 
@@ -108,7 +110,7 @@ export function ReflectionStep({
       {state.status !== "loading" && (
         <Button type="button" onClick={onContinue} className="mt-2 self-start">
           <CheckCircle2 className="size-4" aria-hidden="true" />
-          Finish Lesson
+          {messages.reflection.finishLesson}
         </Button>
       )}
     </div>
@@ -169,12 +171,17 @@ function ScoreCard({
   pressHandlers?: ReturnType<typeof useLongPress>;
   children?: React.ReactNode;
 }) {
+  const messages = useLessonMessages();
   return (
     <div
       className="flex flex-col gap-2 rounded-card border border-border bg-surface p-3.5"
       role={pressHandlers ? "button" : undefined}
       tabIndex={pressHandlers ? 0 : undefined}
-      aria-label={pressHandlers ? `${label} — press and hold for a breakdown` : undefined}
+      aria-label={
+        pressHandlers
+          ? formatMessage(messages.reflection.holdBreakdown, { label })
+          : undefined
+      }
       {...pressHandlers}
     >
       <Caption className="font-semibold uppercase tracking-wide text-text-muted">
@@ -197,24 +204,29 @@ function ScoreBreakdownLine({
   counts: ScoreCounts | null | undefined;
   noun: string;
 }) {
+  const messages = useLessonMessages();
   if (loading) {
     return (
       <Caption className="mt-1 block text-text-muted">
-        Loading breakdown…
+        {messages.reflection.loadingBreakdown}
       </Caption>
     );
   }
   if (!counts || counts.total === 0) {
     return (
       <Caption className="mt-1 block text-text-muted">
-        Nothing graded yet for {noun}.
+        {formatMessage(messages.reflection.nothingGraded, { noun })}
       </Caption>
     );
   }
   return (
     <Caption className="mt-1 block text-text-muted">
-      {counts.correct} of {counts.total} {noun} correct (
-      {counts.total - counts.correct} missed)
+      {formatMessage(messages.reflection.breakdown, {
+        correct: counts.correct,
+        total: counts.total,
+        noun,
+        missed: counts.total - counts.correct,
+      })}
     </Caption>
   );
 }
@@ -242,6 +254,7 @@ function SpeakingScoreExplainer({
   finalScore: number;
   dimensions: SpeakingConversationFeedback;
 }) {
+  const messages = useLessonMessages();
   const baseAverage = Math.round(
     (dimensions.pronunciation +
       dimensions.fluency +
@@ -258,18 +271,18 @@ function SpeakingScoreExplainer({
 
   return (
     <Caption className="rounded-control bg-warning-500/10 px-2.5 py-1.5 text-warning-500">
-      Your final score is {finalScore}/100: your 5 core skills averaged{" "}
-      {baseAverage}/100, but you only used {vocabularyPercent}% of the target
-      vocabulary and completed {objectivePercent}% of the objective — those
-      two percentages multiply the average down ({baseAverage} ×{" "}
-      {vocabularyPercent}% × {objectivePercent}% ≈ {finalScore}) rather than
-      just lowering it a little, which is why the final score is so far
-      below the core skills average.
+      {formatMessage(messages.reflection.finalScore, {
+        final: finalScore,
+        average: baseAverage,
+        vocabulary: vocabularyPercent,
+        objective: objectivePercent,
+      })}
     </Caption>
   );
 }
 
-type BreakdownCategory = "vocabulary" | "grammar" | "comprehension" | "speaking";
+type BreakdownCategory =
+  "vocabulary" | "grammar" | "comprehension" | "speaking";
 
 /**
  * Animated score count-up (2026-08-29, Milestone 6's "celebratory
@@ -317,6 +330,7 @@ export function ReflectionReport({
    * than adding a query to that fast path for it. */
   learningObjectives?: { id: string; description: string }[];
 }) {
+  const messages = useLessonMessages();
   const overall = report.totalScore ?? 0;
   const passed = overall >= REFLECTION_PASS_SCORE;
   const stars = starsForScore(overall);
@@ -328,18 +342,14 @@ export function ReflectionReport({
     void getReflectionStreakAction().then(setStreak);
   }, []);
 
-  const [breakdown, setBreakdown] = useState<LessonScoreBreakdown | null>(
-    null,
-  );
+  const [breakdown, setBreakdown] = useState<LessonScoreBreakdown | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [activeBreakdown, setActiveBreakdown] =
     useState<BreakdownCategory | null>(null);
 
   const revealBreakdown = useCallback(
     (category: BreakdownCategory) => {
-      setActiveBreakdown((current) =>
-        current === category ? null : category,
-      );
+      setActiveBreakdown((current) => (current === category ? null : category));
       if (!lessonId || breakdown || breakdownLoading) return;
       setBreakdownLoading(true);
       void getLessonScoreBreakdownAction(lessonId).then((result) => {
@@ -378,14 +388,18 @@ export function ReflectionReport({
           transition={{ duration: 0.4, ease: "easeOut" }}
         >
           <Caption className="text-accent-100">
-            {passed ? "Nice work today" : "Keep practicing"}
+            {passed
+              ? messages.reflection.niceWork
+              : messages.reflection.keepPracticing}
           </Caption>
           <div className="mt-1 flex items-baseline gap-2">
             <Display className="text-[2.6rem] text-on-color-light">
               {animatedScore}
             </Display>
             <Caption className="text-on-color-light/75">
-              / 100 — {REFLECTION_PASS_SCORE}+ to pass
+              {formatMessage(messages.reflection.passScore, {
+                score: REFLECTION_PASS_SCORE,
+              })}
             </Caption>
           </div>
           <div className="mt-2">
@@ -411,7 +425,9 @@ export function ReflectionReport({
                 size="sm"
                 className="bg-on-color-light/15 text-on-color-light"
               >
-                {streak.currentStreak}-day streak
+                {formatMessage(messages.reflection.dayStreak, {
+                  count: streak.currentStreak,
+                })}
               </Chip>
             )}
           </div>
@@ -435,7 +451,7 @@ export function ReflectionReport({
       {learningObjectives && learningObjectives.length > 0 && (
         <div className="flex flex-col gap-2 rounded-panel border border-border bg-surface p-4">
           <Caption className="font-semibold text-accent-300">
-            What you learned
+            {messages.reflection.learned}
           </Caption>
           <ul className="flex flex-col gap-1.5">
             {learningObjectives.map((objective) => (
@@ -456,7 +472,7 @@ export function ReflectionReport({
 
       <div className="grid grid-cols-2 gap-2.5">
         <ScoreCard
-          label="Vocabulary"
+          label={messages.reflection.vocabulary}
           value={
             report.vocabularyScore !== null ? `${report.vocabularyScore}` : "—"
           }
@@ -467,18 +483,21 @@ export function ReflectionReport({
             <ScoreBar percent={report.vocabularyScore} />
           )}
           <Caption className="mt-1 block text-text-muted">
-            {report.vocabularyCovered}/{report.vocabularyTotal} words explored
+            {formatMessage(messages.reflection.wordsExplored, {
+              covered: report.vocabularyCovered,
+              total: report.vocabularyTotal,
+            })}
           </Caption>
           {activeBreakdown === "vocabulary" && (
             <ScoreBreakdownLine
               loading={breakdownLoading}
               counts={breakdown?.vocabulary}
-              noun="quiz questions"
+              noun={messages.reflection.quizQuestions}
             />
           )}
         </ScoreCard>
         <ScoreCard
-          label="Comprehension"
+          label={messages.reflection.comprehension}
           value={
             report.comprehensionScore !== null
               ? `${report.comprehensionScore}`
@@ -494,12 +513,12 @@ export function ReflectionReport({
             <ScoreBreakdownLine
               loading={breakdownLoading}
               counts={breakdown?.comprehension}
-              noun="exercises"
+              noun={messages.reflection.exercises}
             />
           )}
         </ScoreCard>
         <ScoreCard
-          label="Grammar"
+          label={messages.reflection.grammar}
           value={report.grammarScore !== null ? `${report.grammarScore}` : "—"}
           colorClass="text-primary-300"
           pressHandlers={lessonId ? grammarPress : undefined}
@@ -511,7 +530,7 @@ export function ReflectionReport({
             <ScoreBreakdownLine
               loading={breakdownLoading}
               counts={breakdown?.grammar}
-              noun="exercises"
+              noun={messages.reflection.exercises}
             />
           )}
         </ScoreCard>
@@ -519,11 +538,17 @@ export function ReflectionReport({
           className="col-span-2 flex flex-col gap-2 rounded-card border border-accent-500 bg-surface p-3.5"
           role={lessonId ? "button" : undefined}
           tabIndex={lessonId ? 0 : undefined}
-          aria-label={lessonId ? "Speaking — press and hold for a breakdown" : undefined}
+          aria-label={
+            lessonId
+              ? formatMessage(messages.reflection.holdBreakdown, {
+                  label: messages.reflection.speaking,
+                })
+              : undefined
+          }
           {...(lessonId ? speakingPress : {})}
         >
           <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-            Speaking
+            {messages.reflection.speaking}
           </Caption>
           {report.speakingScore !== null && report.speakingDimensions ? (
             <>
@@ -532,16 +557,21 @@ export function ReflectionReport({
               </Display>
               <ScoreBar percent={report.speakingScore} />
               <Caption className="mt-1 text-text-secondary">
-                Reaching 30/30 needs strong vocabulary use and a fully
-                completed objective, not just fluent conversation.
+                {messages.reflection.speakingRequirement}
               </Caption>
               {activeBreakdown === "speaking" && (
                 <Caption className="block text-text-muted">
                   {breakdownLoading
-                    ? "Loading breakdown…"
+                    ? messages.reflection.loadingBreakdown
                     : breakdown?.speakingMistakeCount != null
-                      ? `${breakdown.speakingMistakeCount} specific issue${breakdown.speakingMistakeCount === 1 ? "" : "s"} identified in this conversation.`
-                      : "No speaking evaluation yet."}
+                      ? formatMessage(messages.reflection.speakingIssues, {
+                          count: breakdown.speakingMistakeCount,
+                          issues:
+                            breakdown.speakingMistakeCount === 1
+                              ? messages.reflection.issue
+                              : messages.reflection.issues,
+                        })
+                      : messages.reflection.noSpeakingEvaluation}
                 </Caption>
               )}
               <SpeakingScoreExplainer
@@ -551,22 +581,34 @@ export function ReflectionReport({
               <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-2">
                 {(
                   [
-                    ["Pronunciation", report.speakingDimensions.pronunciation],
-                    ["Fluency", report.speakingDimensions.fluency],
-                    ["Accuracy", report.speakingDimensions.accuracy],
-                    ["Lesson language", report.speakingDimensions.complexity],
                     [
-                      "Communication",
+                      messages.reflection.dimensions.pronunciation,
+                      report.speakingDimensions.pronunciation,
+                    ],
+                    [
+                      messages.reflection.dimensions.fluency,
+                      report.speakingDimensions.fluency,
+                    ],
+                    [
+                      messages.reflection.dimensions.accuracy,
+                      report.speakingDimensions.accuracy,
+                    ],
+                    [
+                      messages.reflection.dimensions.lessonLanguage,
+                      report.speakingDimensions.complexity,
+                    ],
+                    [
+                      messages.reflection.dimensions.communication,
                       report.speakingDimensions.communicationEffectiveness,
                     ],
                     [
-                      "Vocabulary used",
+                      messages.reflection.dimensions.vocabularyUsed,
                       Math.round(
                         report.speakingDimensions.vocabularyUsageRatio * 100,
                       ),
                     ],
                     [
-                      "Objective completed",
+                      messages.reflection.dimensions.objectiveCompleted,
                       Math.round(
                         report.speakingDimensions.objectiveCompletionRatio *
                           100,
@@ -588,9 +630,10 @@ export function ReflectionReport({
             </>
           ) : (
             <Body className="text-text-secondary">
-              {report.speakingDimensions?.recommendedNextStep === "Speaking evaluation pending."
-                ? "Speaking evaluation is temporarily unavailable. Reopen Reflection to retry."
-                : "Not enough data yet — practice in the Speaking step to see your score here."}
+              {report.speakingDimensions?.recommendedNextStep ===
+              "Speaking evaluation pending."
+                ? messages.reflection.evaluationUnavailable
+                : messages.reflection.notEnoughData}
             </Body>
           )}
         </div>
@@ -598,48 +641,61 @@ export function ReflectionReport({
 
       <div className="flex flex-col gap-3 rounded-panel border border-error-500/35 bg-error-500/5 p-4">
         <div className="flex items-center gap-2">
-          <Body className="font-display text-[1.05rem]">Speaking errors</Body>
+          <Body className="font-display text-[1.05rem]">
+            {messages.reflection.speakingErrors}
+          </Body>
         </div>
         {report.speakingDimensions?.mistakes?.length ? (
           <div className="flex flex-col gap-3">
             {report.speakingDimensions.mistakes.map((mistake, index) => (
-              <div key={`${mistake.category}-${index}`} className="rounded-card border border-border bg-surface p-3">
+              <div
+                key={`${mistake.category}-${index}`}
+                className="rounded-card border border-border bg-surface p-3"
+              >
                 <Caption className="font-semibold uppercase tracking-wide text-error-500">
                   {mistake.category}
                 </Caption>
                 <Body className="mt-1 font-chinese text-text-primary">
                   &ldquo;{mistake.evidence}&rdquo;
                 </Body>
-                <Body className="mt-1 text-text-secondary">{mistake.feedback}</Body>
+                <Body className="mt-1 text-text-secondary">
+                  {mistake.feedback}
+                </Body>
               </div>
             ))}
           </div>
-        ) : report.speakingDimensions?.recommendedNextStep === "Speaking evaluation pending." ? (
+        ) : report.speakingDimensions?.recommendedNextStep ===
+          "Speaking evaluation pending." ? (
           <Body className="text-text-secondary">
-            Your transcript was saved, but automatic evaluation is temporarily unavailable. Reopen Reflection to retry.
+            {messages.reflection.transcriptSaved}
           </Body>
         ) : report.speakingScore === null ? (
           <Body className="text-text-secondary">
-            Complete a longer Speaking conversation to receive specific feedback here.
+            {messages.reflection.longerConversation}
           </Body>
         ) : (
           <Body className="text-text-secondary">
-            No specific speaking errors were detected in the available evidence.
+            {messages.reflection.noErrors}
           </Body>
         )}
-        {report.speakingScore !== null && report.speakingDimensions?.recommendedNextStep && (
-          <div className="rounded-card bg-accent-500/10 p-3">
-            <Caption className="font-semibold text-accent-300">Recommended next step</Caption>
-            <Body className="mt-1 text-text-secondary">
-              {report.speakingDimensions.recommendedNextStep}
-            </Body>
-          </div>
-        )}
+        {report.speakingScore !== null &&
+          report.speakingDimensions?.recommendedNextStep && (
+            <div className="rounded-card bg-accent-500/10 p-3">
+              <Caption className="font-semibold text-accent-300">
+                {messages.reflection.recommendedNextStep}
+              </Caption>
+              <Body className="mt-1 text-text-secondary">
+                {report.speakingDimensions.recommendedNextStep}
+              </Body>
+            </div>
+          )}
       </div>
 
       <div className="flex flex-col gap-3 rounded-panel border border-border bg-surface p-4">
         <div className="flex items-center gap-2">
-          <Body className="font-display text-[1.05rem]">A note from Han</Body>
+          <Body className="font-display text-[1.05rem]">
+            {messages.reflection.noteFromHan}
+          </Body>
           <div className="ml-auto">
             <HanSpeechButton
               text={report.hanNarrative}
@@ -655,7 +711,7 @@ export function ReflectionReport({
         {report.strengths.length > 0 && (
           <div className="flex flex-col gap-1">
             <Caption className="font-semibold text-accent-300">
-              What went well
+              {messages.reflection.wentWell}
             </Caption>
             <ul className="flex flex-col gap-1 pl-4">
               {report.strengths.map((item) => (
@@ -673,7 +729,7 @@ export function ReflectionReport({
         {report.improvements.length > 0 && (
           <div className="flex flex-col gap-1">
             <Caption className="font-semibold text-accent-300">
-              What to improve
+              {messages.reflection.improve}
             </Caption>
             <ul className="flex flex-col gap-1 pl-4">
               {report.improvements.map((item) => (

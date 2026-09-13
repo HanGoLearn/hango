@@ -8,6 +8,8 @@ import {
   updateDisplayNameAction,
   type SettingsActionState,
 } from "@/lib/actions/settings";
+import type { AppLocale } from "@/i18n/config";
+import type { SettingsMessages } from "@/i18n/messages/types";
 
 const initialState: SettingsActionState = { status: "idle" };
 
@@ -24,8 +26,12 @@ const initialState: SettingsActionState = { status: "idle" };
  */
 export function DisplayNameSection({
   initialDisplayName,
+  locale,
+  messages,
 }: {
   initialDisplayName: string;
+  locale: AppLocale;
+  messages: SettingsMessages["displayName"];
 }) {
   const [state, formAction, isPending] = useActionState(
     updateDisplayNameAction,
@@ -34,18 +40,19 @@ export function DisplayNameSection({
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      <input type="hidden" name="locale" value={locale} />
       {state.status === "error" && (
         <InformationBanner variant="error">{state.message}</InformationBanner>
       )}
       <Input
-        label="Name"
+        label={messages.label}
         name="displayName"
         defaultValue={initialDisplayName}
-        placeholder="What Han calls you"
+        placeholder={messages.placeholder}
         maxLength={60}
       />
       <Button type="submit" loading={isPending} className="w-fit">
-        Save
+        {messages.save}
       </Button>
     </form>
   );

@@ -21,6 +21,8 @@ import {
 } from "@/lib/progress-evidence";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
 import { checkWritingLabAchievements } from "@/lib/achievements";
+import type { AppLocale } from "@/i18n/config";
+import { localizeContentRecord } from "@/lib/content/localization";
 
 export interface WritingLessonOption {
   id: string;
@@ -30,31 +32,50 @@ export interface WritingLessonOption {
 }
 
 /** Every published lesson with writing tasks, for the Writing Lab's lesson picker (same pattern as Speaking Lab's, 2026-08-08). */
-export async function getWritingLessonOptions(): Promise<
-  WritingLessonOption[]
-> {
+export async function getWritingLessonOptions(
+  locale: AppLocale = "en",
+): Promise<WritingLessonOption[]> {
   const lessons = await db.lesson.findMany({
     where: {
       status: "PUBLISHED",
       writingTasks: { some: { status: "PUBLISHED" } },
     },
     orderBy: { order: "asc" },
-    include: { scenarioLevel: { include: { scenario: true } } },
+    include: {
+      translations: true,
+      scenarioLevel: {
+        include: { scenario: { include: { translations: true } } },
+      },
+    },
   });
   return lessons
-    .map((lesson) => ({
-      id: lesson.id,
-      slug: lesson.slug,
-      title: lesson.title,
-      scenarioTitle: lesson.scenarioLevel.scenario.name,
-      scenarioOrder: lesson.scenarioLevel.scenario.order,
-    }))
+    .map((lesson) => {
+      const localizedLesson = localizeContentRecord(lesson, locale, [
+        "title",
+        "communicationObjective",
+      ]);
+      const scenario = localizeContentRecord(
+        localizedLesson.scenarioLevel.scenario,
+        locale,
+        ["name", "description", "context", "communicationOutcomes"],
+      );
+      return {
+        id: localizedLesson.id,
+        slug: localizedLesson.slug,
+        title: localizedLesson.title,
+        scenarioTitle: scenario.name,
+        scenarioOrder: scenario.order,
+      };
+    })
     .sort((a, b) => a.scenarioOrder - b.scenarioOrder)
     .map(({ scenarioOrder: _scenarioOrder, ...option }) => option);
 }
 
 /** Writing tasks for one lesson (defaults to the first available lesson) - was an unscoped global catalog until 2026-08-08, now scoped like Speaking Lab. */
-export async function getWritingTasks(lessonId?: string) {
+export async function getWritingTasks(
+  lessonId?: string,
+  locale: AppLocale = "en",
+) {
   const resolvedLessonId =
     lessonId ??
     (
@@ -76,31 +97,49 @@ export async function getWritingTasks(lessonId?: string) {
     )?.id;
   if (!resolvedLessonId) return [];
 
-  return db.writingTask.findMany({
+  const tasks = await db.writingTask.findMany({
     where: { status: "PUBLISHED", lessonId: resolvedLessonId },
     orderBy: { order: "asc" },
+    include: { translations: true },
   });
+  return tasks.map((task) =>
+    localizeContentRecord(task, locale, ["title", "prompt"]),
+  );
 }
 
 /** Standalone pool of Translation Challenge texts - not scoped to any lesson (Writing Lab redesign, 2026-08-08 round 2). */
-export async function getTranslationChallenges() {
-  return db.writingTask.findMany({
+export async function getTranslationChallenges(locale: AppLocale = "en") {
+  const tasks = await db.writingTask.findMany({
     where: {
       status: "PUBLISHED",
       type: "TRANSLATION_CHALLENGE",
       lessonId: null,
     },
     orderBy: { order: "asc" },
+    include: { translations: true },
   });
+  return tasks.map((task) =>
+    localizeContentRecord(task, locale, ["title", "prompt"]),
+  );
 }
 
-export async function getRecentAttempts(userId: string, limit = 5) {
-  return db.writingAttempt.findMany({
+export async function getRecentAttempts(
+  userId: string,
+  limit = 5,
+  locale: AppLocale = "en",
+) {
+  const attempts = await db.writingAttempt.findMany({
     where: { userId, submittedAt: { not: null } },
     orderBy: { submittedAt: "desc" },
     take: limit,
-    include: { task: true },
+    include: { task: { include: { translations: true } } },
   });
+  return attempts.map((attempt) => ({
+    ...attempt,
+    task: attempt.task
+      ? localizeContentRecord(attempt.task, locale, ["title", "prompt"])
+      : null,
+  }));
 }
 
 // submitWritingAttempt triggers a paid AI feedback call - same abuse/cost

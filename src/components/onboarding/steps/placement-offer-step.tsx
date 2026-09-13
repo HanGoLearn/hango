@@ -8,10 +8,16 @@ import type { PlacementQuestionView } from "@/lib/placement-exam-data";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 export interface PlacementOfferStepProps {
   onNext: () => void;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["placementOffer"];
+  examMessages: OnboardingMessages["placementExam"];
+  commonMessages: OnboardingMessages["common"];
 }
 
 /**
@@ -24,7 +30,14 @@ export interface PlacementOfferStepProps {
  * uses) rather than navigating away, since (app)'s layout would otherwise
  * redirect an onboarding-incomplete learner straight back here.
  */
-export function PlacementOfferStep({ onNext, onBack }: PlacementOfferStepProps) {
+export function PlacementOfferStep({
+  onNext,
+  onBack,
+  locale,
+  messages,
+  examMessages,
+  commonMessages,
+}: PlacementOfferStepProps) {
   const [exam, setExam] = useState<{
     sessionId: string;
     question: PlacementQuestionView | null;
@@ -42,13 +55,16 @@ export function PlacementOfferStep({ onNext, onBack }: PlacementOfferStepProps) 
       setError(result.error);
       return;
     }
-    await acknowledgePlacementOfferAction();
-    setExam({ sessionId: result.value.sessionId, question: result.value.question });
+    await acknowledgePlacementOfferAction(locale);
+    setExam({
+      sessionId: result.value.sessionId,
+      question: result.value.question,
+    });
   }
 
   async function handleSkip() {
     setSkipping(true);
-    await acknowledgePlacementOfferAction();
+    await acknowledgePlacementOfferAction(locale);
     setSkipping(false);
     onNext();
   }
@@ -56,11 +72,13 @@ export function PlacementOfferStep({ onNext, onBack }: PlacementOfferStepProps) 
   if (exam) {
     return (
       <PlacementExamHome
+        locale={locale}
+        messages={examMessages}
         sessionId={exam.sessionId}
         initialQuestion={exam.question}
         footer={
           <Button type="button" onClick={onNext} className="self-start">
-            Continue
+            {commonMessages.continue}
           </Button>
         }
       />
@@ -69,20 +87,14 @@ export function PlacementOfferStep({ onNext, onBack }: PlacementOfferStepProps) 
 
   return (
     <div className="flex flex-col gap-4 text-center">
-      <SectionTitle>Want a more precise starting point?</SectionTitle>
-      <Body className="text-text-secondary">
-        Take a quick placement exam across Vocabulary, Grammar, Reading,
-        Listening, and Speaking - about 10-15 minutes. Every lesson at or
-        below your real level gets credited with General Level points
-        automatically, marked with a badge so you can still redo any of
-        them for real, anytime.
-      </Body>
+      <SectionTitle>{messages.title}</SectionTitle>
+      <Body className="text-text-secondary">{messages.description}</Body>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <div className="flex gap-2">
           <Button
@@ -91,10 +103,15 @@ export function PlacementOfferStep({ onNext, onBack }: PlacementOfferStepProps) 
             loading={skipping}
             type="button"
           >
-            Skip for now
+            {messages.skip}
           </Button>
-          <Button size="lg" onClick={handleStart} loading={starting} type="button">
-            Take the placement exam
+          <Button
+            size="lg"
+            onClick={handleStart}
+            loading={starting}
+            type="button"
+          >
+            {messages.takeExam}
           </Button>
         </div>
       </div>

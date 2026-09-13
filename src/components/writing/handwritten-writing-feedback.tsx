@@ -9,6 +9,8 @@ import {
   SectionTitle,
 } from "@/components/ui/typography";
 import type { HandwrittenEvaluation } from "@/lib/handwritten-writing";
+import type { WritingLabMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 const DIMENSION_COLORS = [
   "bg-primary-500",
@@ -21,8 +23,10 @@ const DIMENSION_COLORS = [
 
 export function HandwrittenWritingFeedback({
   evaluation,
+  messages,
 }: {
   evaluation: HandwrittenEvaluation;
+  messages: WritingLabMessages["handwritten"];
 }) {
   const errorsByType = {
     character: evaluation.errors.filter((error) => error.type === "character"),
@@ -31,21 +35,36 @@ export function HandwrittenWritingFeedback({
       (error) => error.type === "vocabulary",
     ),
   };
+  const targetRange =
+    {
+      "About 60–90 Chinese characters": messages.levels.BASIC.characterTarget,
+      "About 90–300 Chinese characters":
+        messages.levels.INTERMEDIATE.characterTarget,
+      "300+ Chinese characters": messages.levels.ADVANCED.characterTarget,
+    }[evaluation.targetRange] ?? evaluation.targetRange;
 
   return (
     <div className="flex flex-col gap-5">
       <Card className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <Caption>Overall score</Caption>
+            <Caption>{messages.feedback.overallScore}</Caption>
             <div className="font-display text-5xl font-semibold text-primary-500">
               {evaluation.overallScore}
               <span className="text-section-title text-text-muted">/100</span>
             </div>
           </div>
           <div className="text-right">
-            <Body>{evaluation.characterCount} Chinese characters</Body>
-            <Caption>Target: {evaluation.targetRange}</Caption>
+            <Body>
+              {formatMessage(messages.feedback.characterCount, {
+                count: evaluation.characterCount,
+              })}
+            </Body>
+            <Caption>
+              {formatMessage(messages.feedback.targetRange, {
+                range: targetRange,
+              })}
+            </Caption>
           </div>
         </div>
 
@@ -54,7 +73,11 @@ export function HandwrittenWritingFeedback({
             <ProgressBar
               key={dimension.key}
               value={dimension.score}
-              label={`${dimension.label} · ${dimension.weight}%`}
+              label={`${
+                messages.feedback.dimensionLabels[
+                  dimension.key as keyof typeof messages.feedback.dimensionLabels
+                ] ?? dimension.label
+              } · ${dimension.weight}%`}
               indicatorClassName={
                 DIMENSION_COLORS[index % DIMENSION_COLORS.length]
               }
@@ -65,7 +88,7 @@ export function HandwrittenWritingFeedback({
 
       {evaluation.problemCharacters.length > 0 && (
         <Card className="flex flex-col gap-3">
-          <CardTitle>Characters to improve</CardTitle>
+          <CardTitle>{messages.feedback.charactersToImprove}</CardTitle>
           <div className="grid gap-2 sm:grid-cols-2">
             {evaluation.problemCharacters.map((problem, index) => (
               <div
@@ -87,14 +110,14 @@ export function HandwrittenWritingFeedback({
               className="mt-0.5 size-4 shrink-0"
               aria-hidden="true"
             />
-            <Caption>{evaluation.strokeOrderDisclaimer}</Caption>
+            <Caption>{messages.feedback.strokeOrderDisclaimer}</Caption>
           </div>
         </Card>
       )}
 
       {evaluation.cohesionNotes && (
         <Card className="flex flex-col gap-1">
-          <CardTitle>Cohesion</CardTitle>
+          <CardTitle>{messages.feedback.cohesion}</CardTitle>
           <Body className="text-text-secondary">
             {evaluation.cohesionNotes}
           </Body>
@@ -103,12 +126,12 @@ export function HandwrittenWritingFeedback({
 
       {evaluation.errors.length > 0 && (
         <Card className="flex flex-col gap-4">
-          <SectionTitle>Specific feedback</SectionTitle>
+          <SectionTitle>{messages.feedback.specificFeedback}</SectionTitle>
           {(
             [
-              ["character", "Character formation"],
-              ["grammar", "Grammar"],
-              ["vocabulary", "Vocabulary"],
+              ["character", messages.feedback.errorTypes.character],
+              ["grammar", messages.feedback.errorTypes.grammar],
+              ["vocabulary", messages.feedback.errorTypes.vocabulary],
             ] as const
           ).map(([type, label]) =>
             errorsByType[type].length > 0 ? (
@@ -131,7 +154,7 @@ export function HandwrittenWritingFeedback({
       )}
 
       <Card className="flex flex-col gap-2">
-        <CardTitle>Corrected version</CardTitle>
+        <CardTitle>{messages.feedback.correctedVersion}</CardTitle>
         <ChineseText className="whitespace-pre-wrap">
           {evaluation.correctedVersion}
         </ChineseText>
@@ -143,7 +166,7 @@ export function HandwrittenWritingFeedback({
           aria-hidden="true"
         />
         <div className="flex flex-col gap-1">
-          <CardTitle>A note from Han</CardTitle>
+          <CardTitle>{messages.feedback.noteFromHan}</CardTitle>
           <Body>{evaluation.overallNotes}</Body>
         </div>
       </Card>

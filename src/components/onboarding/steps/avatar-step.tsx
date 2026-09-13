@@ -6,14 +6,26 @@ import { AnimalGrid } from "@/components/avatar/animal-grid";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 export interface AvatarStepProps {
   initialAnimal: string | null;
   onNext: (animal: string) => void;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["avatar"];
+  commonMessages: OnboardingMessages["common"];
 }
 
-export function AvatarStep({ initialAnimal, onNext, onBack }: AvatarStepProps) {
+export function AvatarStep({
+  initialAnimal,
+  onNext,
+  onBack,
+  locale,
+  messages,
+  commonMessages,
+}: AvatarStepProps) {
   const [animal, setAnimal] = useState(initialAnimal ?? "");
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
@@ -21,7 +33,7 @@ export function AvatarStep({ initialAnimal, onNext, onBack }: AvatarStepProps) {
   const handleContinue = async () => {
     setIsPending(true);
     setError(undefined);
-    const result = await saveAvatarAnimalAction(animal);
+    const result = await saveAvatarAnimalAction(animal, locale);
     setIsPending(false);
     if (result.status === "error") {
       setError(result.message);
@@ -33,20 +45,19 @@ export function AvatarStep({ initialAnimal, onNext, onBack }: AvatarStepProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 text-center">
-        <SectionTitle>Choose your avatar</SectionTitle>
+        <SectionTitle>{messages.title}</SectionTitle>
         <Body className="text-text-secondary">
-          Pick a zodiac animal to represent you. It&apos;s just for fun — you
-          can change it anytime, and it never affects your progress.
+          {messages.description}
         </Body>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      <AnimalGrid selected={animal} onSelect={setAnimal} />
+      <AnimalGrid selected={animal} onSelect={setAnimal} messages={messages} />
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <Button
           size="lg"
@@ -54,7 +65,7 @@ export function AvatarStep({ initialAnimal, onNext, onBack }: AvatarStepProps) {
           loading={isPending}
           disabled={!animal}
         >
-          Continue
+          {commonMessages.continue}
         </Button>
       </div>
     </div>

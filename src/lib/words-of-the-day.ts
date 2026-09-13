@@ -1,5 +1,6 @@
 import { createTtlCache } from "@/lib/ttl-cache";
 import { getVocabularyItemsForLevel } from "@/lib/content/vocabulary";
+import type { AppLocale } from "@/i18n/config";
 
 export interface WordOfTheDay {
   chineseForm: string;
@@ -26,8 +27,15 @@ function resolvePoolLevel(hskLevel: number): number {
  * day, and the daily key rollover needs no manual invalidation.
  */
 const getWordsForLevelAndDay = createTtlCache(
-  async (poolLevel: number, dayIndex: number): Promise<WordOfTheDay[]> => {
-    const items = await getVocabularyItemsForLevel(poolLevel);
+  async (
+    poolLevel: number,
+    dayIndex: number,
+    locale: AppLocale,
+  ): Promise<WordOfTheDay[]> => {
+    const items =
+      locale === "en"
+        ? await getVocabularyItemsForLevel(poolLevel)
+        : await getVocabularyItemsForLevel(poolLevel, locale);
     if (items.length === 0) return [];
     return Array.from(
       { length: Math.min(WORDS_PER_DAY, items.length) },
@@ -35,7 +43,7 @@ const getWordsForLevelAndDay = createTtlCache(
     );
   },
   24 * 60 * 60 * 1000,
-  (poolLevel, dayIndex) => `${poolLevel}:${dayIndex}`,
+  (poolLevel, dayIndex, locale) => `${poolLevel}:${dayIndex}:${locale}`,
 );
 
 /**
@@ -47,7 +55,8 @@ const getWordsForLevelAndDay = createTtlCache(
 export async function getWordsOfTheDay(
   hskLevel: number,
   date: Date = new Date(),
+  locale: AppLocale = "en",
 ): Promise<WordOfTheDay[]> {
   const poolLevel = resolvePoolLevel(hskLevel);
-  return getWordsForLevelAndDay(poolLevel, daysSinceEpoch(date));
+  return getWordsForLevelAndDay(poolLevel, daysSinceEpoch(date), locale);
 }

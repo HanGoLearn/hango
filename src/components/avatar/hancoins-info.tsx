@@ -21,43 +21,39 @@ import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
 import { Chip } from "@/components/ui/chip";
 import { Body, Caption } from "@/components/ui/typography";
 import { cn } from "@/lib/cn";
+import type { ShellMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 interface CoinSource {
   icon: LucideIcon;
-  title: string;
-  detail: string;
+  key: keyof ShellMessages["hanCoins"]["sources"];
   amount: string;
 }
 
 const SOURCES: CoinSource[] = [
   {
     icon: CalendarCheck,
-    title: "Open the app",
-    detail: "Once per day, just for showing up",
+    key: "daily",
     amount: "5",
   },
   {
     icon: BookOpen,
-    title: "Complete a lesson",
-    detail: "1, 2, or 3 HanCoins, based on your score",
+    key: "lesson",
     amount: "1–3",
   },
   {
     icon: CheckCircle,
-    title: "Finish a scenario for the first time",
-    detail: "Once per scenario, not on a redo",
+    key: "scenario",
     amount: "5",
   },
   {
     icon: Award,
-    title: "Unlock an achievement",
-    detail: "Streaks, General Level tiers, mastery, whole Chapters, and more",
+    key: "achievement",
     amount: "10–250",
   },
   {
     icon: Trophy,
-    title: "Top 3 on the weekly leaderboard",
-    detail: "Ranked by HanCoins earned that week",
+    key: "leaderboard",
     amount: "50 / 30 / 10",
   },
 ];
@@ -67,6 +63,7 @@ export interface HanCoinsInfoTriggerProps {
   /** Rendered as the clickable trigger (a Chip, a pill, etc.) - this component just makes it open the explainer. */
   children: React.ReactNode;
   className?: string;
+  messages: ShellMessages["hanCoins"];
 }
 
 /**
@@ -92,6 +89,7 @@ export function HanCoinsInfoTrigger({
   balance,
   children,
   className,
+  messages,
 }: HanCoinsInfoTriggerProps) {
   const [open, setOpen] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -122,22 +120,19 @@ export function HanCoinsInfoTrigger({
                 HanCoins
               </ModalTitle>
               <Caption className="text-on-color-dark/80">
-                You have {balance}
+                {formatMessage(messages.balance, { balance })}
               </Caption>
             </div>
           </div>
 
           <div className="flex flex-col gap-2.5 p-5">
-            <ModalDescription>
-              Spend them in the Shop on hats, glasses, and clothes for your
-              avatar.
-            </ModalDescription>
+            <ModalDescription>{messages.description}</ModalDescription>
             <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-              How to earn them
+              {messages.earnTitle}
             </Caption>
             {SOURCES.map((source) => (
               <div
-                key={source.title}
+                key={source.key}
                 className="flex items-center gap-2.5 rounded-panel border border-border bg-surface px-3 py-2"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-500/15 text-accent-300">
@@ -145,9 +140,11 @@ export function HanCoinsInfoTrigger({
                 </span>
                 <div className="min-w-0 flex-1">
                   <Body className="font-medium text-text-primary">
-                    {source.title}
+                    {messages.sources[source.key].title}
                   </Body>
-                  <Caption className="text-text-muted">{source.detail}</Caption>
+                  <Caption className="text-text-muted">
+                    {messages.sources[source.key].detail}
+                  </Caption>
                 </div>
                 <Chip tone="accent" size="sm" className="shrink-0">
                   {source.amount}
@@ -155,7 +152,7 @@ export function HanCoinsInfoTrigger({
               </div>
             ))}
             <Caption className="text-center text-text-muted">
-              Never purchasable with real money — always earned.
+              {messages.earnedOnly}
             </Caption>
           </div>
         </motion.div>

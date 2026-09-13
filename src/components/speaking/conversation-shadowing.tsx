@@ -19,6 +19,9 @@ import { getDialogueLineAudioAction } from "@/lib/actions/dialogue-audio";
 import type { SyllableScore } from "@/lib/tone-analysis";
 import type { ShadowingLine } from "@/lib/content/speaking-prompts";
 import { cn } from "@/lib/cn";
+import type { SpeakingLabMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
+import { localizeSpeakingError } from "@/i18n/speaking";
 
 interface CompletedLine {
   overallScore: number | null;
@@ -38,20 +41,26 @@ export function ConversationShadowing({
   lessonId,
   dialogueId,
   onExit,
+  messages,
 }: {
   lines: ShadowingLine[];
   lessonId?: string;
   dialogueId: string;
   onExit: () => void;
+  messages: SpeakingLabMessages;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [attemptDone, setAttemptDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPinyin, setShowPinyin] = useState(true);
-  const [syllableScores, setSyllableScores] = useState<SyllableScore[] | null>(null);
+  const [syllableScores, setSyllableScores] = useState<SyllableScore[] | null>(
+    null,
+  );
   const [completed, setCompleted] = useState<Record<string, CompletedLine>>({});
-  const [lineAudioState, setLineAudioState] = useState<Record<string, "idle" | "loading" | "playing">>({});
+  const [lineAudioState, setLineAudioState] = useState<
+    Record<string, "idle" | "loading" | "playing">
+  >({});
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const creatingRef = useRef(false);
 
@@ -88,9 +97,12 @@ export function ConversationShadowing({
       return;
     }
     const audio = new Audio(result.url);
-    audio.onplay = () => setLineAudioState((s) => ({ ...s, [lineId]: "playing" }));
-    audio.onended = () => setLineAudioState((s) => ({ ...s, [lineId]: "idle" }));
-    audio.onpause = () => setLineAudioState((s) => ({ ...s, [lineId]: "idle" }));
+    audio.onplay = () =>
+      setLineAudioState((s) => ({ ...s, [lineId]: "playing" }));
+    audio.onended = () =>
+      setLineAudioState((s) => ({ ...s, [lineId]: "idle" }));
+    audio.onpause = () =>
+      setLineAudioState((s) => ({ ...s, [lineId]: "idle" }));
     audioRefs.current[lineId] = audio;
     void audio.play();
   }
@@ -99,7 +111,7 @@ export function ConversationShadowing({
     if (!sessionId || !currentLine) return;
     const attemptResult = await submitRecordingAction(sessionId, formData);
     if (!attemptResult.ok) {
-      setError(attemptResult.error);
+      setError(localizeSpeakingError(attemptResult.error, messages.errors));
       return;
     }
     setError(null);
@@ -117,7 +129,7 @@ export function ConversationShadowing({
     if (!sessionId || !currentLine) return;
     const attemptResult = await submitTextFallbackAction(sessionId, text);
     if (!attemptResult.ok) {
-      setError(attemptResult.error);
+      setError(localizeSpeakingError(attemptResult.error, messages.errors));
       return;
     }
     setError(null);
@@ -141,7 +153,7 @@ export function ConversationShadowing({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <CardTitle>Shadowing — Conversation</CardTitle>
+        <CardTitle>{messages.shadowing.title}</CardTitle>
         <Button
           type="button"
           variant="tertiary"
@@ -153,13 +165,19 @@ export function ConversationShadowing({
           ) : (
             <Eye className="size-4" aria-hidden="true" />
           )}
-          {showPinyin ? "Hide pinyin" : "Show pinyin"}
+          {showPinyin ? messages.common.hidePinyin : messages.common.showPinyin}
         </Button>
       </div>
 
-      <ConversationPlayer dialogueId={dialogueId} />
+      <ConversationPlayer
+        dialogueId={dialogueId}
+        messages={messages.picker.player}
+      />
 
-      <div className="flex items-center gap-1.5" aria-label="Progress">
+      <div
+        className="flex items-center gap-1.5"
+        aria-label={messages.shadowing.progress}
+      >
         {lines.map((line, index) => (
           <span
             key={line.id}
@@ -185,7 +203,10 @@ export function ConversationShadowing({
           return (
             <div
               key={line.id}
-              className={cn("flex items-end gap-2", isRight && "flex-row-reverse")}
+              className={cn(
+                "flex items-end gap-2",
+                isRight && "flex-row-reverse",
+              )}
             >
               <span
                 className={cn(
@@ -199,7 +220,9 @@ export function ConversationShadowing({
               <div
                 className={cn(
                   "flex max-w-[80%] flex-col gap-1 rounded-panel px-3 py-2.5 opacity-80",
-                  isRight ? "rounded-br-sm bg-primary-900" : "rounded-bl-sm bg-elevated",
+                  isRight
+                    ? "rounded-br-sm bg-primary-900"
+                    : "rounded-bl-sm bg-elevated",
                 )}
               >
                 {/* isRight sits on the fixed bg-primary-900 fill, same
@@ -207,7 +230,9 @@ export function ConversationShadowing({
                     dialogue-lines.tsx's right bubble - Caption/
                     CharacterToneFeedback both need the on-color override
                     here, not their default inverting text tokens. */}
-                <Caption className={isRight ? "text-on-color-light/85" : undefined}>
+                <Caption
+                  className={isRight ? "text-on-color-light/85" : undefined}
+                >
                   {line.speakerName}
                 </Caption>
                 <CharacterToneFeedback
@@ -231,11 +256,18 @@ export function ConversationShadowing({
 
       {!finished && currentLine && (
         <Card className="flex flex-col gap-3">
-          <div className={cn("flex items-end gap-2", currentLine.speakerOrder % 2 === 1 && "flex-row-reverse")}>
+          <div
+            className={cn(
+              "flex items-end gap-2",
+              currentLine.speakerOrder % 2 === 1 && "flex-row-reverse",
+            )}
+          >
             <span
               className={cn(
                 "flex size-7 shrink-0 items-center justify-center rounded-full font-chinese text-caption font-semibold text-on-color-light",
-                currentLine.speakerOrder % 2 === 1 ? "bg-primary-500" : "bg-secondary-500",
+                currentLine.speakerOrder % 2 === 1
+                  ? "bg-primary-500"
+                  : "bg-secondary-500",
               )}
               aria-hidden="true"
             >
@@ -266,7 +298,7 @@ export function ConversationShadowing({
             ) : (
               <Play className="size-4" aria-hidden="true" />
             )}
-            Listen to this line
+            {messages.shadowing.listenLine}
           </Button>
 
           {sessionId && !attemptDone && (
@@ -274,17 +306,26 @@ export function ConversationShadowing({
               onSubmitRecording={handleSubmitRecording}
               onSubmitText={handleSubmitText}
               expectedPinyin={currentLine.pinyin}
-              onToneAnalysis={(analysis) => setSyllableScores(analysis.perSyllable)}
+              onToneAnalysis={(analysis) =>
+                setSyllableScores(analysis.perSyllable)
+              }
+              messages={messages.recorder}
             />
           )}
 
           {attemptDone && (
             <div className="flex gap-2">
-              <Button type="button" variant="secondary" onClick={handleRetryLine}>
-                Try again
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleRetryLine}
+              >
+                {messages.common.tryAgain}
               </Button>
               <Button type="button" onClick={handleNext}>
-                {currentIndex === lines.length - 1 ? "Finish" : "Next line"}
+                {currentIndex === lines.length - 1
+                  ? messages.common.finish
+                  : messages.shadowing.nextLine}
               </Button>
             </div>
           )}
@@ -294,10 +335,14 @@ export function ConversationShadowing({
       {finished && (
         <div className="flex flex-col items-start gap-3 rounded-panel border border-success-500/40 bg-success-500/10 p-5">
           <Body className="font-semibold text-text-primary">
-            Conversation complete — {lines.length} line{lines.length === 1 ? "" : "s"} practiced.
+            {lines.length === 1
+              ? messages.shadowing.completeOne
+              : formatMessage(messages.shadowing.completeMany, {
+                  count: lines.length,
+                })}
           </Body>
           <Button type="button" onClick={onExit}>
-            Back to Speaking Lab
+            {messages.common.backToLab}
           </Button>
         </div>
       )}

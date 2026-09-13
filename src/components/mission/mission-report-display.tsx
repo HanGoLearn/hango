@@ -3,48 +3,52 @@ import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Body, Caption, CardTitle } from "@/components/ui/typography";
 import type { MissionReport } from "@/lib/mission-evaluation";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 // DESIGN_TASKS.md Phase 8 (consistency pass): same colored-dimension
 // scorecard as SpeakingFeedbackDisplay/WritingFeedbackDisplay (Phase 6/7)
 // — this component has the identical DIMENSIONS-array pattern but was
 // missed when that treatment was first applied.
+type MissionDimensionKey =
+  | "communicationSuccess"
+  | "taskCompletion"
+  | "vocabularyUsage"
+  | "grammarUsage"
+  | "clarity";
+
 const DIMENSIONS: {
-  key: keyof MissionReport;
-  label: string;
+  key: MissionDimensionKey;
   indicatorClassName: string;
 }[] = [
   {
     key: "communicationSuccess",
-    label: "Communication success",
     indicatorClassName: "bg-primary-500",
   },
   {
     key: "taskCompletion",
-    label: "Task completion",
     indicatorClassName: "bg-secondary-500",
   },
   {
     key: "vocabularyUsage",
-    label: "Vocabulary usage",
     indicatorClassName: "bg-accent-500",
   },
   {
     key: "grammarUsage",
-    label: "Grammar usage",
     indicatorClassName: "bg-info-500",
   },
-  { key: "clarity", label: "Clarity", indicatorClassName: "bg-success-500" },
+  { key: "clarity", indicatorClassName: "bg-success-500" },
 ];
 
 export function MissionReportDisplay({ report }: { report: MissionReport }) {
+  const messages = useLessonMessages();
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        {DIMENSIONS.map(({ key, label, indicatorClassName }) => (
+        {DIMENSIONS.map(({ key, indicatorClassName }) => (
           <ProgressBar
             key={key}
             value={report[key] as number}
-            label={label}
+            label={messages.mission.reportDimensions[key]}
             className="h-3"
             indicatorClassName={indicatorClassName}
           />
@@ -53,7 +57,9 @@ export function MissionReportDisplay({ report }: { report: MissionReport }) {
 
       {report.successConditions.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <CardTitle className="text-body">Success conditions</CardTitle>
+          <CardTitle className="text-body">
+            {messages.mission.successConditions}
+          </CardTitle>
           <ul className="flex flex-col gap-1.5">
             {report.successConditions.map((condition) => (
               <li
@@ -79,12 +85,12 @@ export function MissionReportDisplay({ report }: { report: MissionReport }) {
       )}
 
       <div className="flex flex-col gap-1">
-        <Caption>Notes</Caption>
+        <Caption>{messages.mission.notes}</Caption>
         <Body>{report.overallNotes}</Body>
       </div>
 
       <div className="flex flex-col gap-1">
-        <Caption>Recommended next step</Caption>
+        <Caption>{messages.mission.recommendedNextStep}</Caption>
         <Body>{report.recommendedNextStep}</Body>
       </div>
     </Card>

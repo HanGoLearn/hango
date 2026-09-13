@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
 import { z } from "zod";
 import { requireAdministrator } from "@/lib/admin-auth";
 import { grantAdminCoins } from "@/lib/admin-communications";
@@ -118,7 +119,7 @@ export async function createAnnouncementAction(
 
   revalidatePath("/admin");
   revalidatePath("/admin/communications");
-  revalidatePath("/dashboard");
+  revalidateLocalizedPath("/dashboard");
   return {
     ok: true,
     message:
@@ -135,7 +136,7 @@ export async function archiveAnnouncementAction(announcementId: string) {
     data: { status: "ARCHIVED", endsAt: new Date() },
   });
   revalidatePath("/admin/communications");
-  revalidatePath("/dashboard");
+  revalidateLocalizedPath("/dashboard");
 }
 
 export async function grantHanCoinsAction(
@@ -186,7 +187,7 @@ export async function grantHanCoinsAction(
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${recipient.id}`);
   revalidatePath("/admin/communications");
-  revalidatePath("/dashboard");
+  revalidateLocalizedPath("/dashboard");
   return {
     ok: true,
     message: `${parsed.data.amount.toLocaleString("es-CO")} HanCoins otorgados correctamente.`,

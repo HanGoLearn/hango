@@ -9,14 +9,22 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { PageTitle, Body } from "@/components/ui/typography";
 import { GoogleSignInButton } from "@/components/auth/google-signin-button";
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { AuthMessages } from "@/i18n/messages/types";
 
 const initialState: RegisterFormState = { status: "idle" };
 
 export interface RegisterFormProps {
   googleEnabled: boolean;
+  locale: AppLocale;
+  messages: AuthMessages;
 }
 
-export function RegisterForm({ googleEnabled }: RegisterFormProps) {
+export function RegisterForm({
+  googleEnabled,
+  locale,
+  messages,
+}: RegisterFormProps) {
   const [state, formAction, isPending] = useActionState(
     registerAction,
     initialState,
@@ -26,13 +34,13 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
   if (state.status === "success") {
     return (
       <div className="flex flex-col gap-4 text-center">
-        <PageTitle>Check your email</PageTitle>
+        <PageTitle>{messages.register.successTitle}</PageTitle>
         <InformationBanner variant="success">{state.message}</InformationBanner>
         <Link
-          href="/login"
+          href={localePath(locale, "/login")}
           className="font-interface text-supporting text-primary-300 hover:underline"
         >
-          Back to login
+          {messages.register.backToLogin}
         </Link>
       </div>
     );
@@ -42,9 +50,9 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
     // Two sibling <form> elements, not nested — see login-form.tsx for why.
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1 text-center">
-        <PageTitle>Create your account</PageTitle>
+        <PageTitle>{messages.register.title}</PageTitle>
         <Body className="text-text-secondary">
-          Learn Chinese through real communication.
+          {messages.register.subtitle}
         </Body>
       </div>
 
@@ -53,9 +61,10 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
       )}
 
       <form action={formAction} className="flex flex-col gap-5">
+        <input type="hidden" name="locale" value={locale} />
         <Input
           name="name"
-          label="Name"
+          label={messages.register.name}
           autoComplete="name"
           required
           error={state.fieldErrors?.name}
@@ -63,7 +72,7 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
         <Input
           name="email"
           type="email"
-          label="Email"
+          label={messages.register.email}
           autoComplete="email"
           required
           error={state.fieldErrors?.email}
@@ -71,15 +80,15 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
         <Input
           name="password"
           type="password"
-          label="Password"
+          label={messages.register.password}
           autoComplete="new-password"
           required
           error={state.fieldErrors?.password}
-          hint="At least 8 characters"
+          hint={messages.register.passwordHint}
         />
 
         <Checkbox
-          label="I agree to the Terms of Service and Privacy Policy"
+          label={messages.register.terms}
           checked={termsAccepted}
           onCheckedChange={(checked) => setTermsAccepted(checked === true)}
         />
@@ -89,16 +98,23 @@ export function RegisterForm({ googleEnabled }: RegisterFormProps) {
           loading={isPending}
           disabled={!termsAccepted || isPending}
         >
-          Create account
+          {messages.register.submit}
         </Button>
       </form>
 
-      <GoogleSignInButton enabled={googleEnabled} />
+      <GoogleSignInButton
+        enabled={googleEnabled}
+        redirectTo={localePath(locale, "/dashboard")}
+        messages={messages.google}
+      />
 
       <Body className="text-center text-text-secondary">
-        Already have an account?{" "}
-        <Link href="/login" className="text-primary-300 hover:underline">
-          Log in
+        {messages.register.existingAccount}{" "}
+        <Link
+          href={localePath(locale, "/login")}
+          className="text-primary-300 hover:underline"
+        >
+          {messages.register.login}
         </Link>
       </Body>
     </div>

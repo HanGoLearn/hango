@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Caption, Supporting } from "@/components/ui/typography";
 import { InformationBanner } from "@/components/ui/banner";
 import { updateHanAudioSettingsAction } from "@/lib/actions/settings";
+import type { SettingsMessages } from "@/i18n/messages/types";
 
 /** Restricted to "cedar" only (2026-08-21, user request) - see HAN_VOICES in actions/settings.ts for the enforced allow-list. */
 const VOICE = "cedar";
@@ -15,12 +16,14 @@ const VOICE = "cedar";
 export function HanAudioSettings({
   initialResponseMode,
   initialVoice: _initialVoice,
+  messages,
 }: {
   initialResponseMode: "TEXT_ONLY" | "TEXT_AND_AUDIO" | "AUDIO_ONLY";
   /** Unused now that voice is fixed to "cedar" - every profile was already
       backfilled to it (migration 20260821223212), kept as a prop so the
       caller (Settings page) doesn't need its own special-case. */
   initialVoice: string;
+  messages: SettingsMessages["han"];
 }) {
   const router = useRouter();
   const [responseMode, setResponseMode] = useState(initialResponseMode);
@@ -34,9 +37,9 @@ export function HanAudioSettings({
     try {
       await updateHanAudioSettingsAction(responseMode, VOICE);
       router.refresh();
-      setMessage("Saved.");
+      setMessage(messages.saved);
     } catch {
-      setMessage("The settings couldn't be saved. Please try again.");
+      setMessage(messages.saveError);
     } finally {
       setSaving(false);
     }
@@ -61,7 +64,7 @@ export function HanAudioSettings({
       audio.onended = () => URL.revokeObjectURL(url);
       await audio.play();
     } catch {
-      setMessage("The voice preview is temporarily unavailable.");
+      setMessage(messages.previewError);
     } finally {
       setPreviewing(false);
     }
@@ -72,7 +75,7 @@ export function HanAudioSettings({
       {message && <InformationBanner>{message}</InformationBanner>}
 
       <div className="flex flex-col gap-2">
-        <Caption>Han replies</Caption>
+        <Caption>{messages.replies}</Caption>
         <RadioGroup
           value={responseMode}
           onValueChange={(value) => {
@@ -85,26 +88,22 @@ export function HanAudioSettings({
             }
           }}
         >
-          <RadioGroupItem value="TEXT_ONLY" label="Text only" />
-          <RadioGroupItem value="TEXT_AND_AUDIO" label="Text and audio" />
-          <RadioGroupItem value="AUDIO_ONLY" label="Audio only" />
+          <RadioGroupItem value="TEXT_ONLY" label={messages.textOnly} />
+          <RadioGroupItem
+            value="TEXT_AND_AUDIO"
+            label={messages.textAndAudio}
+          />
+          <RadioGroupItem value="AUDIO_ONLY" label={messages.audioOnly} />
         </RadioGroup>
-        <Supporting>
-          Han always writes the answer internally, whichever mode you pick.
-          Text and audio shows it and plays it aloud automatically; Audio
-          only plays it aloud and hides the written reply.
-        </Supporting>
+        <Supporting>{messages.replyDescription}</Supporting>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Han&apos;s voice</Caption>
+        <Caption>{messages.voice}</Caption>
         <span className="font-interface text-body text-text-primary">
-          Cedar
+          {messages.voiceName}
         </span>
-        <Supporting>
-          This is an AI-generated voice. OpenAI currently optimizes it
-          primarily for English.
-        </Supporting>
+        <Supporting>{messages.voiceDisclosure}</Supporting>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -115,11 +114,11 @@ export function HanAudioSettings({
           loading={previewing}
         >
           <Play className="size-4" aria-hidden="true" />
-          Preview voice
+          {messages.preview}
         </Button>
         <Button type="button" onClick={() => void save()} loading={saving}>
           <Volume2 className="size-4" aria-hidden="true" />
-          Save audio settings
+          {messages.save}
         </Button>
       </div>
     </div>

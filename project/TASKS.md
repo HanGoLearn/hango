@@ -5389,3 +5389,245 @@ test verification, not just a read-through.
   homepage renders as static (○) as intended by this pass's earlier fix.
   **Worth checking on Vercel's dashboard that the next deployment actually
   succeeds.**
+
+## Bilingual interface — Phase 1 (2026-09-09) — ✅ Complete
+
+- [x] Added Spanish and English interface locales with required `/es/...` and
+  `/en/...` learner-facing routes. Legacy unprefixed links now redirect using
+  the explicit locale cookie, weighted browser language, then Spanish as the
+  safe default.
+- [x] Localized the complete public marketing homepage and authentication flow
+  (login, registration, forgotten password, password reset, email verification
+  redirects and user-visible server errors), including localized metadata,
+  canonical URLs and `hreflang` alternatives.
+- [x] Added an ES/EN selector that preserves the current path, query and hash,
+  persists the preference in a one-year cookie and updates an existing
+  learner profile's `interfaceLanguage` without changing
+  `explanationLanguage`.
+- [x] Kept `/admin/...` unprefixed and Spanish-only for the private owner MVP;
+  APIs remain locale-neutral.
+- [x] Preserved the product boundary: no Han prompt, personality, memory,
+  voice, transcription, response-language or pedagogy behavior was changed.
+  Learning Journey Speaking, Speaking Lab and Han remain separate systems.
+- [x] Verified production build, typecheck, scoped ESLint, unit, component,
+  accessibility and authentication integration coverage. Verified on the real
+  local server that ES ⇄ EN switching works and retains navigation state.
+- [x] Phase 2 completed below: learner shell, onboarding, Dashboard, Settings,
+  placement-exam chrome, locale persistence and direct localized navigation.
+
+## Bilingual interface — Phase 2 (2026-09-09) — ✅ Complete
+
+- [x] Localized the complete onboarding flow, including validation feedback,
+  recommendation presentation and the UI around the embedded placement exam.
+  The placement speaking conversation keeps the same component, scenarios,
+  voice, turn limits and grading behavior.
+- [x] Localized the authenticated shell (sidebar, mobile navigation, top bar,
+  user menu and theme controls), Dashboard and Settings. Dashboard review
+  labels now translate from structured context while authored lesson titles,
+  Chinese and pinyin remain untouched for the later curriculum phase.
+- [x] Kept interface language and Han explanation language independent.
+  Changing the interface in Settings synchronizes profile, cookie and URL; a
+  post-login handoff restores the saved profile language on another device for
+  both credentials and Google sign-in while preserving the requested page.
+- [x] Converted learner navigation, lesson completion routes, Speaking Lab QA
+  routes, announcement CTAs and cache revalidation to locale-aware paths. The
+  legacy unprefixed redirect remains only as backward compatibility.
+- [x] Fixed two locale-prefix compatibility issues discovered during the pass:
+  the lateral Han Tutor stays hidden on both `/es/han` and `/en/han`, and
+  activity attribution again distinguishes Han Companion, Speaking Lab,
+  Placement and Learning Journey after stripping the locale.
+- [x] Confirmed with a targeted diff audit that Han prompts, personality,
+  memory, voice, transcription, response-language and speech-processing files
+  were not modified. Han Tutor, Han Companion, Learning Journey Speaking and
+  Speaking Lab remain separate systems.
+- [x] Production build and typecheck pass. Scoped ESLint passes with zero
+  errors/warnings; whole-repository lint is blocked by an unreadable,
+  pre-existing `.codex-tmp/informe-academico/...` LibreOffice directory, which
+  was intentionally left untouched. Unit 661/661, component 60/60, smoke 1/1,
+  and 260/266 full integration assertions pass.
+- [ ] Pre-existing test maintenance, outside this phase: five
+  `handwritten-writing-data` assertions use a stale mock missing
+  `HANDWRITTEN_EVALUATION_MODEL`; the placement-listening 30-request
+  rate-limit test exceeds its 15-second timeout even in isolation. Production
+  build and the bilingual/affected integration suites are green.
+
+## Bilingual interface — Phase 3A (2026-09-09) — ✅ Complete
+
+- [x] Localized the complete learner interface for Progress, Achievements,
+  Leaderboard and the avatar Shop in Spanish and English. Authored scenario
+  and lesson names remain unchanged for the curriculum-content phase.
+- [x] Localized achievement titles/descriptions/categories and locale-aware
+  unlock dates while preserving permanent achievement keys, conditions,
+  rewards and database records.
+- [x] Localized the weekly leaderboard countdown, rank and empty states while
+  preserving its General Level calculations, ranking and weekly payouts.
+- [x] Localized avatar tabs, animals, accessories, rarity/equip/preview states,
+  HanCoin explanation and purchase/equip errors. Prices, ownership and coin
+  transaction logic were not changed.
+- [x] Localized the global achievement and HanCoin celebrations. Admin-authored
+  HanCoin messages are still displayed verbatim; their bilingual variants
+  belong to the later user-communications phase.
+- [x] Han Tutor, Han Companion, Learning Journey Speaking and Speaking Lab
+  remain separate. No Han prompt, personality, memory, voice, transcription,
+  response-language, pedagogy or evaluation logic was changed.
+- [x] Production build and typecheck pass. Scoped ESLint passes with zero
+  errors/warnings; unit 662/662 and component 62/62 pass, including dictionary
+  parity and localized achievement/scenario/leaderboard coverage.
+- [x] Phase 3B Speaking Lab (2026-09-10): localized its complete UI chrome in
+  Spanish and English, including modes, recording, shadowing, contextual and
+  free-topic practice, feedback, known operational errors and the internal QA
+  harness. Existing role/pacing/correction values, authored Chinese/pinyin,
+  generated evaluator text, prompts, speech processing, grading and activity
+  attribution remain unchanged.
+- [x] Phase 3B validation: production build, typecheck and scoped ESLint pass;
+  unit 663/663 and component 63/63 pass. The protected real route correctly
+  redirects an unauthenticated ES visit to login while retaining
+  `callbackUrl=/es/speaking-lab`; visual content QA awaits an authenticated
+  learner session and no credentials were automated.
+- [x] Phase 3C Writing Lab (2026-09-10): localized the complete learner chrome
+  for handwritten paragraphs, translation challenges and custom writing in
+  Spanish and English. Localized setup controls, draft states, upload guidance,
+  known operational errors, fixed rubric labels and feedback headings while
+  preserving authored tasks and generated evaluator observations verbatim.
+- [x] Kept Writing Lab behavior unchanged: task/topic/level identifiers,
+  English evaluator inputs, custom format/tone values, autosave, image
+  preparation limits, paid-call timing, prompts, scoring, persistence, rewards
+  and activity attribution are the same as before.
+- [x] Phase 3C validation: production build, typecheck and scoped ESLint pass;
+  unit 664/664 and component 64/64 pass. The protected ES route redirects to
+  login with `callbackUrl=/es/writing-lab`; visual content QA awaits an
+  authenticated learner session and no credentials were automated.
+- [x] Phase 3D Han Vocabulary (2026-09-10): localized its benefits, search
+  controls, automatic-level guidance, known operational errors, frequency
+  labels and result-card headings in the Han hub and Dashboard word-of-the-day
+  modal. Chinese, pinyin and generated definitions/examples remain verbatim.
+- [x] Kept Han Vocabulary behavior unchanged: automatic earned-level lookup,
+  independent explanation-language preference, cache keys, input/rate/daily
+  limits, provider prompts, parsing, paid-call accounting and activity
+  attribution are unchanged. Han Tutor and Han Companion were not reconfigured.
+- [x] Phase 3D validation: production build, typecheck and scoped ESLint pass;
+  unit 665/665 and component 65/65 pass. The protected ES route redirects with
+  `callbackUrl=/es/han`; authenticated visual content QA remains pending and no
+  credentials or paid lookup were automated.
+- [x] Bilingual interface Phase 3 complete. The next planned block is Phase 4:
+  localized authored curriculum content with shared Chinese/pinyin/audio and
+  locale-specific display fields.
+
+## Bilingual interface — Phase 4A foundation (2026-09-11) — ✅ Complete
+
+- [x] Added additive, normalized translation tables for domains, scenarios,
+  lessons, lesson steps, learning objectives, missions, mission success
+  conditions and mission evaluation criteria. Every row is tied to its base
+  content by a cascading foreign key and is unique per interface language.
+- [x] Kept canonical English fields on the base records as the safe fallback.
+  Slugs, order, difficulty, HSK references, scoring and learner progress remain
+  shared rather than duplicated per locale.
+- [x] Made Learning Journey, Dashboard/Progress continuation targets, lesson
+  headers/objectives and mission display data locale-aware. Existing internal
+  callers default to canonical English, so Han's app-context catalog and
+  speaking/mission prompt behavior remain unchanged.
+- [x] Added a deterministic coverage report (`npm run content:i18n:coverage --
+  es`). Current inventory: 9 domains, 41 scenarios, 164 lessons, 984 steps,
+  664 objectives, 167 missions, 506 success conditions and 504 evaluation
+  criteria; all currently fall back safely until the Spanish authoring batches
+  are added.
+- [x] Applied the two additive database migrations and regenerated Prisma
+  Client. No existing curriculum row was overwritten or deleted.
+- [x] Validation passes: Prisma format/validate, TypeScript, scoped ESLint,
+  production build, 672/672 unit tests, 65/65 component tests and 18/18
+  targeted content/dashboard integration assertions.
+- [x] Phase 4B (2026-09-11): extended normalized translations and locale-aware
+  learner reads to dialogues and line meanings, speaker roles, vocabulary
+  meanings/examples, authored grammar explanations/examples, exercises,
+  options/hints, quizzes/questions/options and writing-task titles/prompts.
+- [x] Kept Mandarin source text, pinyin, audio keys, ordering, correct answers,
+  reference answers, scoring and AI-generated grammar detail on the canonical
+  records. Grading and prompt builders still load canonical content; only
+  learner-facing reads accept the interface locale.
+- [x] Preserved the Han boundary explicitly: Han's navigation catalog and the
+  Speaking/Mission prompt paths keep their canonical English reads. No Han
+  personality, memory, voice, transcription, pedagogy or evaluation setting
+  changed.
+- [x] Applied the additive Phase 4B migration. The expanded coverage report now
+  measures 22 content areas, including 1,646 dialogue lines, 3,014 vocabulary
+  items, 7,872 vocabulary examples, 909 grammar points, 1,780 exercises, 552
+  quiz questions and 179 writing tasks.
+- [x] Phase 4C: authored, independently validated and imported explicit Spanish
+  content for all 41/41 published scenarios. The 31,996 scenario translation
+  units are complete; Chinese, pinyin, placeholders, URLs and scoring data
+  remain protected and canonical English remains the safe fallback.
+- [x] Prepared the Phase 4C Claude handoff workflow: scenario-scoped JSON
+  export, source fingerprint, protected Chinese/placeholder validation, dry-run
+  import and explicit atomic `--apply`. No OpenAI API call is used and Han,
+  answers, scoring, pinyin and audio are excluded from the exchange package.
+- [x] Phase 4C parallel UI work (2026-09-11): localized the fixed lesson chrome
+  in Spanish and English across navigation, display toggles, audio controls,
+  dialogue, comprehension, grammar, vocabulary, guided practice, writing,
+  quizzes, missions, speaking, reflection and results. The shared mission
+  runtime now receives the same locale-aware labels.
+- [x] Kept Claude's pilot file
+  `project/curriculum-translations/es/getting-started.json` untouched while its
+  authored curriculum translation is in progress. Mandarin, pinyin, authored
+  lesson data, generated feedback and Han-spoken/scripted text remain outside
+  this UI-chrome pass.
+- [x] Preserved the Han boundary: no Han Tutor, Han Companion, voice,
+  transcription, prompt, personality, memory, pedagogy or evaluation behavior
+  changed. Production build, non-incremental TypeScript and scoped ESLint pass;
+  the focused bilingual regression set passes 34/34 and the complete
+  unit/component run passes 740/741. The remaining assertion is an existing
+  lazy-load timing failure in `AiTeacherBubble` after its dialog has already
+  opened, unrelated to lesson localization.
+- [x] Phase 4C first authored batch (2026-09-11): fixed the exchange validator
+  so ordinary Spanish accents no longer masquerade as added tone-mark pinyin,
+  while source pinyin still has to survive unchanged. Added regression tests
+  for both the accepted Spanish and rejected altered-pinyin cases.
+- [x] Validated, dry-ran and atomically imported Claude's completed
+  `getting-started.json`: 743 translated fields across 609 normalized Spanish
+  rows. Coverage now reports 1/41 scenarios, 4/164 lessons, 40/3,014
+  vocabulary items and 120/7,872 vocabulary examples, with English fallback
+  everywhere else.
+- [x] Increased the atomic scenario-import timeout from one to five minutes
+  after a verified full rollback at the old 60-second limit. Also allowed
+  zero-coverage export batches to reuse only exact matching shared
+  translations; any differing stored value still blocks as concurrent work.
+  Six focused exchange tests, non-incremental TypeScript and scoped ESLint pass.
+- [x] Phase 4C follow-up batch (2026-09-12): independently revalidated,
+  database-dry-ran and sequentially imported `family`, `weather-and-seasons`,
+  `daily-life-and-feelings`, `around-the-house` and `basic-shopping`. Each
+  scenario passed again against the database state produced by the preceding
+  import; no shared-row conflict or partial write occurred.
+- [x] The six imported Foundation scenarios contain 4,423 translated fields
+  across 3,614 normalized Spanish rows. Coverage now includes 6/41 scenarios,
+  24/164 lessons, 240/3,014 vocabulary items, 720/7,872 vocabulary examples,
+  264/1,780 exercises and 336/1,868 quiz options. All other curriculum remains
+  available through canonical English fallback.
+- [x] Phase 4C ten-scenario batch (2026-09-12): independently revalidated,
+  database-dry-ran and atomically imported `phone-and-communication`, `school`,
+  `hobbies`, `body-basics`, `money-banking`, `places-hours`,
+  `opinions-comparisons`, `plans-and-time`, `restaurant` and `shopping`.
+- [x] Generalized the additive-batch concurrency guard after `phone` advanced
+  the shared baseline before `school` was imported: a stale package may proceed
+  only when every already-stored non-empty value matches its incoming value
+  exactly. Any differing value still reports conflicts and blocks before a
+  transaction. Focused tests 6/6, non-incremental TypeScript and scoped ESLint
+  pass.
+- [x] Phase 4C closure (2026-09-13): all 41 scenario packages were revalidated,
+  dry-run checked and imported atomically. Fresh exports matched every authored
+  unit exactly before their translation baselines were synchronized.
+- [x] Closed the published standalone-content gap with an idempotent, atomic
+  backfill: 1,422 vocabulary items, 429 grammar points, 429 grammar examples and
+  15 writing challenges now have explicit Spanish translations. Existing
+  translations are never overwritten; exact source-equivalent reviewed content
+  is reused deterministically and the writing manifest verifies source text.
+- [x] Final Spanish curriculum coverage is 100% in all 22 measured areas:
+  9/9 domains, 41/41 scenarios, 164/164 lessons, 984/984 steps, 664/664
+  objectives, 167/167 missions, 506/506 success conditions, 504/504 evaluation
+  criteria, 164/164 dialogues, 328/328 speakers, 1,646/1,646 dialogue lines,
+  3,014/3,014 vocabulary items, 7,872/7,872 vocabulary examples, 909/909 grammar
+  points, 1,869/1,869 grammar examples, 1,780/1,780 exercises, 5,472/5,472
+  exercise options, 2/2 hints, 164/164 quizzes, 552/552 questions, 1,868/1,868
+  question options and 179/179 writing tasks.
+- [x] Final bilingual verification (2026-09-13): cleared a stale Next 16
+  Turbopack development cache that still referenced the removed unprefixed
+  `/tienda` route. Fresh ES/EN requests and a complete production build now
+  pass; the build includes `/[locale]/tienda` and all 56 generated pages.

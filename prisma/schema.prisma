@@ -389,7 +389,8 @@ model Domain {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  scenarios Scenario[]
+  scenarios    Scenario[]
+  translations DomainTranslation[]
 }
 
 model Scenario {
@@ -406,13 +407,14 @@ model Scenario {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 
-  domain              Domain               @relation(fields: [domainId], references: [id])
+  domain              Domain                @relation(fields: [domainId], references: [id])
   levels              ScenarioLevel[]
   learningObjectives  LearningObjective[]
   missions            Mission[]
   speakingSessions    SpeakingSession[]
   writingTasks        WritingTask[]
   scenarioCompletions ScenarioCompletion[]
+  translations        ScenarioTranslation[]
 }
 
 /// Not explicitly named as its own entity in any doc (see file-level note) —
@@ -463,6 +465,7 @@ model Lesson {
   writingTasks             WritingTask[]
   reflectionReports        LessonReflectionReport[]
   vocabularyQuizAttempts   VocabularyQuizAttempt[]
+  translations             LessonTranslation[]
 
   @@index([scenarioLevelId, order])
 }
@@ -473,7 +476,7 @@ model Lesson {
 /// cache on revisit (not regenerated every time). See
 /// src/lib/reflection.ts.
 model LessonReflectionReport {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   userId             String
   lessonId           String
   /// Coverage (words opened) - kept for the narrative note ("X of Y words
@@ -502,7 +505,7 @@ model LessonReflectionReport {
   hanNarrative       String
   strengths          Json
   improvements       Json
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
   /// Same pattern as ScenarioCompletion.rewardsGrantedAt (2026-09-08 fix) -
   /// checkReflectionAchievements/grantCoins used to run only once, right
   /// after this row's own create; if either one didn't complete (a crash,
@@ -574,7 +577,8 @@ model LessonStep {
   title    String?
   order    Int
 
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson       Lesson                  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  translations LessonStepTranslation[]
 
   @@unique([lessonId, order])
 }
@@ -588,11 +592,91 @@ model LearningObjective {
   description String
   order       Int     @default(0)
 
-  scenario Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  lesson   Lesson?   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  scenario     Scenario?                      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  lesson       Lesson?                        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  translations LearningObjectiveTranslation[]
 
   @@index([scenarioId])
   @@index([lessonId])
+}
+
+/// Locale-specific authored display copy. The existing base columns remain
+/// the canonical English fallback while the Spanish curriculum is migrated;
+/// structural fields (slugs, ordering, difficulty, HSK and scoring) stay on
+/// the base records and are never duplicated per locale.
+model DomainTranslation {
+  id          String            @id @default(cuid())
+  domainId    String
+  locale      InterfaceLanguage
+  name        String
+  description String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, locale])
+  @@index([locale])
+}
+
+model ScenarioTranslation {
+  id                    String            @id @default(cuid())
+  scenarioId            String
+  locale                InterfaceLanguage
+  name                  String
+  description           String?
+  context               String?
+  communicationOutcomes String[]          @default([])
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, locale])
+  @@index([locale])
+}
+
+model LessonTranslation {
+  id                     String            @id @default(cuid())
+  lessonId               String
+  locale                 InterfaceLanguage
+  title                  String
+  communicationObjective String
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, locale])
+  @@index([locale])
+}
+
+model LessonStepTranslation {
+  id           String            @id @default(cuid())
+  lessonStepId String
+  locale       InterfaceLanguage
+  title        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  lessonStep LessonStep @relation(fields: [lessonStepId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonStepId, locale])
+  @@index([locale])
+}
+
+model LearningObjectiveTranslation {
+  id                  String            @id @default(cuid())
+  learningObjectiveId String
+  locale              InterfaceLanguage
+  description         String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  learningObjective LearningObjective @relation(fields: [learningObjectiveId], references: [id], onDelete: Cascade)
+
+  @@unique([learningObjectiveId, locale])
+  @@index([locale])
 }
 
 /// Fixed reference list (9 rows, seeded once) — competency_framework.md's
@@ -655,9 +739,10 @@ model Dialogue {
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
 
-  lesson   Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  speakers DialogueSpeaker[]
-  lines    DialogueLine[]
+  lesson       Lesson                @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  speakers     DialogueSpeaker[]
+  lines        DialogueLine[]
+  translations DialogueTranslation[]
 
   @@index([lessonId])
 }
@@ -679,8 +764,9 @@ model DialogueSpeaker {
   /// gender - those keep the existing alternating fallback.
   voice      String?
 
-  dialogue Dialogue       @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
-  lines    DialogueLine[]
+  dialogue     Dialogue                     @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
+  lines        DialogueLine[]
+  translations DialogueSpeakerTranslation[]
 }
 
 model DialogueLine {
@@ -696,10 +782,55 @@ model DialogueLine {
   /// audioFilePath. Generated lazily on first playback, not at seed time.
   audioFilePath String?
 
-  dialogue Dialogue        @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
-  speaker  DialogueSpeaker @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  dialogue     Dialogue                  @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
+  speaker      DialogueSpeaker           @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  translations DialogueLineTranslation[]
 
   @@unique([dialogueId, order])
+}
+
+model DialogueTranslation {
+  id                     String            @id @default(cuid())
+  dialogueId             String
+  locale                 InterfaceLanguage
+  title                  String
+  communicationObjective String?
+  contextDescription     String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  dialogue Dialogue @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
+
+  @@unique([dialogueId, locale])
+  @@index([locale])
+}
+
+model DialogueSpeakerTranslation {
+  id                String            @id @default(cuid())
+  dialogueSpeakerId String
+  locale            InterfaceLanguage
+  role              String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  dialogueSpeaker DialogueSpeaker @relation(fields: [dialogueSpeakerId], references: [id], onDelete: Cascade)
+
+  @@unique([dialogueSpeakerId, locale])
+  @@index([locale])
+}
+
+model DialogueLineTranslation {
+  id             String            @id @default(cuid())
+  dialogueLineId String
+  locale         InterfaceLanguage
+  translation    String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  dialogueLine DialogueLine @relation(fields: [dialogueLineId], references: [id], onDelete: Cascade)
+
+  @@unique([dialogueLineId, locale])
+  @@index([locale])
 }
 
 // ---------------------------------------------------------------------------
@@ -725,6 +856,7 @@ model VocabularyItem {
   examples     VocabularyExample[]
   interactions LearnerVocabularyInteraction[]
   quizAttempts VocabularyQuizAttempt[]
+  translations VocabularyItemTranslation[]
 
   @@index([chineseForm])
   /// Added 2026-09-05 (cost/performance audit) - getVocabularyItemsForLevel
@@ -750,9 +882,39 @@ model VocabularyExample {
   audioFilePath    String?
   createdAt        DateTime @default(now())
 
-  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem                 @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+  translations   VocabularyExampleTranslation[]
 
   @@unique([vocabularyItemId, order])
+}
+
+model VocabularyItemTranslation {
+  id               String            @id @default(cuid())
+  vocabularyItemId String
+  locale           InterfaceLanguage
+  meaning          String
+  partOfSpeech     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@unique([vocabularyItemId, locale])
+  @@index([locale])
+}
+
+model VocabularyExampleTranslation {
+  id                  String            @id @default(cuid())
+  vocabularyExampleId String
+  locale              InterfaceLanguage
+  translation         String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  vocabularyExample VocabularyExample @relation(fields: [vocabularyExampleId], references: [id], onDelete: Cascade)
+
+  @@unique([vocabularyExampleId, locale])
+  @@index([locale])
 }
 
 model LessonVocabulary {
@@ -787,9 +949,10 @@ model GrammarPoint {
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
-  examples  GrammarExample[]
-  exercises Exercise[]
-  lessons   LessonGrammarPoint[]
+  examples     GrammarExample[]
+  exercises    Exercise[]
+  lessons      LessonGrammarPoint[]
+  translations GrammarPointTranslation[]
 }
 
 model GrammarExample {
@@ -803,7 +966,39 @@ model GrammarExample {
   translation    String
   order          Int     @default(0)
 
+  grammarPoint GrammarPoint                @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+  translations GrammarExampleTranslation[]
+}
+
+model GrammarPointTranslation {
+  id                   String            @id @default(cuid())
+  grammarPointId       String
+  locale               InterfaceLanguage
+  name                 String
+  communicationPurpose String?
+  explanation          String
+  commonMistake        String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
   grammarPoint GrammarPoint @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+
+  @@unique([grammarPointId, locale])
+  @@index([locale])
+}
+
+model GrammarExampleTranslation {
+  id               String            @id @default(cuid())
+  grammarExampleId String
+  locale           InterfaceLanguage
+  translation      String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  grammarExample GrammarExample @relation(fields: [grammarExampleId], references: [id], onDelete: Cascade)
+
+  @@unique([grammarExampleId, locale])
+  @@index([locale])
 }
 
 model LessonGrammarPoint {
@@ -865,11 +1060,12 @@ model Exercise {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  lesson       Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  grammarPoint GrammarPoint?     @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+  lesson       Lesson                @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  grammarPoint GrammarPoint?         @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
   options      ExerciseOption[]
   hints        ExerciseHint[]
   attempts     ExerciseAttempt[]
+  translations ExerciseTranslation[]
 
   @@index([lessonId])
   @@index([grammarPointId])
@@ -911,7 +1107,8 @@ model ExerciseOption {
   isCorrect  Boolean @default(false)
   order      Int     @default(0)
 
-  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exercise     Exercise                    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  translations ExerciseOptionTranslation[]
 }
 
 /// exercises_system.md's 5-level progressive hint system, verbatim roles:
@@ -923,9 +1120,53 @@ model ExerciseHint {
   level      Int
   text       String
 
-  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exercise     Exercise                  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  translations ExerciseHintTranslation[]
 
   @@unique([exerciseId, level])
+}
+
+model ExerciseTranslation {
+  id          String            @id @default(cuid())
+  exerciseId  String
+  locale      InterfaceLanguage
+  prompt      String
+  explanation String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, locale])
+  @@index([locale])
+}
+
+model ExerciseOptionTranslation {
+  id               String            @id @default(cuid())
+  exerciseOptionId String
+  locale           InterfaceLanguage
+  content          String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  exerciseOption ExerciseOption @relation(fields: [exerciseOptionId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseOptionId, locale])
+  @@index([locale])
+}
+
+model ExerciseHintTranslation {
+  id             String            @id @default(cuid())
+  exerciseHintId String
+  locale         InterfaceLanguage
+  text           String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  exerciseHint ExerciseHint @relation(fields: [exerciseHintId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseHintId, locale])
+  @@index([locale])
 }
 
 enum QuizCategory {
@@ -956,9 +1197,10 @@ model Quiz {
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 
-  lesson    Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  questions QuizQuestion[]
-  attempts  QuizAttempt[]
+  lesson       Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions    QuizQuestion[]
+  attempts     QuizAttempt[]
+  translations QuizTranslation[]
 
   @@index([lessonId])
 }
@@ -972,9 +1214,10 @@ model QuizQuestion {
   explanation   String?
   order         Int          @default(0)
 
-  quiz    Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  options QuizQuestionOption[]
-  answers QuizAnswer[]
+  quiz         Quiz                      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options      QuizQuestionOption[]
+  answers      QuizAnswer[]
+  translations QuizQuestionTranslation[]
 }
 
 model QuizQuestionOption {
@@ -984,7 +1227,51 @@ model QuizQuestionOption {
   isCorrect      Boolean @default(false)
   order          Int     @default(0)
 
+  quizQuestion QuizQuestion                    @relation(fields: [quizQuestionId], references: [id], onDelete: Cascade)
+  translations QuizQuestionOptionTranslation[]
+}
+
+model QuizTranslation {
+  id        String            @id @default(cuid())
+  quizId    String
+  locale    InterfaceLanguage
+  title     String
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, locale])
+  @@index([locale])
+}
+
+model QuizQuestionTranslation {
+  id             String            @id @default(cuid())
+  quizQuestionId String
+  locale         InterfaceLanguage
+  prompt         String
+  explanation    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
   quizQuestion QuizQuestion @relation(fields: [quizQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([quizQuestionId, locale])
+  @@index([locale])
+}
+
+model QuizQuestionOptionTranslation {
+  id                   String            @id @default(cuid())
+  quizQuestionOptionId String
+  locale               InterfaceLanguage
+  content              String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  quizQuestionOption QuizQuestionOption @relation(fields: [quizQuestionOptionId], references: [id], onDelete: Cascade)
+
+  @@unique([quizQuestionOptionId, locale])
+  @@index([locale])
 }
 
 // ---------------------------------------------------------------------------
@@ -1055,6 +1342,7 @@ model Mission {
   successConditions  MissionSuccessCondition[]
   evaluationCriteria MissionEvaluationCriterion[]
   attempts           MissionAttempt[]
+  translations       MissionTranslation[]
 
   @@index([lessonId])
   @@index([scenarioId])
@@ -1066,7 +1354,8 @@ model MissionSuccessCondition {
   description String
   order       Int    @default(0)
 
-  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  mission      Mission                              @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  translations MissionSuccessConditionTranslation[]
 }
 
 model MissionEvaluationCriterion {
@@ -1076,7 +1365,55 @@ model MissionEvaluationCriterion {
   description String?
   order       Int     @default(0)
 
+  mission      Mission                                 @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  translations MissionEvaluationCriterionTranslation[]
+}
+
+model MissionTranslation {
+  id          String            @id @default(cuid())
+  missionId   String
+  locale      InterfaceLanguage
+  title       String
+  context     String?
+  objective   String
+  learnerRole String?
+  aiRole      String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
   mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, locale])
+  @@index([locale])
+}
+
+model MissionSuccessConditionTranslation {
+  id                        String            @id @default(cuid())
+  missionSuccessConditionId String
+  locale                    InterfaceLanguage
+  description               String
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  missionSuccessCondition MissionSuccessCondition @relation(fields: [missionSuccessConditionId], references: [id], onDelete: Cascade)
+
+  @@unique([missionSuccessConditionId, locale])
+  @@index([locale])
+}
+
+model MissionEvaluationCriterionTranslation {
+  id                           String            @id @default(cuid())
+  missionEvaluationCriterionId String
+  locale                       InterfaceLanguage
+  name                         String
+  description                  String?
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
+
+  missionEvaluationCriterion MissionEvaluationCriterion @relation(fields: [missionEvaluationCriterionId], references: [id], onDelete: Cascade)
+
+  @@unique([missionEvaluationCriterionId, locale])
+  @@index([locale])
 }
 
 // ---------------------------------------------------------------------------
@@ -1590,15 +1927,31 @@ model WritingTask {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  lesson   Lesson?          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  scenario Scenario?        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  attempts WritingAttempt[]
+  lesson       Lesson?                  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  scenario     Scenario?                @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  attempts     WritingAttempt[]
+  translations WritingTaskTranslation[]
 
   /// Only content model in this section with no index at all (2026-09-08
   /// optimization pass) - writing-data.ts filters {status, lessonId} twice;
   /// matches the sibling convention (Exercise/Quiz/Mission/Dialogue all
   /// index lessonId alone).
   @@index([lessonId])
+}
+
+model WritingTaskTranslation {
+  id            String            @id @default(cuid())
+  writingTaskId String
+  locale        InterfaceLanguage
+  title         String
+  prompt        String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  writingTask WritingTask @relation(fields: [writingTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([writingTaskId, locale])
+  @@index([locale])
 }
 
 /// `draft` is the live, autosaved text (11.4); `submittedResponse` is a

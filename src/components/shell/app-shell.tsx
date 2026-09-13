@@ -12,6 +12,13 @@ import { getStudyStreak } from "@/lib/dashboard-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
 import { getAvatarPageData } from "@/lib/avatar-data";
 import { grantDailyLoginCoins } from "@/lib/coins";
+import type { AppLocale } from "@/i18n/config";
+import type {
+  AchievementsMessages,
+  LessonMessages,
+  ShellMessages,
+} from "@/i18n/messages/types";
+import { LessonMessagesProvider } from "@/components/lesson/lesson-messages";
 
 // Dynamically loaded (2026-09-08 optimization pass) - these are rare-event
 // overlays (an achievement unlocking, coins landing), not visible on most
@@ -33,6 +40,11 @@ const CoinCelebration = dynamic(() =>
 
 export interface AppShellProps {
   children: ReactNode;
+  locale: AppLocale;
+  messages: ShellMessages;
+  languageSwitcherLabel: string;
+  achievementMessages: AchievementsMessages;
+  lessonMessages: LessonMessages;
 }
 
 /**
@@ -58,12 +70,22 @@ export interface AppShellProps {
  * synchronously - but it's a single already-cached (React.cache()) query,
  * not the 9-query burden TopBar carried.
  */
-export async function AppShell({ children }: AppShellProps) {
+export async function AppShell({
+  children,
+  locale,
+  messages,
+  languageSwitcherLabel,
+  achievementMessages,
+  lessonMessages,
+}: AppShellProps) {
   const session = await auth();
   const userId = session?.user?.id ?? null;
 
   const hanPreferences = userId
-    ? await getOrCreateLearnerProfile(userId).then((profile) => ({
+    ? await getOrCreateLearnerProfile(
+        userId,
+        locale === "en" ? "EN" : "ES",
+      ).then((profile) => ({
         // Always TUTOR (2026-08-31, Han Practice retired) - Practice's job
         // moved entirely to the voice-only Han Companion (/han), which
         // never goes through AiTeacherChat/the floating bubble at all. The
@@ -90,27 +112,42 @@ export async function AppShell({ children }: AppShellProps) {
       initialVoice={hanPreferences.voice}
       initialExplanationLanguage={hanPreferences.explanationLanguage}
     >
-      <ActivityTracker />
-      <div className="flex h-dvh flex-col">
-        <Suspense fallback={<TopBarSkeleton />}>
-          <TopBarData
-            userId={userId}
-            role={session?.user?.role ?? null}
-            email={session?.user?.email ?? null}
-          />
-        </Suspense>
-        <div className="flex flex-1 overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto bg-page p-4 pb-20 md:pb-4">
-            {children}
-          </main>
+      <LessonMessagesProvider messages={lessonMessages}>
+        <ActivityTracker />
+        <div className="flex h-dvh flex-col">
+          <Suspense fallback={<TopBarSkeleton />}>
+            <TopBarData
+              userId={userId}
+              role={session?.user?.role ?? null}
+              email={session?.user?.email ?? null}
+              locale={locale}
+              messages={messages}
+              languageSwitcherLabel={languageSwitcherLabel}
+            />
+          </Suspense>
+          <div className="flex flex-1 overflow-hidden">
+            <Sidebar locale={locale} messages={messages} />
+            <main className="flex-1 overflow-y-auto bg-page p-4 pb-20 md:pb-4">
+              {children}
+            </main>
+          </div>
+          <BottomNav locale={locale} messages={messages} />
+          <AiTeacherBubble />
+          {userId && (
+            <AchievementCelebration
+              messages={messages.achievementCelebration}
+              achievementMessages={achievementMessages}
+            />
+          )}
+          {userId && (
+            <CoinCelebration
+              locale={locale}
+              messages={messages.coinCelebration}
+            />
+          )}
+          {userId && <AnnouncementCenter locale={locale} />}
         </div>
-        <BottomNav />
-        <AiTeacherBubble />
-        {userId && <AchievementCelebration />}
-        {userId && <CoinCelebration />}
-        {userId && <AnnouncementCenter />}
-      </div>
+      </LessonMessagesProvider>
     </AiTeacherProvider>
   );
 }
@@ -119,10 +156,16 @@ async function TopBarData({
   userId,
   role,
   email,
+  locale,
+  messages,
+  languageSwitcherLabel,
 }: {
   userId: string | null;
   role: string | null;
   email: string | null;
+  locale: AppLocale;
+  messages: ShellMessages;
+  languageSwitcherLabel: string;
 }) {
   if (!userId) {
     return (
@@ -132,6 +175,9 @@ async function TopBarData({
         avatarAnimal={null}
         avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
         isAdministrator={false}
+        locale={locale}
+        messages={messages}
+        languageSwitcherLabel={languageSwitcherLabel}
       />
     );
   }
@@ -160,6 +206,9 @@ async function TopBarData({
         role === "ADMINISTRATOR" &&
         email?.toLowerCase() === "arean.mendoza@unmsm.edu.pe"
       }
+      locale={locale}
+      messages={messages}
+      languageSwitcherLabel={languageSwitcherLabel}
     />
   );
 }

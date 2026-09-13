@@ -8,12 +8,22 @@ import {
   markAchievementsSeenAction,
   type UnlockedAchievement,
 } from "@/lib/actions/achievements";
-import { CATEGORY_LABELS } from "@/lib/achievements-catalog";
-import { Modal, ModalContent, ModalTitle, ModalDescription } from "@/components/ui/modal";
+import {
+  Modal,
+  ModalContent,
+  ModalTitle,
+  ModalDescription,
+} from "@/components/ui/modal";
 import { HanMascot } from "@/components/ui/han-mascot";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { AchievementIcon } from "@/components/achievements/achievement-icon";
+import type {
+  AchievementsMessages,
+  ShellMessages,
+} from "@/i18n/messages/types";
+import { localizeAchievement } from "@/i18n/achievements";
+import { formatMessage } from "@/i18n/format";
 
 /**
  * Achievement celebration (2026-08-29, user request) - mounted once in
@@ -31,7 +41,13 @@ import { AchievementIcon } from "@/components/achievements/achievement-icon";
  * happen right before a redirect, e.g. finishing a lesson) won't celebrate
  * until the next route change.
  */
-export function AchievementCelebration() {
+export function AchievementCelebration({
+  messages,
+  achievementMessages,
+}: {
+  messages: ShellMessages["achievementCelebration"];
+  achievementMessages: AchievementsMessages;
+}) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
   const [queue, setQueue] = useState<UnlockedAchievement[]>([]);
@@ -60,6 +76,7 @@ export function AchievementCelebration() {
   }, [current]);
 
   if (!current) return null;
+  const localized = localizeAchievement(current, achievementMessages);
 
   return (
     <Modal
@@ -77,21 +94,23 @@ export function AchievementCelebration() {
           <HanMascot pose="celebrating" size={110} />
         </motion.div>
         <Chip tone="accent" variant="solid" size="sm">
-          Achievement unlocked
+          {messages.unlocked}
         </Chip>
         <ModalTitle className="flex items-center gap-2">
           <AchievementIcon
             name={current.iconName}
             className="size-5 text-accent-300"
           />
-          {current.title}
+          {localized.title}
         </ModalTitle>
-        <ModalDescription>{current.description}</ModalDescription>
+        <ModalDescription>{localized.description}</ModalDescription>
         <span className="font-interface text-caption font-semibold uppercase tracking-wide text-text-muted">
-          {CATEGORY_LABELS[current.category]}
+          {achievementMessages.categories[current.category]}
         </span>
         <Button type="button" onClick={dismiss} className="mt-1">
-          {queue.length > 1 ? `Next (${queue.length - 1} more)` : "Nice!"}
+          {queue.length > 1
+            ? formatMessage(messages.next, { count: queue.length - 1 })
+            : messages.nice}
         </Button>
       </ModalContent>
     </Modal>

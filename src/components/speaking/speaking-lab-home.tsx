@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { localePath, type AppLocale } from "@/i18n/config";
 import {
   Repeat,
   Drama,
@@ -37,6 +38,11 @@ import type {
   SpeakingPrompt,
   SpeakingLessonOption,
 } from "@/lib/content/speaking-prompts";
+import type {
+  DashboardMessages,
+  SpeakingLabMessages,
+} from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 /** Same accent identity as the Learning Journey page's chapters (CHAPTER_CONFIG), re-styled for a tab button instead of a circular node. */
 const TAB_ACCENT: Record<
@@ -81,37 +87,37 @@ type View =
  */
 const MODES: {
   type: ActivityType;
-  title: string;
-  description: string;
   icon: typeof Repeat;
   locked?: boolean;
 }[] = [
   {
     type: "SHADOWING",
-    title: "Shadowing",
-    description: "Repeat a real conversation or a long passage, with pinyin.",
     icon: Repeat,
     locked: true,
   },
   {
     type: "SCENARIO_ROLE_PLAY",
-    title: "Scenario Role Play",
-    description: "Respond in character to the scenario's mission.",
     icon: Drama,
     locked: true,
   },
 ];
 
 export function SpeakingLabHome({
+  locale,
   prompts,
   lessonOptions,
   activeLessonId,
   showSpeakingTestMode = false,
+  messages,
+  levelMessages,
 }: {
+  locale: AppLocale;
   prompts: Record<ActivityType, SpeakingPrompt | null>;
   lessonOptions: SpeakingLessonOption[];
   activeLessonId: string | null;
   showSpeakingTestMode?: boolean;
+  messages: SpeakingLabMessages;
+  levelMessages: DashboardMessages["levels"];
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>({ name: "home" });
@@ -163,7 +169,7 @@ export function SpeakingLabHome({
 
   function selectLesson(lessonId: string) {
     setPickerOpen(false);
-    router.push(`/speaking-lab?lessonId=${lessonId}`);
+    router.push(localePath(locale, `/speaking-lab?lessonId=${lessonId}`));
   }
 
   async function handleStart(mode: ActivityType) {
@@ -194,17 +200,25 @@ export function SpeakingLabHome({
   }
 
   if (view.name === "free-practice") {
-    return <FreeTopicPractice onExit={() => setView({ name: "home" })} />;
+    return (
+      <FreeTopicPractice
+        onExit={() => setView({ name: "home" })}
+        messages={messages}
+        levelMessages={levelMessages}
+      />
+    );
   }
 
   if (view.name === "session") {
     return (
       <SpeakingSession
+        locale={locale}
         sessionId={view.sessionId}
         activityType={view.activityType}
         prompt={view.prompt}
         pinyin={view.pinyin}
         dialogueId={view.dialogueId}
+        messages={messages}
       />
     );
   }
@@ -221,11 +235,11 @@ export function SpeakingLabHome({
             onClick={() => setView({ name: "home" })}
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Back
+            {messages.common.back}
           </Button>
           <EmptyState
-            title="Conversation unavailable"
-            description="This lesson doesn't have dialogue content to shadow."
+            title={messages.picker.unavailableTitle}
+            description={messages.picker.unavailableDescription}
           />
         </div>
       );
@@ -236,6 +250,7 @@ export function SpeakingLabHome({
         lessonId={shadowing.lessonId}
         dialogueId={shadowing.dialogueId}
         onExit={() => setView({ name: "home" })}
+        messages={messages}
       />
     );
   }
@@ -251,13 +266,13 @@ export function SpeakingLabHome({
             onClick={() => setView({ name: "home" })}
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Back
+            {messages.common.back}
           </Button>
         </div>
         <div className="flex flex-col gap-1">
-          <PageTitle>Shadowing</PageTitle>
+          <PageTitle>{messages.picker.title}</PageTitle>
           <Body className="text-text-secondary">
-            Choose how you want to practice this lesson&apos;s dialogue.
+            {messages.picker.description}
           </Body>
         </div>
 
@@ -279,10 +294,9 @@ export function SpeakingLabHome({
               className="mb-2 size-5 text-primary-500"
               aria-hidden="true"
             />
-            <CardTitle>Conversation</CardTitle>
+            <CardTitle>{messages.picker.conversation}</CardTitle>
             <Body className="text-text-secondary">
-              Shadow the lesson&apos;s real dialogue, one turn at a time, like a
-              chat.
+              {messages.picker.conversationDescription}
             </Body>
           </Card>
 
@@ -303,10 +317,9 @@ export function SpeakingLabHome({
               className="mb-2 size-5 text-primary-500"
               aria-hidden="true"
             />
-            <CardTitle>Long text</CardTitle>
+            <CardTitle>{messages.picker.longText}</CardTitle>
             <Body className="text-text-secondary">
-              Shadow the whole dialogue as one continuous passage, pinyin always
-              shown.
+              {messages.picker.longTextDescription}
             </Body>
           </Card>
         </div>
@@ -317,11 +330,8 @@ export function SpeakingLabHome({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <PageTitle>Speaking Lab</PageTitle>
-        <Body className="text-text-secondary">
-          Practice out loud with real feedback, including a tone-match score
-          computed from your own recording.
-        </Body>
+        <PageTitle>{messages.home.title}</PageTitle>
+        <Body className="text-text-secondary">{messages.home.description}</Body>
       </div>
 
       {/* accent-600 doesn't exist in the palette (only 50/100/300/500/700
@@ -348,10 +358,11 @@ export function SpeakingLabHome({
           className="mb-2 size-5 text-on-color-light"
           aria-hidden="true"
         />
-        <CardTitle className="text-on-color-light">Practice with Han</CardTitle>
+        <CardTitle className="text-on-color-light">
+          {messages.home.practiceWithHan}
+        </CardTitle>
         <Body className="text-on-color-light/85">
-          Pick any topic, set the level and speed, and have a live spoken
-          conversation built around exactly what you want to practice.
+          {messages.home.practiceWithHanDescription}
         </Body>
       </Card>
 
@@ -363,10 +374,9 @@ export function SpeakingLabHome({
               aria-hidden="true"
             />
             <div className="flex flex-col gap-1">
-              <CardTitle>Speaking test mode</CardTitle>
+              <CardTitle>{messages.home.testMode}</CardTitle>
               <Body className="text-text-secondary">
-                Open the exact Speaking step from any lesson without changing
-                your Learning Journey progress.
+                {messages.home.testModeDescription}
               </Body>
             </div>
           </div>
@@ -374,15 +384,15 @@ export function SpeakingLabHome({
             type="button"
             variant="secondary"
             className="shrink-0"
-            onClick={() => router.push("/speaking-test")}
+            onClick={() => router.push(localePath(locale, "/speaking-test"))}
           >
-            Open test mode
+            {messages.home.openTestMode}
           </Button>
         </Card>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
-        <SectionTitle>Practice a lesson</SectionTitle>
+        <SectionTitle>{messages.home.practiceLesson}</SectionTitle>
 
         {lessonOptions.length > 0 && (
           <button
@@ -394,7 +404,7 @@ export function SpeakingLabHome({
             <span className="font-semibold text-text-primary">
               {currentOption
                 ? `${currentOption.scenarioTitle} — ${currentOption.title}`
-                : "Choose a lesson"}
+                : messages.home.chooseLesson}
             </span>
             <ChevronDown
               className={cn(
@@ -482,8 +492,11 @@ export function SpeakingLabHome({
                       {group.title}
                     </Caption>
                     <Caption className="text-text-muted">
-                      {group.options.length} lesson
-                      {group.options.length === 1 ? "" : "s"}
+                      {group.options.length === 1
+                        ? messages.home.oneLesson
+                        : formatMessage(messages.home.lessons, {
+                            count: group.options.length,
+                          })}
                     </Caption>
                   </button>
                 ))}
@@ -523,18 +536,22 @@ export function SpeakingLabHome({
                 {locked && (
                   <Lock
                     className="size-4 text-text-muted"
-                    aria-label="Locked"
+                    aria-label={messages.home.locked}
                   />
                 )}
               </div>
-              <CardTitle>{mode.title}</CardTitle>
-              <Body className="text-text-secondary">{mode.description}</Body>
+              <CardTitle>{messages.home.modes[mode.type].title}</CardTitle>
+              <Body className="text-text-secondary">
+                {messages.home.modes[mode.type].description}
+              </Body>
               {locked ? (
-                <Body className="mt-1 text-text-muted">Coming soon.</Body>
+                <Body className="mt-1 text-text-muted">
+                  {messages.home.comingSoon}
+                </Body>
               ) : (
                 !available && (
                   <Body className="mt-1 text-text-muted">
-                    Not available yet — no content for this mode.
+                    {messages.home.unavailable}
                   </Body>
                 )
               )}
@@ -545,8 +562,8 @@ export function SpeakingLabHome({
 
       {Object.values(prompts).every((p) => p === null) && (
         <EmptyState
-          title="Nothing to practice yet"
-          description="Speaking activities will appear here once lesson content is available."
+          title={messages.home.emptyTitle}
+          description={messages.home.emptyDescription}
         />
       )}
     </div>

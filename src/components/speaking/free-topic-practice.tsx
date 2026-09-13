@@ -34,6 +34,12 @@ import { SPEAKING_CLOSING_RESERVE_MS } from "@/lib/speaking-session-timing";
 import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
 import { buildFreeTopicRolePlay } from "@/lib/free-topic-role-play";
 import { tierNameForLevel } from "@/lib/points-system";
+import type {
+  DashboardMessages,
+  SpeakingLabMessages,
+} from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
+import { localizeSpeakingError } from "@/i18n/speaking";
 
 // Radix Select rejects an empty-string item value, so "use my profile
 // level" (level: undefined in rolePlay) is represented by this sentinel.
@@ -132,7 +138,15 @@ type Stage = "setup" | "live" | "results";
  * conversation is one AI call (reflection-prompt.ts's existing rubric),
  * not per-turn - same cost shape as Reflection.
  */
-export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
+export function FreeTopicPractice({
+  onExit,
+  messages,
+  levelMessages,
+}: {
+  onExit: () => void;
+  messages: SpeakingLabMessages;
+  levelMessages: DashboardMessages["levels"];
+}) {
   const {
     voice,
     explanationLanguage,
@@ -205,12 +219,12 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
         // failure) must never be silently swapped for fabricated scores -
         // that looked like real feedback and wasn't (user report, 2026-08-08).
         setFeedback(null);
-        setFeedbackError(result.error);
+        setFeedbackError(localizeSpeakingError(result.error, messages.errors));
         return;
       }
       setFeedback(result.feedback === null ? "not-enough" : result.feedback);
     },
-    [topic],
+    [messages.errors, topic],
   );
 
   const handleComplete = useCallback(
@@ -236,45 +250,51 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
           onClick={onExit}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Back
+          {messages.common.back}
         </Button>
 
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <Sparkles className="size-5 text-primary-500" aria-hidden="true" />
-            <PageTitle>Practice with Han</PageTitle>
+            <PageTitle>{messages.freePractice.title}</PageTitle>
           </div>
           <Body className="text-text-secondary">
-            Pick a topic and how you want Han to run it — a live spoken
-            conversation, just like the Learning Journey&apos;s Speaking step.
+            {messages.freePractice.description}
           </Body>
         </div>
 
         <Card className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Topic
+              {messages.freePractice.topic}
             </Caption>
             <Textarea
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
-              placeholder="e.g. Talk about my weekend trip to Beijing"
-              aria-label="Topic"
+              placeholder={messages.freePractice.topicPlaceholder}
+              aria-label={messages.freePractice.topic}
             />
           </label>
 
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Who is Han?
+              {messages.freePractice.role}
             </Caption>
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger aria-label="Han's role" className="max-w-xs">
+              <SelectTrigger
+                aria-label={messages.freePractice.roleLabel}
+                className="max-w-xs"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {ROLE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                    {
+                      messages.freePractice.roles[
+                        option.value as keyof typeof messages.freePractice.roles
+                      ].label
+                    }
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -283,16 +303,23 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
 
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Level
+              {messages.freePractice.level}
             </Caption>
             <Select value={level} onValueChange={setLevel}>
-              <SelectTrigger aria-label="Level" className="max-w-xs">
+              <SelectTrigger
+                aria-label={messages.freePractice.level}
+                className="max-w-xs"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {LEVEL_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                    {option.value === PROFILE_LEVEL
+                      ? messages.freePractice.useProfileLevel
+                      : (levelMessages[
+                          option.label as keyof typeof levelMessages
+                        ] ?? option.label)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -301,7 +328,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
 
           <div className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Speed
+              {messages.freePractice.speed}
             </Caption>
             <RadioGroup
               value={pace}
@@ -314,7 +341,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
                 <RadioGroupItem
                   key={option.value}
                   value={option.value}
-                  label={option.label}
+                  label={messages.freePractice.paces[option.value]}
                 />
               ))}
             </RadioGroup>
@@ -322,7 +349,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
 
           <div className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              When should Han correct me?
+              {messages.freePractice.correctionQuestion}
             </Caption>
             <RadioGroup
               value={correctionMode}
@@ -333,9 +360,20 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
             >
               {CORRECTION_OPTIONS.map((option) => (
                 <div key={option.value} className="flex flex-col gap-0.5">
-                  <RadioGroupItem value={option.value} label={option.label} />
+                  <RadioGroupItem
+                    value={option.value}
+                    label={
+                      messages.freePractice.corrections[
+                        option.value as keyof typeof messages.freePractice.corrections
+                      ].label
+                    }
+                  />
                   <Caption className="pl-7 text-text-secondary">
-                    {option.description}
+                    {
+                      messages.freePractice.corrections[
+                        option.value as keyof typeof messages.freePractice.corrections
+                      ].description
+                    }
                   </Caption>
                 </div>
               ))}
@@ -344,13 +382,13 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
 
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Anything else? (optional)
+              {messages.freePractice.extra}
             </Caption>
             <Textarea
               value={extra}
               onChange={(event) => setExtra(event.target.value)}
-              placeholder="e.g. Be more formal. Focus on restaurant vocabulary. Correct my tones when I finish."
-              aria-label="Additional instructions"
+              placeholder={messages.freePractice.extraPlaceholder}
+              aria-label={messages.freePractice.extraLabel}
             />
           </label>
 
@@ -360,7 +398,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
             disabled={!topic.trim()}
             onClick={handleStart}
           >
-            Start conversation
+            {messages.freePractice.start}
           </Button>
         </Card>
       </div>
@@ -380,7 +418,11 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
               context={{ rolePlay }}
               open
               variant="immersive"
-              roleLabel={selectedRole.displayLabel}
+              roleLabel={
+                messages.freePractice.roles[
+                  selectedRole.value as keyof typeof messages.freePractice.roles
+                ].display
+              }
               appendMessage={appendRealtimeMessage}
               onActiveChange={handleActiveChange}
               onUnavailable={handleUnavailable}
@@ -395,7 +437,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
               onClick={() => setFallbackVisible(true)}
             >
               <Keyboard className="size-4" aria-hidden="true" />
-              Use text instead
+              {messages.freePractice.useText}
             </Button>
           </>
         ) : (
@@ -406,7 +448,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
                 aria-hidden="true"
               />
               <Body className="text-text-secondary">
-                Microphone unavailable — practice this topic by text instead.
+                {messages.freePractice.microphoneUnavailable}
               </Body>
             </div>
             <div className="h-[28rem] rounded-card border border-border bg-surface p-4">
@@ -418,7 +460,7 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
               className="w-fit"
               onClick={onExit}
             >
-              Back to Speaking Lab
+              {messages.common.backToLab}
             </Button>
           </div>
         )}
@@ -430,16 +472,17 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 text-success-500">
         <CheckCircle2 className="size-5" aria-hidden="true" />
-        <CardTitle>Conversation complete</CardTitle>
+        <CardTitle>{messages.freePractice.complete}</CardTitle>
       </div>
 
       {feedback === "loading" && (
-        <Body className="text-text-secondary">Getting your feedback…</Body>
+        <Body className="text-text-secondary">
+          {messages.freePractice.gettingFeedback}
+        </Body>
       )}
       {feedback === "not-enough" && (
         <Body className="text-text-secondary">
-          That conversation was too short to score — try again and speak a bit
-          more.
+          {messages.freePractice.tooShort}
         </Body>
       )}
       {feedbackError && (
@@ -455,20 +498,23 @@ export function FreeTopicPractice({ onExit }: { onExit: () => void }) {
                 void requestFeedback(lastTranscript, lastSpeakingEvidence)
               }
             >
-              Try getting feedback again
+              {messages.freePractice.retryFeedback}
             </Button>
           )}
         </div>
       )}
       {feedback && feedback !== "loading" && feedback !== "not-enough" && (
         <SpeakingFeedbackDisplay
-          transcript={`Live conversation about: ${topic}`}
+          transcript={formatMessage(messages.freePractice.transcriptTitle, {
+            topic,
+          })}
           feedback={feedback}
+          messages={messages.feedback}
         />
       )}
 
       <Button type="button" onClick={onExit}>
-        Back to Speaking Lab
+        {messages.common.backToLab}
       </Button>
     </div>
   );

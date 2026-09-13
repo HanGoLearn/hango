@@ -5,6 +5,7 @@ import { Chip } from "@/components/ui/chip";
 import type { LessonAvailabilityStatus } from "@/lib/content/learning-journey";
 import { starsForScore } from "@/lib/points-system";
 import { cn } from "@/lib/cn";
+import { localePath, type AppLocale } from "@/i18n/config";
 
 // Every 4th lesson in a level gets the "checkpoint" treatment (2026-08-29,
 // Milestone 3 - "milestone markers every few lessons"), reusing the final-
@@ -23,7 +24,9 @@ function StarRow({ score }: { score: number }) {
           key={n}
           className={cn(
             "size-3",
-            n <= filled ? "fill-accent-300 text-accent-300" : "fill-none text-border",
+            n <= filled
+              ? "fill-accent-300 text-accent-300"
+              : "fill-none text-border",
           )}
         />
       ))}
@@ -83,9 +86,11 @@ const ROW_SHIFT_PX = 28;
 export function LessonPath({
   lessons,
   finalMissionTitle,
+  locale,
 }: {
   lessons: LessonPathItem[];
   finalMissionTitle?: string;
+  locale: AppLocale;
 }) {
   const currentIndex = lessons.findIndex(
     (lesson) => lesson.availability === "AVAILABLE",
@@ -219,7 +224,7 @@ export function LessonPath({
               node
             ) : (
               <Link
-                href={`/lesson/${lesson.slug}`}
+                href={localePath(locale, `/lesson/${lesson.slug}`)}
                 className="block rounded-panel focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
               >
                 {node}
@@ -232,7 +237,9 @@ export function LessonPath({
       {finalMissionTitle && (
         <div
           className="relative z-10 flex items-center gap-3"
-          style={lessons.length % 2 === 1 ? { paddingLeft: ROW_SHIFT_PX } : undefined}
+          style={
+            lessons.length % 2 === 1 ? { paddingLeft: ROW_SHIFT_PX } : undefined
+          }
         >
           <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-accent-500 to-primary-500 text-on-color-light ring-4 ring-page">
             <Star className="size-5" aria-hidden="true" />

@@ -18,14 +18,9 @@ import {
   ModalDescription,
   ModalTitle,
 } from "@/components/ui/modal";
+import type { AppLocale } from "@/i18n/config";
+import type { ShellMessages } from "@/i18n/messages/types";
 
-const REASON_LABELS: Record<string, string> = {
-  lesson_completed: "Lesson completed",
-  scenario_completed: "Scenario completed",
-  achievement_unlocked: "Achievement unlocked",
-  weekly_leaderboard: "Weekly leaderboard bonus",
-  daily_login: "Daily login",
-};
 const TOAST_DURATION_MS = 3500;
 
 /**
@@ -39,7 +34,13 @@ const TOAST_DURATION_MS = 3500;
  * AchievementCelebration in AppShell - both can show at once without
  * conflict, different screen regions.
  */
-export function CoinCelebration() {
+export function CoinCelebration({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: ShellMessages["coinCelebration"];
+}) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
   const [queue, setQueue] = useState<UnseenCoinGain[]>([]);
@@ -89,15 +90,18 @@ export function CoinCelebration() {
           <div className="flex items-center gap-2 text-accent-300">
             <HanCoinsIcon size={30} />
             <span className="font-display text-page-title font-semibold">
-              +{current.amount.toLocaleString("es-CO")}
+              +
+              {current.amount.toLocaleString(
+                locale === "es" ? "es-CO" : "en-US",
+              )}
             </span>
           </div>
-          <ModalTitle>¡Recibiste HanCoins!</ModalTitle>
+          <ModalTitle>{messages.received}</ModalTitle>
           <ModalDescription className="whitespace-pre-wrap text-body">
             {current.adminMessage}
           </ModalDescription>
           <Button type="button" onClick={dismiss}>
-            Continuar
+            {messages.continue}
           </Button>
         </ModalContent>
       </Modal>
@@ -126,7 +130,13 @@ export function CoinCelebration() {
                 +{current.amount}
               </Body>
               <Caption className="text-text-muted">
-                {REASON_LABELS[current.reason] ?? "Earned"}
+                {{
+                  lesson_completed: messages.reasons.lessonCompleted,
+                  scenario_completed: messages.reasons.scenarioCompleted,
+                  achievement_unlocked: messages.reasons.achievementUnlocked,
+                  weekly_leaderboard: messages.reasons.weeklyLeaderboard,
+                  daily_login: messages.reasons.dailyLogin,
+                }[current.reason] ?? messages.earned}
               </Caption>
             </div>
           </motion.button>

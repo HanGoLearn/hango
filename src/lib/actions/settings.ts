@@ -8,6 +8,12 @@ import {
   recordingRetentionSchema,
 } from "@/lib/validation/settings";
 import { profileStepSchema } from "@/lib/validation/onboarding";
+import { localePath, type AppLocale } from "@/i18n/config";
+import {
+  localizeSettingsValidation,
+  settingsActionMessages,
+  settingsLocaleFromFormData,
+} from "@/i18n/settings";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -44,11 +50,18 @@ export async function updateDisplayNameAction(
   _prevState: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
+  const locale = settingsLocaleFromFormData(formData);
   const parsed = profileStepSchema.shape.displayName.safeParse(
     formData.get("displayName"),
   );
   if (!parsed.success) {
-    return { status: "error", message: parsed.error.issues[0]?.message };
+    return {
+      status: "error",
+      message: localizeSettingsValidation(
+        locale,
+        parsed.error.issues[0]?.message,
+      ),
+    };
   }
   const userId = await requireUserId();
   await db.learnerProfile.update({
@@ -74,11 +87,19 @@ export async function updateAccountNameAction(
   _prevState: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
+  const locale = settingsLocaleFromFormData(formData);
+  const actionMessages = settingsActionMessages(locale);
   const parsed = profileStepSchema.shape.nickname.safeParse(
     formData.get("nickname"),
   );
   if (!parsed.success) {
-    return { status: "error", message: parsed.error.issues[0]?.message };
+    return {
+      status: "error",
+      message: localizeSettingsValidation(
+        locale,
+        parsed.error.issues[0]?.message,
+      ),
+    };
   }
   const userId = await requireUserId();
 
@@ -89,7 +110,7 @@ export async function updateAccountNameAction(
   if (current?.nickname) {
     return {
       status: "error",
-      message: "Your Account Name is already set and can't be changed.",
+      message: actionMessages.accountNamePermanent,
     };
   }
 
@@ -100,7 +121,7 @@ export async function updateAccountNameAction(
   if (existing) {
     return {
       status: "error",
-      message: "That Account Name is taken. Try another one.",
+      message: actionMessages.accountNameTaken,
     };
   }
 
@@ -115,6 +136,7 @@ export async function updateLearningPreferencesAction(
   _prevState: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
+  const locale = settingsLocaleFromFormData(formData);
   const parsed = learningPreferencesSchema.safeParse({
     interfaceLanguage: formData.get("interfaceLanguage"),
     explanationLanguage: formData.get("explanationLanguage"),
@@ -124,7 +146,13 @@ export async function updateLearningPreferencesAction(
     correctionStyle: formData.get("correctionStyle"),
   });
   if (!parsed.success) {
-    return { status: "error", message: parsed.error.issues[0]?.message };
+    return {
+      status: "error",
+      message: localizeSettingsValidation(
+        locale,
+        parsed.error.issues[0]?.message,
+      ),
+    };
   }
   const userId = await requireUserId();
   await db.learnerProfile.update({ where: { userId }, data: parsed.data });
@@ -186,8 +214,10 @@ export async function updateRecordingRetentionAction(
  * reviews - no such review workflow exists in this project. Every related
  * table cascades from `User` via `onDelete: Cascade`.
  */
-export async function deleteAccountAction(): Promise<void> {
+export async function deleteAccountAction(
+  locale: AppLocale = "en",
+): Promise<void> {
   const userId = await requireUserId();
   await db.user.delete({ where: { id: userId } });
-  await signOut({ redirectTo: "/" });
+  await signOut({ redirectTo: localePath(locale) });
 }

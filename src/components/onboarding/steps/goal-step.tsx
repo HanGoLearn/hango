@@ -15,33 +15,35 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body, Caption } from "@/components/ui/typography";
 import { HanAvatar, HanMascot } from "@/components/ui/han-mascot";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 const OPTIONS = [
-  { value: "SPEAK_CONFIDENTLY", label: "Speak confidently", icon: MessageCircle },
-  { value: "HSK_PREPARATION", label: "Prepare for HSK", icon: GraduationCap },
-  { value: "TRAVEL", label: "Travel", icon: Plane },
-  { value: "WORK", label: "Work", icon: Briefcase },
-  { value: "STUDY", label: "Study", icon: BookOpen },
-  { value: "PERSONAL_INTEREST", label: "Personal interest", icon: Sparkles },
-];
-
-/** Han's one-line reaction to the most recently selected goal - a small "the mascot notices what you picked" touch (2026-08-27), not just decoration between screens. */
-const GOAL_REACTIONS: Record<string, string> = {
-  SPEAK_CONFIDENTLY: "Nice — we'll get you talking early and often.",
-  HSK_PREPARATION: "Got it — we'll keep your HSK level front and center.",
-  TRAVEL: "Perfect for ordering food, asking directions, all of it.",
-  WORK: "We'll focus on the Chinese you'll actually use at work.",
-  STUDY: "We'll build a strong foundation for your studies.",
-  PERSONAL_INTEREST: "Learning for the love of it — my favorite kind.",
-};
+  { value: "SPEAK_CONFIDENTLY", key: "speakConfidently", icon: MessageCircle },
+  { value: "HSK_PREPARATION", key: "hskPreparation", icon: GraduationCap },
+  { value: "TRAVEL", key: "travel", icon: Plane },
+  { value: "WORK", key: "work", icon: Briefcase },
+  { value: "STUDY", key: "study", icon: BookOpen },
+  { value: "PERSONAL_INTEREST", key: "personalInterest", icon: Sparkles },
+] as const;
 
 export interface GoalStepProps {
   initialValue: string[];
   onNext: (value: string[]) => void;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["goal"];
+  commonMessages: OnboardingMessages["common"];
 }
 
-export function GoalStep({ initialValue, onNext, onBack }: GoalStepProps) {
+export function GoalStep({
+  initialValue,
+  onNext,
+  onBack,
+  locale,
+  messages,
+  commonMessages,
+}: GoalStepProps) {
   const [selected, setSelected] = useState<string[]>(initialValue);
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
@@ -58,6 +60,7 @@ export function GoalStep({ initialValue, onNext, onBack }: GoalStepProps) {
     setIsPending(true);
     const formData = new FormData();
     for (const value of selected) formData.append("learningGoals", value);
+    formData.set("locale", locale);
     const result = await saveGoalStepAction({ status: "idle" }, formData);
     setIsPending(false);
     if (result.status === "error") {
@@ -67,14 +70,19 @@ export function GoalStep({ initialValue, onNext, onBack }: GoalStepProps) {
     onNext(selected);
   };
 
-  const lastReaction = GOAL_REACTIONS[selected[selected.length - 1] ?? ""];
+  const lastOption = OPTIONS.find(
+    (option) => option.value === selected[selected.length - 1],
+  );
+  const lastReaction = lastOption
+    ? messages.reactions[lastOption.key]
+    : undefined;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 text-center">
         <HanMascot pose="wave" size={110} />
-        <SectionTitle>What&apos;s your learning goal?</SectionTitle>
-        <Body className="text-text-secondary">Select all that apply.</Body>
+        <SectionTitle>{messages.title}</SectionTitle>
+        <Body className="text-text-secondary">{messages.selectAll}</Body>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
@@ -84,7 +92,7 @@ export function GoalStep({ initialValue, onNext, onBack }: GoalStepProps) {
           <CheckboxTile
             key={option.value}
             value={option.value}
-            label={option.label}
+            label={messages.options[option.key]}
             icon={<option.icon className="size-5" aria-hidden="true" />}
             layout="row"
             checked={selected.includes(option.value)}
@@ -102,7 +110,7 @@ export function GoalStep({ initialValue, onNext, onBack }: GoalStepProps) {
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <Button
           size="lg"
@@ -110,7 +118,7 @@ export function GoalStep({ initialValue, onNext, onBack }: GoalStepProps) {
           loading={isPending}
           disabled={selected.length === 0}
         >
-          Continue
+          {commonMessages.continue}
         </Button>
       </div>
     </div>

@@ -9,6 +9,8 @@ import {
   updateAccountNameAction,
   type SettingsActionState,
 } from "@/lib/actions/settings";
+import type { AppLocale } from "@/i18n/config";
+import type { SettingsMessages } from "@/i18n/messages/types";
 
 const initialState: SettingsActionState = { status: "idle" };
 
@@ -23,8 +25,12 @@ const initialState: SettingsActionState = { status: "idle" };
  */
 export function AccountNameSection({
   nickname,
+  locale,
+  messages,
 }: {
   nickname: string | null;
+  locale: AppLocale;
+  messages: SettingsMessages["accountName"];
 }) {
   const [state, formAction, isPending] = useActionState(
     updateAccountNameAction,
@@ -35,32 +41,31 @@ export function AccountNameSection({
     return (
       <div className="flex flex-col gap-1.5">
         <Caption className="font-medium text-text-primary">
-          Account Name
+          {messages.label}
         </Caption>
         <span className="font-interface text-body text-text-primary">
           @{nickname}
         </span>
-        <Caption className="text-text-muted">
-          Shown on the leaderboard. Permanent — it can&apos;t be changed.
-        </Caption>
+        <Caption className="text-text-muted">{messages.permanent}</Caption>
       </div>
     );
   }
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      <input type="hidden" name="locale" value={locale} />
       {state.status === "error" && (
         <InformationBanner variant="error">{state.message}</InformationBanner>
       )}
       <Input
-        label="Account Name"
+        label={messages.label}
         name="nickname"
-        placeholder="A unique handle for the leaderboard"
-        hint="Letters, numbers, and underscores only. You can only set this once — choose carefully."
+        placeholder={messages.placeholder}
+        hint={messages.hint}
         maxLength={24}
       />
       <Button type="submit" loading={isPending} className="w-fit">
-        Set Account Name
+        {messages.set}
       </Button>
     </form>
   );

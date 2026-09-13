@@ -6,6 +6,7 @@ import {
   type JourneyChapter,
 } from "@/lib/content/learning-journey";
 import { tierNameForLevel } from "@/lib/points-system";
+import type { AppLocale } from "@/i18n/config";
 
 /**
  * Recommendation engine (3.4), rebuilt 2026-08-24 to replace the old
@@ -32,6 +33,7 @@ export interface RecommendationInput {
   currentLevel: SelfReportedLevel;
   learningGoals: string[];
   skillPriorities: string[];
+  locale?: AppLocale;
 }
 
 export interface RecommendedScenario {
@@ -69,14 +71,43 @@ const SELF_REPORTED_LEVEL: Record<string, number> = {
   UNSURE: 0,
 };
 
-const GOAL_LABELS: Record<string, string> = {
+const GOAL_LABELS: Record<AppLocale, Record<string, string>> = {
+  en: {
   SPEAK_CONFIDENTLY: "Speak confidently",
   HSK_PREPARATION: "Prepare for HSK",
   TRAVEL: "Travel",
   WORK: "Work",
   STUDY: "Study",
   PERSONAL_INTEREST: "Personal interest",
+  },
+  es: {
+    SPEAK_CONFIDENTLY: "Hablar con confianza",
+    HSK_PREPARATION: "Prepararme para el HSK",
+    TRAVEL: "Viajar",
+    WORK: "Trabajar",
+    STUDY: "Estudiar",
+    PERSONAL_INTEREST: "Interés personal",
+  },
 };
+
+const SPANISH_TIER_NAMES: Record<number, string> = {
+  0: "Primeros pasos",
+  1: "Comunicándote con lo esencial",
+  2: "Encontrando tu ritmo",
+  3: "Hablando con soltura",
+  4: "Haciéndote entender fácilmente",
+  5: "Resolviendo situaciones reales",
+  6: "Hablando como profesional",
+  7: "Cerca del dominio",
+  8: "Fluidez refinada",
+  9: "Dominio del idioma",
+};
+
+function localizedTierName(locale: AppLocale, level: number): string {
+  return locale === "es"
+    ? (SPANISH_TIER_NAMES[level] ?? SPANISH_TIER_NAMES[0]!)
+    : tierNameForLevel(level);
+}
 
 /**
  * Keyword match against real scenario/domain text, not a hand-authored
@@ -180,6 +211,26 @@ function buildReason(
   fromPlacement: boolean,
   level: number,
 ): string {
+  const locale = input.locale ?? "en";
+  if (locale === "es") {
+    if (fromPlacement) {
+      return `Tu prueba de nivel te ubicó en ${localizedTierName(locale, level)}; ${scenario.scenarioName} (${scenario.domainName}) corresponde a ese punto de partida.`;
+    }
+    if (input.learningGoals.includes("TRAVEL")) {
+      return `${scenario.scenarioName} forma parte de ${scenario.domainName}, una de las áreas más útiles para desenvolverte al viajar.`;
+    }
+    if (input.learningGoals.includes("WORK")) {
+      return `${scenario.scenarioName} (${scenario.domainName}) desarrolla habilidades de comunicación cotidiana que también usarás en el trabajo.`;
+    }
+    if (input.skillPriorities.includes("SPEAKING")) {
+      return `Como hablar es una prioridad para ti, ${scenario.scenarioName} comienza con diálogo y una misión oral desde la primera lección.`;
+    }
+    if (!input.currentLevel || input.currentLevel === "UNSURE") {
+      return `${scenario.scenarioName} usa vocabulario cotidiano y aumenta gradualmente la dificultad, por lo que es un punto de partida confiable para cualquier nivel.`;
+    }
+    return `${scenario.scenarioName} corresponde a ${localizedTierName(locale, level)}, tu nivel actual dentro de la Ruta de aprendizaje.`;
+  }
+
   if (fromPlacement) {
     return `Your placement exam placed you at ${tierNameForLevel(level)} - ${scenario.scenarioName} (${scenario.domainName}) matches that starting point.`;
   }
@@ -222,7 +273,12 @@ export async function computeRecommendation(
         .filter((s) => matchesKeywords(s, keywords))
         .slice(0, 3)
         .map(toRecommendedScenario);
-      return { goal, label: GOAL_LABELS[goal] ?? goal, scenarios: matched };
+      const locale = input.locale ?? "en";
+      return {
+        goal,
+        label: GOAL_LABELS[locale][goal] ?? goal,
+        scenarios: matched,
+      };
     })
     .filter((entry) => entry.scenarios.length > 0);
 
@@ -238,7 +294,9 @@ export async function computeRecommendation(
     primary,
     reason: primary
       ? buildReason(primary, input, fromPlacement, level)
-      : "New content is on its way - check back soon for your first scenario.",
+      : input.locale === "es"
+        ? "Estamos preparando contenido nuevo. Vuelve pronto para descubrir tu primer escenario."
+        : "New content is on its way - check back soon for your first scenario.",
     goalMatches,
     placementLevel: fromPlacement ? level : null,
   };

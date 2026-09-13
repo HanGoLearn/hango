@@ -13,6 +13,8 @@ import {
 } from "@/lib/actions/quiz-progress";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 import type { ExerciseAnswer } from "@/lib/exercise-progress";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 type Quiz = LessonWithContent["quizzes"][number];
 
@@ -35,6 +37,7 @@ export function QuizRunner({
   quiz: Quiz;
   onFinish: () => void;
 }) {
+  const messages = useLessonMessages();
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [index, setIndex] = useState(0);
@@ -54,14 +57,18 @@ export function QuizRunner({
     return (
       <Card className="flex flex-col gap-3">
         <CardTitle>{quiz.title}</CardTitle>
-        <Caption>{quiz.questions.length} questions</Caption>
+        <Caption>
+          {formatMessage(messages.quiz.questions, {
+            count: quiz.questions.length,
+          })}
+        </Caption>
         <Button
           type="button"
           onClick={handleStart}
           loading={starting}
           className="self-start"
         >
-          Start Quiz
+          {messages.quiz.start}
         </Button>
       </Card>
     );
@@ -70,17 +77,20 @@ export function QuizRunner({
   if (results) {
     return (
       <Card className="flex flex-col gap-3">
-        <CardTitle>Quiz Results</CardTitle>
+        <CardTitle>{messages.quiz.results}</CardTitle>
         <Body>
-          {results.correctCount} of {results.totalQuestions} correct —{" "}
-          {results.score}%
+          {formatMessage(messages.quiz.score, {
+            correct: results.correctCount,
+            total: results.totalQuestions,
+            score: results.score,
+          })}
         </Body>
         <div className="flex gap-2">
           <Button type="button" variant="secondary" onClick={handleStart}>
-            Retry Quiz
+            {messages.quiz.retry}
           </Button>
           <Button type="button" onClick={onFinish}>
-            Continue
+            {messages.common.continue}
           </Button>
         </div>
       </Card>
@@ -117,14 +127,14 @@ export function QuizRunner({
   return (
     <div className="flex flex-col gap-3">
       <Caption>
-        {quiz.title} · {index + 1} of {quiz.questions.length}
+        {quiz.title} · {index + 1} {messages.common.of} {quiz.questions.length}
       </Caption>
       <ExerciseItem
         key={question.id}
         item={question}
         onSubmit={handleSubmit}
         onNext={handleNext}
-        nextLabel={isLast ? "Finish Quiz" : "Next question"}
+        nextLabel={isLast ? messages.quiz.finish : messages.common.nextQuestion}
       />
     </div>
   );

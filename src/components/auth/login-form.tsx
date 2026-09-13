@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { PageTitle, Body } from "@/components/ui/typography";
 import { GoogleSignInButton } from "@/components/auth/google-signin-button";
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { AuthMessages } from "@/i18n/messages/types";
 
 const initialState: LoginFormState = { status: "idle" };
 
@@ -19,6 +21,8 @@ export interface LoginFormProps {
   googleEnabled: boolean;
   /** Where to send the learner after a successful login (e.g. the page that redirected them here). */
   redirectTo?: string;
+  locale: AppLocale;
+  messages: AuthMessages;
 }
 
 export function LoginForm({
@@ -26,6 +30,8 @@ export function LoginForm({
   errorNotice,
   googleEnabled,
   redirectTo = "/dashboard",
+  locale,
+  messages,
 }: LoginFormProps) {
   const boundLoginAction = loginAction.bind(null, redirectTo);
   const [state, formAction, isPending] = useActionState(
@@ -40,8 +46,8 @@ export function LoginForm({
     // instead, which is why the Google button did nothing).
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1 text-center">
-        <PageTitle>Log in</PageTitle>
-        <Body className="text-text-secondary">Welcome back to HanGo.</Body>
+        <PageTitle>{messages.login.title}</PageTitle>
+        <Body className="text-text-secondary">{messages.login.subtitle}</Body>
       </div>
 
       {notice && (
@@ -57,39 +63,47 @@ export function LoginForm({
       )}
 
       <form action={formAction} className="flex flex-col gap-5">
+        <input type="hidden" name="locale" value={locale} />
         <Input
           name="email"
           type="email"
-          label="Email"
+          label={messages.login.email}
           autoComplete="email"
           required
         />
         <Input
           name="password"
           type="password"
-          label="Password"
+          label={messages.login.password}
           autoComplete="current-password"
           required
         />
 
         <Link
-          href="/forgot-password"
+          href={localePath(locale, "/forgot-password")}
           className="text-right font-interface text-supporting text-primary-300 hover:underline"
         >
-          Forgot password?
+          {messages.login.forgotPassword}
         </Link>
 
         <Button type="submit" loading={isPending}>
-          Log in
+          {messages.login.submit}
         </Button>
       </form>
 
-      <GoogleSignInButton enabled={googleEnabled} redirectTo={redirectTo} />
+      <GoogleSignInButton
+        enabled={googleEnabled}
+        redirectTo={redirectTo}
+        messages={messages.google}
+      />
 
       <Body className="text-center text-text-secondary">
-        Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-primary-300 hover:underline">
-          Register
+        {messages.login.noAccount}{" "}
+        <Link
+          href={localePath(locale, "/register")}
+          className="text-primary-300 hover:underline"
+        >
+          {messages.login.register}
         </Link>
       </Body>
     </div>

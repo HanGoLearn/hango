@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
 import type { AiTeacherContext } from "@/lib/ai-context";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /**
  * Opens the AI Teacher (desktop panel or mobile drawer, whichever applies)
@@ -12,13 +13,14 @@ import type { AiTeacherContext } from "@/lib/ai-context";
  * placeholder.
  */
 export function AskAiButton({
-  label = "Ask AI",
+  label,
   contextPatch,
 }: {
   label?: string;
   contextPatch: Partial<AiTeacherContext>;
 }) {
   const { openTeacher } = useAiTeacher();
+  const messages = useLessonMessages();
 
   return (
     <Button
@@ -28,7 +30,7 @@ export function AskAiButton({
       onClick={() => void openTeacher(contextPatch)}
     >
       <Sparkles className="size-4" aria-hidden="true" />
-      {label}
+      {label ?? messages.ai.ask}
     </Button>
   );
 }

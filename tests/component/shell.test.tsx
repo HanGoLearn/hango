@@ -5,8 +5,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard",
+  usePathname: () => "/en/dashboard",
+  useRouter: () => ({ replace: vi.fn() }),
 }));
+vi.mock("@/lib/actions/locale", () => ({ setInterfaceLocaleAction: vi.fn() }));
 // logoutAction is a "use server" action pulling in next-auth (-> next/server),
 // which Vitest's jsdom environment can't resolve — it doesn't understand the
 // "use server" build-time boundary the way Next's bundler does. Real
@@ -41,6 +43,12 @@ import {
   resetAiTeacherConversationAction,
   sendAiTeacherMessageAction,
 } from "@/lib/actions/ai-teacher";
+import { messages as englishMessages } from "@/i18n/messages/en";
+
+const shellProps = {
+  locale: "en" as const,
+  messages: englishMessages.shell,
+};
 
 function InjectSpeakingContext() {
   const { setContext } = useAiTeacher();
@@ -70,7 +78,7 @@ afterEach(() => {
 
 describe("Sidebar", () => {
   it("marks the current section as active", () => {
-    render(<Sidebar />);
+    render(<Sidebar {...shellProps} />);
     const dashboardLink = screen.getByRole("link", { name: /Dashboard/ });
     expect(dashboardLink).toHaveAttribute("aria-current", "page");
     const journeyLink = screen.getByRole("link", { name: /Learning Journey/ });
@@ -78,7 +86,7 @@ describe("Sidebar", () => {
   });
 
   it("includes all required desktop nav items", () => {
-    render(<Sidebar />);
+    render(<Sidebar {...shellProps} />);
     for (const label of [
       "Dashboard",
       "Learning Journey",
@@ -96,7 +104,7 @@ describe("Sidebar", () => {
 
 describe("BottomNav", () => {
   it("omits Settings and uses compact mobile labels", () => {
-    render(<BottomNav />);
+    render(<BottomNav {...shellProps} />);
     expect(screen.getByRole("link", { name: "Home" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Journey" })).toBeInTheDocument();
     expect(
@@ -114,6 +122,8 @@ describe("TopBar", () => {
         avatarAnimal={null}
         avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
         isAdministrator={false}
+        {...shellProps}
+        languageSwitcherLabel={englishMessages.common.languageSwitcher}
       />,
     );
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
@@ -130,6 +140,7 @@ describe("UserMenu", () => {
         animal={null}
         equipped={{ HEAD: null, FACE: null, TORSO: null }}
         isAdministrator={false}
+        {...shellProps}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "User menu" }));
@@ -138,13 +149,13 @@ describe("UserMenu", () => {
     // overriding the anchor's implicit "link" role.
     expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
-      "/settings",
+      "/en/settings",
     );
     expect(
       screen.getByRole("menuitem", { name: "Log out" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("menuitem", { name: "Administrador" }),
+      screen.queryByRole("menuitem", { name: "Administrator" }),
     ).not.toBeInTheDocument();
   });
 
@@ -154,13 +165,40 @@ describe("UserMenu", () => {
         animal={null}
         equipped={{ HEAD: null, FACE: null, TORSO: null }}
         isAdministrator
+        {...shellProps}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "User menu" }));
 
     expect(
+      screen.getByRole("menuitem", { name: "Administrator" }),
+    ).toHaveAttribute("href", "/admin");
+  });
+
+  it("renders the learner menu in Spanish without changing the admin route", async () => {
+    const { messages: spanishMessages } = await import("@/i18n/messages/es");
+    render(
+      <UserMenu
+        animal={null}
+        equipped={{ HEAD: null, FACE: null, TORSO: null }}
+        isAdministrator
+        locale="es"
+        messages={spanishMessages.shell}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Menú de usuario" }),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: "Configuración" }),
+    ).toHaveAttribute("href", "/es/settings");
+    expect(
       screen.getByRole("menuitem", { name: "Administrador" }),
     ).toHaveAttribute("href", "/admin");
+    expect(
+      screen.getByRole("menuitem", { name: "Cerrar sesión" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -282,7 +320,15 @@ describe("AppShell", () => {
     // AppShell is an async Server Component — called directly and awaited
     // (rather than mounted as JSX) so its Promise<Element> resolves before
     // React Testing Library renders the result.
-    render(await AppShell({ children: <p>Page content</p> }));
+    render(
+      await AppShell({
+        children: <p>Page content</p>,
+        ...shellProps,
+        languageSwitcherLabel: englishMessages.common.languageSwitcher,
+        achievementMessages: englishMessages.achievements,
+        lessonMessages: englishMessages.lesson,
+      }),
+    );
     expect(screen.getByText("Page content")).toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: /Dashboard|Home/ }).length,

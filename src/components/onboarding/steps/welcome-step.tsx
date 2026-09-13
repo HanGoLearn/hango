@@ -2,6 +2,7 @@ import { MessageCircleQuestion, Mic, Flame } from "lucide-react";
 import { PageTitle, Body, CardTitle, Caption } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
 import { HanMascot } from "@/components/ui/han-mascot";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 /**
  * Real HanGo capabilities Han actually has (not aspirational copy) - text
@@ -12,38 +13,39 @@ import { HanMascot } from "@/components/ui/han-mascot";
  * "principios, no copia" rule - none of that app's copy, colors, or mascot
  * carry over.
  */
-const HAN_FEATURES = [
+const FEATURE_ICONS = [
   {
     icon: MessageCircleQuestion,
-    title: "Explains as you go",
-    description: "Ask Han anything, anytime — text or voice.",
   },
   {
     icon: Mic,
-    title: "Talks with you",
-    description: "Practice real conversations out loud, not just typing.",
   },
   {
     icon: Flame,
-    title: "Keeps your streak alive",
-    description: "A nudge before you lose it.",
   },
 ];
 
-export function WelcomeStep({ onNext }: { onNext: () => void }) {
+export function WelcomeStep({
+  messages,
+  onNext,
+}: {
+  messages: OnboardingMessages["welcome"];
+  onNext: () => void;
+}) {
   return (
     <div className="flex flex-col items-center gap-4 text-center">
       <HanMascot pose="wave" size={140} gesture="wave" />
       <div>
-        <PageTitle>Meet Han</PageTitle>
+        <PageTitle>{messages.title}</PageTitle>
         <Body className="mt-1 text-text-secondary">
-          Your teacher for this whole journey. A few quick questions
-          first, so lessons can be tailored to you.
+          {messages.description}
         </Body>
       </div>
 
       <div className="flex w-full flex-col gap-2 text-left">
-        {HAN_FEATURES.map(({ icon: Icon, title, description }) => (
+        {messages.features.map(({ title, description }, index) => {
+          const Icon = FEATURE_ICONS[index]?.icon ?? MessageCircleQuestion;
+          return (
           <div
             key={title}
             className="flex items-center gap-3 rounded-panel bg-elevated p-3"
@@ -56,11 +58,12 @@ export function WelcomeStep({ onNext }: { onNext: () => void }) {
               <Caption className="text-text-secondary">{description}</Caption>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <Button size="lg" onClick={onNext} className="mt-2 w-full">
-        Get started
+        {messages.action}
       </Button>
     </div>
   );

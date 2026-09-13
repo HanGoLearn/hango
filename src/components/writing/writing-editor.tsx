@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Caption } from "@/components/ui/typography";
 import { saveDraftAction } from "@/lib/actions/writing";
+import type { WritingLabMessages } from "@/i18n/messages/types";
 
 const AUTOSAVE_DELAY_MS = 1200;
 const MAX_LENGTH = 2000;
@@ -20,11 +21,13 @@ export function WritingEditor({
   initialDraft,
   onSubmit,
   submitting,
+  messages,
 }: {
   attemptId: string;
   initialDraft: string;
   onSubmit: (text: string) => void;
   submitting: boolean;
+  messages: WritingLabMessages;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [dirty, setDirty] = useState(false);
@@ -74,8 +77,8 @@ export function WritingEditor({
       <Textarea
         value={draft}
         onChange={(event) => handleChange(event.target.value)}
-        placeholder="Write your response in Chinese"
-        aria-label="Your writing"
+        placeholder={messages.editor.placeholder}
+        aria-label={messages.editor.label}
         maxLength={MAX_LENGTH}
         showCharacterCount
         disabled={submitting}
@@ -84,12 +87,12 @@ export function WritingEditor({
       <div className="flex items-center justify-between">
         <Caption role="status">
           {saving
-            ? "Saving..."
+            ? messages.editor.saving
             : saveError
-              ? "Couldn't save — check your connection"
+              ? messages.editor.saveFailed
               : dirty
-                ? "Unsaved changes"
-                : "Saved"}
+                ? messages.editor.unsaved
+                : messages.editor.saved}
         </Caption>
         <Button
           type="button"
@@ -97,7 +100,7 @@ export function WritingEditor({
           disabled={!draft.trim() || submitting}
           loading={submitting}
         >
-          Submit
+          {messages.common.submit}
         </Button>
       </div>
     </div>

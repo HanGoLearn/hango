@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import {
   getOrGenerateScenarioCompletion,
@@ -9,6 +8,7 @@ import {
   ScenarioCompletionNotFoundError,
   type ScenarioCompletionResult,
 } from "@/lib/scenario-completion";
+import { revalidateLocalizedPath } from "@/i18n/revalidate";
 
 export type ScenarioCompletionActionResult =
   | { ok: true; completion: ScenarioCompletionResult | null }
@@ -45,7 +45,7 @@ export async function redoScenarioAction(
   }
   try {
     await redoScenario(session.user.id, scenarioId);
-    revalidatePath(`/learning-journey/${scenarioSlug}`);
+    revalidateLocalizedPath(`/learning-journey/${scenarioSlug}`);
     return { ok: true };
   } catch (error) {
     if (error instanceof ScenarioCompletionNotFoundError) {
@@ -66,8 +66,8 @@ export async function redoLessonAction(
   }
   try {
     await redoLesson(session.user.id, lessonId);
-    revalidatePath(`/lesson/${lessonSlug}`);
-    revalidatePath(`/learning-journey/${scenarioSlug}`);
+    revalidateLocalizedPath(`/lesson/${lessonSlug}`);
+    revalidateLocalizedPath(`/learning-journey/${scenarioSlug}`);
     return { ok: true };
   } catch (error) {
     if (error instanceof ScenarioCompletionNotFoundError) {

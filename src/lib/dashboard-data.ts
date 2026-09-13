@@ -18,6 +18,7 @@ import { getLeaderboardTop, getLearnerRank } from "@/lib/leaderboard-data";
 import { getAchievementSummary } from "@/lib/achievements";
 import { getAvatarPageData } from "@/lib/avatar-data";
 import { getWordsOfTheDay } from "@/lib/words-of-the-day";
+import type { AppLocale } from "@/i18n/config";
 
 // 120, not 60 (2026-08-30) - achievements-catalog.ts now has a streak_100
 // achievement ("studied 100 days in a row"), and computeStreak can never
@@ -90,7 +91,10 @@ export const getStudyStreak = cache(
   },
 );
 
-export async function getDashboardData(userId: string) {
+export async function getDashboardData(
+  userId: string,
+  locale: AppLocale = "en",
+) {
   // Resolved first, not inside the Promise.all below (2026-09-01) - Words
   // of the Day needs the learner's real level to pick its pool, and
   // fetching it here lets that call take the level directly instead of
@@ -111,9 +115,9 @@ export async function getDashboardData(userId: string) {
     avatar,
     wordsOfTheDay,
   ] = await Promise.all([
-    getContinueLearningTarget(userId),
+    getContinueLearningTarget(userId, locale),
     getStudyStreak(userId),
-    getScenariosWithProgress(userId),
+    getScenariosWithProgress(userId, locale),
     getCompetencyProgress(userId),
     getReviewQueue(userId),
     // Same cached call getStudyStreak makes internally (see above) - zero
@@ -134,7 +138,7 @@ export async function getDashboardData(userId: string) {
     // Shared across every learner at this level today (2026-09-01,
     // words-of-the-day.ts) - zero AI cost to show; a lookup only fires if
     // the learner taps a word (reuses lookupVocabularyWordAction as-is).
-    getWordsOfTheDay(hskLevel),
+    getWordsOfTheDay(hskLevel, new Date(), locale),
   ]);
 
   return {

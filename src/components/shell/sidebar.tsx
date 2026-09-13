@@ -5,21 +5,30 @@ import { usePathname } from "next/navigation";
 import { primaryNavItems } from "@/lib/navigation";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/cn";
+import { localePath, pathWithoutLocale, type AppLocale } from "@/i18n/config";
+import type { ShellMessages } from "@/i18n/messages/types";
 
 /**
  * Persistent desktop navigation (docs/04_design/ui.md, components.md).
  * Hidden below the md breakpoint — MobileBottomNav takes over there.
  */
-export function Sidebar() {
+export function Sidebar({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: ShellMessages;
+}) {
   const pathname = usePathname();
+  const localeNeutralPathname = pathWithoutLocale(pathname);
 
   return (
     <nav
-      aria-label="Primary navigation"
+      aria-label={messages.primaryNavigation}
       className="hidden w-56 shrink-0 flex-col gap-6 border-r border-border bg-surface p-4 md:flex"
     >
       <Link
-        href="/dashboard"
+        href={localePath(locale, "/dashboard")}
         className="w-fit rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
       >
         <Logo />
@@ -27,12 +36,13 @@ export function Sidebar() {
 
       <ul className="flex flex-1 flex-col gap-1">
         {primaryNavItems.map((item) => {
-          const isActive = pathname?.startsWith(item.href);
+          const isActive = localeNeutralPathname.startsWith(item.href);
           const Icon = item.icon;
+          const copy = messages.navigation[item.key];
           return (
             <li key={item.href}>
               <Link
-                href={item.href}
+                href={localePath(locale, item.href)}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-control px-3 py-2 font-interface text-body transition-colors duration-fast ease-standard",
@@ -64,7 +74,7 @@ export function Sidebar() {
                     aria-hidden="true"
                   />
                 </span>
-                {item.label}
+                {copy.label}
               </Link>
             </li>
           );
@@ -72,7 +82,7 @@ export function Sidebar() {
       </ul>
 
       <div className="border-t border-border pt-4 font-interface text-supporting text-text-secondary">
-        Learner profile
+        {messages.learnerProfile}
       </div>
     </nav>
   );

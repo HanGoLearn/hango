@@ -7,12 +7,17 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
 import { HanMascot } from "@/components/ui/han-mascot";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 export interface ProfileStepProps {
   initialDisplayName: string | null;
   initialNickname: string | null;
   onNext: (values: { displayName: string; nickname: string }) => void;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["profile"];
+  commonMessages: OnboardingMessages["common"];
 }
 
 export function ProfileStep({
@@ -20,6 +25,9 @@ export function ProfileStep({
   initialNickname,
   onNext,
   onBack,
+  locale,
+  messages,
+  commonMessages,
 }: ProfileStepProps) {
   const [displayName, setDisplayName] = useState(initialDisplayName ?? "");
   const [nickname, setNickname] = useState(initialNickname ?? "");
@@ -32,6 +40,7 @@ export function ProfileStep({
     const formData = new FormData();
     formData.set("displayName", displayName);
     formData.set("nickname", nickname);
+    formData.set("locale", locale);
     const result = await saveProfileStepAction({ status: "idle" }, formData);
     setIsPending(false);
     if (result.status === "error") {
@@ -45,35 +54,33 @@ export function ProfileStep({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 text-center">
         <HanMascot pose="wave" size={110} />
-        <SectionTitle>What should Han call you?</SectionTitle>
+        <SectionTitle>{messages.title}</SectionTitle>
         <Body className="text-text-secondary">
-          Your name is what Han calls you — you can change it anytime. Your
-          Account Name is what other learners see on the leaderboard, and
-          it&apos;s permanent once you set it.
+          {messages.description}
         </Body>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
       <Input
-        label="Your name"
+        label={messages.displayName}
         value={displayName}
         onChange={(e) => setDisplayName(e.target.value)}
-        placeholder="What Han calls you"
+        placeholder={messages.displayNamePlaceholder}
         maxLength={60}
       />
       <Input
-        label="Account Name"
+        label={messages.accountName}
         value={nickname}
         onChange={(e) => setNickname(e.target.value)}
-        placeholder="For the leaderboard"
-        hint="Letters, numbers, and underscores only. Permanent — choose carefully."
+        placeholder={messages.accountNamePlaceholder}
+        hint={messages.accountNameHint}
         maxLength={24}
       />
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <Button
           size="lg"
@@ -81,7 +88,7 @@ export function ProfileStep({
           loading={isPending}
           disabled={!displayName.trim() || !nickname.trim()}
         >
-          Continue
+          {commonMessages.continue}
         </Button>
       </div>
     </div>

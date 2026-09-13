@@ -24,6 +24,12 @@ import {
 } from "@/components/writing/writing-task-session";
 import { CustomWriting } from "@/components/writing/custom-writing";
 import { HandwrittenParagraph } from "@/components/writing/handwritten-paragraph";
+import type { AppLocale } from "@/i18n/config";
+import type {
+  DashboardMessages,
+  WritingLabMessages,
+} from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 export interface RecentAttemptSummary {
   id: string;
@@ -49,9 +55,15 @@ type View =
 export function WritingLabHome({
   translationChallenges,
   recentAttempts,
+  locale,
+  messages,
+  levelMessages,
 }: {
   translationChallenges: WritingTaskSummary[];
   recentAttempts: RecentAttemptSummary[];
+  locale: AppLocale;
+  messages: WritingLabMessages;
+  levelMessages: DashboardMessages["levels"];
 }) {
   const [view, setView] = useState<View>({ name: "home" });
 
@@ -60,16 +72,28 @@ export function WritingLabHome({
       <WritingTaskSession
         task={view.task}
         onDone={() => setView({ name: "home" })}
+        messages={messages}
       />
     );
   }
 
   if (view.name === "custom") {
-    return <CustomWriting onExit={() => setView({ name: "home" })} />;
+    return (
+      <CustomWriting
+        onExit={() => setView({ name: "home" })}
+        messages={messages}
+        levelMessages={levelMessages}
+      />
+    );
   }
 
   if (view.name === "paragraph") {
-    return <HandwrittenParagraph onExit={() => setView({ name: "home" })} />;
+    return (
+      <HandwrittenParagraph
+        onExit={() => setView({ name: "home" })}
+        messages={messages}
+      />
+    );
   }
 
   if (view.name === "translation") {
@@ -82,20 +106,19 @@ export function WritingLabHome({
           onClick={() => setView({ name: "home" })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Back
+          {messages.common.back}
         </Button>
         <div className="flex flex-col gap-1">
-          <PageTitle>Translation Challenge</PageTitle>
+          <PageTitle>{messages.home.translationTitle}</PageTitle>
           <Body className="text-text-secondary">
-            Pick a text, translate it into Chinese, and Han will tell you how
-            accurate it was and what to improve.
+            {messages.translation.description}
           </Body>
         </div>
 
         {translationChallenges.length === 0 ? (
           <EmptyState
-            title="Nothing to practice yet"
-            description="Translation texts will appear here once content is available."
+            title={messages.translation.emptyTitle}
+            description={messages.translation.emptyDescription}
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -126,7 +149,7 @@ export function WritingLabHome({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle>Writing Lab</PageTitle>
+      <PageTitle>{messages.home.title}</PageTitle>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card
@@ -146,10 +169,9 @@ export function WritingLabHome({
             className="mb-2 size-5 text-primary-500"
             aria-hidden="true"
           />
-          <CardTitle>Write a Paragraph</CardTitle>
+          <CardTitle>{messages.home.paragraphTitle}</CardTitle>
           <Body className="text-text-secondary">
-            Write Chinese by hand, upload 1–3 photos, and get level-appropriate
-            feedback.
+            {messages.home.paragraphDescription}
           </Body>
         </Card>
 
@@ -170,10 +192,13 @@ export function WritingLabHome({
             className="mb-2 size-5 text-primary-500"
             aria-hidden="true"
           />
-          <CardTitle>Translation Challenge</CardTitle>
+          <CardTitle>{messages.home.translationTitle}</CardTitle>
           <Body className="text-text-secondary">
-            Translate one of {translationChallenges.length || "several"} short
-            texts into Chinese.
+            {translationChallenges.length
+              ? formatMessage(messages.home.translationDescription, {
+                  count: translationChallenges.length,
+                })
+              : messages.home.translationDescriptionFallback}
           </Body>
         </Card>
 
@@ -191,16 +216,18 @@ export function WritingLabHome({
           }}
         >
           <Sparkles className="mb-2 size-5 text-neutral-0" aria-hidden="true" />
-          <CardTitle className="text-neutral-0">Custom Writing</CardTitle>
+          <CardTitle className="text-neutral-0">
+            {messages.home.customTitle}
+          </CardTitle>
           <Body className="text-neutral-0/85">
-            Set your own topic, level, format, and tone.
+            {messages.home.customDescription}
           </Body>
         </Card>
       </div>
 
       {recentAttempts.length > 0 && (
         <div className="flex flex-col gap-2">
-          <SectionTitle>Recent attempts</SectionTitle>
+          <SectionTitle>{messages.home.recentAttempts}</SectionTitle>
           <div className="flex flex-col gap-2">
             {recentAttempts.map((attempt) => (
               <Card
@@ -214,7 +241,9 @@ export function WritingLabHome({
                 <div className="flex flex-col">
                   <Body>{attempt.taskTitle}</Body>
                   <Caption>
-                    {new Date(attempt.submittedAt).toLocaleDateString()}
+                    {new Date(attempt.submittedAt).toLocaleDateString(
+                      locale === "es" ? "es-CO" : "en-US",
+                    )}
                   </Caption>
                 </div>
               </Card>

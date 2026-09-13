@@ -10,6 +10,7 @@ import { InformationBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { sendMissionMessageAction } from "@/lib/actions/mission";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 interface ChatMessage {
   id: string;
@@ -30,6 +31,7 @@ function nextId(): string {
  * MissionAttempt.transcript), not mixed into the ongoing AiConversation.
  */
 export function MissionChat({ attemptId }: { attemptId: string }) {
+  const lessonMessages = useLessonMessages();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -84,7 +86,7 @@ export function MissionChat({ attemptId }: { attemptId: string }) {
       >
         {messages.length === 0 && (
           <Body className="text-text-secondary">
-            Start the conversation whenever you&apos;re ready.
+            {lessonMessages.mission.ready}
           </Body>
         )}
         {messages.map((message) => (
@@ -106,7 +108,7 @@ export function MissionChat({ attemptId }: { attemptId: string }) {
             role="status"
           >
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            <Supporting>Thinking...</Supporting>
+            <Supporting>{lessonMessages.mission.thinking}</Supporting>
           </div>
         )}
       </div>
@@ -122,7 +124,7 @@ export function MissionChat({ attemptId }: { attemptId: string }) {
                 className="px-0"
                 onClick={() => void handleSend(lastFailedMessage)}
               >
-                Retry
+                {lessonMessages.mission.retryMessage}
               </Button>
             )}
           </div>
@@ -134,14 +136,14 @@ export function MissionChat({ attemptId }: { attemptId: string }) {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your response in Chinese..."
-          aria-label="Your message"
+          placeholder={lessonMessages.mission.responsePlaceholder}
+          aria-label={lessonMessages.mission.yourMessage}
           className="min-h-11 flex-1"
           rows={1}
         />
         <IconButton
           icon={<Send className="size-4" aria-hidden="true" />}
-          aria-label="Send message"
+          aria-label={lessonMessages.mission.sendMessage}
           disabled={sending || !draft.trim()}
           onClick={() => void handleSend(draft)}
         />

@@ -77,6 +77,6 @@ describe("application smoke test", () => {
     // already changed more than once since). "HanGo" (the brand name) and
     // a working registration link are stable regardless of copy edits.
     expect(html).toContain("HanGo");
-    expect(html).toContain('href="/register"');
+    expect(html).toContain('href="/es/register"');
   });
 });

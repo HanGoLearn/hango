@@ -3,6 +3,9 @@ import { ArrowRight, Check } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { HomeSections } from "@/components/marketing/home-sections";
 import { HeroDemoCard } from "@/components/marketing/hero-demo-card";
+import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { MarketingMessages } from "@/i18n/messages/types";
 
 const primaryLinkClasses =
   "inline-flex items-center justify-center gap-2 rounded-full bg-primary-500 px-7 py-4 font-interface text-card-title font-semibold text-on-color-light transition-colors duration-fast ease-standard hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600";
@@ -10,65 +13,72 @@ const primaryLinkClasses =
 const secondaryLinkClasses =
   "inline-flex items-center justify-center rounded-full border border-border-strong bg-transparent px-7 py-4 font-interface text-card-title font-semibold text-text-primary transition-colors duration-fast ease-standard hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500";
 
-export function HomeHero() {
+export function HomeHero({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: MarketingMessages;
+}) {
   return (
-    <div
-      lang="es"
-      className="min-h-dvh overflow-x-hidden bg-page text-text-primary"
-    >
+    <div className="min-h-dvh overflow-x-hidden bg-page text-text-primary">
       <a
         href="#contenido-principal"
         className="sr-only z-50 rounded-control bg-primary-500 px-4 py-2 text-on-color-light focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
       >
-        Ir al contenido principal
+        {messages.skipToContent}
       </a>
 
       <header className="relative z-40 border-b border-border/70 bg-page/90 backdrop-blur-lg">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
           <Link
-            href="/"
-            aria-label="HanGo, inicio"
+            href={localePath(locale)}
+            aria-label={messages.brandHome}
             className="rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500"
           >
             <Logo />
           </Link>
 
           <nav
-            aria-label="Navegación principal"
+            aria-label={messages.navLabel}
             className="hidden items-center gap-7 md:flex"
           >
             <a
               href="#como-funciona"
               className="rounded-control text-supporting font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500"
             >
-              Cómo funciona
+              {messages.navHow}
             </a>
             <a
               href="#experiencia"
               className="rounded-control text-supporting font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500"
             >
-              Experiencia
+              {messages.navExperience}
             </a>
             <a
               href="#han"
               className="rounded-control text-supporting font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500"
             >
-              Conoce a Han
+              {messages.navHan}
             </a>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageSwitcher
+              locale={locale}
+              label={locale === "es" ? "Elegir idioma" : "Choose language"}
+            />
             <Link
-              href="/login"
+              href={localePath(locale, "/login")}
               className="hidden rounded-control px-3 py-2 text-supporting font-semibold text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 sm:inline-flex"
             >
-              Iniciar sesión
+              {messages.login}
             </Link>
             <Link
-              href="/register"
+              href={localePath(locale, "/register")}
               className="inline-flex items-center justify-center rounded-full bg-primary-500 px-4 py-2.5 text-supporting font-semibold text-on-color-light transition-colors hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 sm:px-5"
             >
-              Crear cuenta
+              {messages.createAccount}
             </Link>
           </div>
         </div>
@@ -92,36 +102,35 @@ export function HomeHero() {
                   className="size-1.5 rounded-full bg-primary-400"
                   aria-hidden="true"
                 />
-                Mandarín desde cero hasta nivel avanzado
+                {messages.hero.eyebrow}
               </div>
 
               <h1 className="max-w-[14ch] font-display text-[clamp(2.85rem,7vw,5.75rem)] font-semibold leading-[0.98] tracking-[-0.045em] text-text-primary">
-                Empieza desde cero. Lleva tu chino{" "}
-                <span className="text-accent-300">hasta donde quieras.</span>
+                {messages.hero.titleBefore}{" "}
+                <span className="text-accent-300">
+                  {messages.hero.titleAccent}
+                </span>
               </h1>
 
               <p className="mt-7 max-w-[59ch] text-lg leading-8 text-text-secondary sm:text-xl">
-                Aprende mandarín paso a paso, úsalo en situaciones reales y
-                perfecciona tu expresión oral, escritura y vocabulario con la
-                guía de un AI Teacher que se adapta a tu nivel.
+                {messages.hero.description}
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href="/register" className={primaryLinkClasses}>
-                  Crear mi cuenta
+                <Link
+                  href={localePath(locale, "/register")}
+                  className={primaryLinkClasses}
+                >
+                  {messages.hero.primaryCta}
                   <ArrowRight className="size-5" aria-hidden="true" />
                 </Link>
                 <a href="#como-funciona" className={secondaryLinkClasses}>
-                  Ver cómo funciona
+                  {messages.hero.secondaryCta}
                 </a>
               </div>
 
               <ul className="mt-8 flex flex-col gap-3 text-supporting text-text-secondary sm:flex-row sm:flex-wrap sm:gap-x-6">
-                {[
-                  "Empieza sin conocimientos previos",
-                  "Apoyo con pinyin",
-                  "Avanza hasta perfeccionar tu chino",
-                ].map((item) => (
+                {messages.hero.benefits.map((item) => (
                   <li key={item} className="flex items-center gap-2">
                     <span className="grid size-5 place-items-center rounded-full bg-secondary-500/15 text-secondary-500">
                       <Check
@@ -136,10 +145,10 @@ export function HomeHero() {
               </ul>
             </div>
 
-            <HeroDemoCard />
+            <HeroDemoCard locale={locale} messages={messages.demo} />
           </div>
         </section>
-        <HomeSections />
+        <HomeSections locale={locale} messages={messages} />
       </main>
     </div>
   );

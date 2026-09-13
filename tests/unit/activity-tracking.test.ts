@@ -16,6 +16,12 @@ describe("learner activity tracking", () => {
     );
     expect(resolveActivitySurface("/placement-exam")).toBe("PLACEMENT");
     expect(resolveActivitySurface("/dashboard")).toBe("GENERAL");
+    expect(resolveActivitySurface("/es/speaking-lab/session/1")).toBe(
+      "SPEAKING_LAB",
+    );
+    expect(resolveActivitySurface("/en/lesson/introductions")).toBe(
+      "LEARNING_JOURNEY",
+    );
     expect(isLearnerActivitySurface("HAN_TUTOR")).toBe(true);
     expect(isLearnerActivitySurface("SPEAKING")).toBe(false);
   });

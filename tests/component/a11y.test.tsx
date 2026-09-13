@@ -7,8 +7,10 @@ import { axe, toHaveNoViolations } from "jest-axe";
 expect.extend(toHaveNoViolations);
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard",
+  usePathname: () => "/en/dashboard",
+  useRouter: () => ({ replace: vi.fn() }),
 }));
+vi.mock("@/lib/actions/locale", () => ({ setInterfaceLocaleAction: vi.fn() }));
 // See tests/component/shell.test.tsx for why these are mocked here.
 vi.mock("@/lib/actions/logout", () => ({ logoutAction: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
@@ -38,6 +40,7 @@ import { InformationBanner } from "@/components/ui/banner";
 import { EmptyState } from "@/components/ui/states";
 import { AppShell } from "@/components/shell/app-shell";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
+import { messages as englishMessages } from "@/i18n/messages/en";
 
 afterEach(() => {
   cleanup();
@@ -96,6 +99,11 @@ describe("Accessibility (axe)", () => {
             description="Nothing here yet."
           />
         ),
+        locale: "en",
+        messages: englishMessages.shell,
+        languageSwitcherLabel: englishMessages.common.languageSwitcher,
+        achievementMessages: englishMessages.achievements,
+        lessonMessages: englishMessages.lesson,
       }),
     );
     expect(await axe(container)).toHaveNoViolations();
@@ -104,6 +112,8 @@ describe("Accessibility (axe)", () => {
   it("OnboardingWizard (goal step — checkbox group) has no violations", async () => {
     const { container } = render(
       <OnboardingWizard
+        locale="en"
+        messages={englishMessages.onboarding}
         initialStep="goal"
         initialValues={{
           displayName: "Ana",
@@ -123,6 +133,8 @@ describe("Accessibility (axe)", () => {
   it("OnboardingWizard (avatar step — grid of selectable/locked buttons) has no violations", async () => {
     const { container } = render(
       <OnboardingWizard
+        locale="en"
+        messages={englishMessages.onboarding}
         initialStep="avatar"
         initialValues={{
           displayName: "Ana",

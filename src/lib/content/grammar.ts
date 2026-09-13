@@ -1,13 +1,26 @@
 import { db } from "@/lib/db";
+import type { AppLocale } from "@/i18n/config";
+import { localizeContentRecord } from "@/lib/content/localization";
+import {
+  localizeExercise,
+  localizedExerciseInclude,
+} from "@/lib/content/exercise";
 
-export async function getGrammarForLesson(lessonId: string) {
-  return db.lessonGrammarPoint.findMany({
+export async function getGrammarForLesson(
+  lessonId: string,
+  locale: AppLocale = "en",
+) {
+  const grammar = await db.lessonGrammarPoint.findMany({
     where: { lessonId, grammarPoint: { status: "PUBLISHED" } },
     orderBy: { order: "asc" },
     include: {
       grammarPoint: {
         include: {
-          examples: { orderBy: { order: "asc" } },
+          translations: true,
+          examples: {
+            orderBy: { order: "asc" },
+            include: { translations: true },
+          },
           // Eager, server-side (2026-08-19, project/learning-journey-
           // optimization.md Facet B) - hand-authored, same as examples
           // above, so there's no AI-generation reason to keep this behind
@@ -18,13 +31,30 @@ export async function getGrammarForLesson(lessonId: string) {
           exercises: {
             where: { status: "PUBLISHED" },
             orderBy: { order: "asc" },
-            include: {
-              options: { orderBy: { order: "asc" } },
-              hints: { orderBy: { level: "asc" } },
-            },
+            include: localizedExerciseInclude,
           },
         },
       },
     },
+  });
+
+  return grammar.map((lessonGrammarPoint) => {
+    const grammarPoint = localizeContentRecord(
+      lessonGrammarPoint.grammarPoint,
+      locale,
+      ["name", "communicationPurpose", "explanation", "commonMistake"],
+    );
+    return {
+      ...lessonGrammarPoint,
+      grammarPoint: {
+        ...grammarPoint,
+        examples: grammarPoint.examples.map((example) =>
+          localizeContentRecord(example, locale, ["translation"]),
+        ),
+        exercises: grammarPoint.exercises.map((exercise) =>
+          localizeExercise(exercise, locale),
+        ),
+      },
+    };
   });
 }

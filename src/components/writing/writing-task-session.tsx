@@ -14,6 +14,8 @@ import {
   createRewriteAttemptAction,
   type SubmitWritingResult,
 } from "@/lib/actions/writing";
+import type { WritingLabMessages } from "@/i18n/messages/types";
+import { localizeWritingError } from "@/i18n/writing";
 
 export interface WritingTaskSummary {
   id: string;
@@ -25,9 +27,11 @@ export interface WritingTaskSummary {
 export function WritingTaskSession({
   task,
   onDone,
+  messages,
 }: {
   task: WritingTaskSummary;
   onDone: () => void;
+  messages: WritingLabMessages;
 }) {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -55,7 +59,7 @@ export function WritingTaskSession({
       setSubmittedText(text);
       setResult(submitResult.result);
     } else {
-      setError(submitResult.error);
+      setError(localizeWritingError(submitResult.error, messages.errors));
     }
   }
 
@@ -83,19 +87,21 @@ export function WritingTaskSession({
       )}
 
       {!attemptId ? (
-        <LoadingState message="Loading your draft." />
+        <LoadingState message={messages.editor.loadingDraft} />
       ) : !result ? (
         <WritingEditor
           attemptId={attemptId}
           initialDraft={draft}
           onSubmit={(text) => void handleSubmit(text)}
           submitting={submitting}
+          messages={messages}
         />
       ) : (
         <div className="flex flex-col gap-4">
           <WritingFeedbackDisplay
             original={submittedText}
             feedback={result.feedback}
+            messages={messages.feedback}
           />
           <div className="flex gap-2">
             <Button
@@ -103,10 +109,10 @@ export function WritingTaskSession({
               variant="secondary"
               onClick={() => void handleRewrite()}
             >
-              Rewrite
+              {messages.common.rewrite}
             </Button>
             <Button type="button" onClick={onDone}>
-              Done
+              {messages.common.done}
             </Button>
           </div>
         </div>

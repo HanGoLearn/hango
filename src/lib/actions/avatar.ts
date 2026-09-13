@@ -11,6 +11,11 @@ import {
   NotOwnedError,
   InsufficientCoinsError,
 } from "@/lib/coins";
+import {
+  getOnboardingActionMessages,
+  onboardingLocale,
+} from "@/i18n/onboarding";
+import { getShopActionMessages, shopLocale } from "@/i18n/shop";
 
 export interface AvatarActionState {
   status: "idle" | "error";
@@ -27,15 +32,18 @@ const idleState: AvatarActionState = { status: "idle" };
  */
 export async function saveAvatarAnimalAction(
   animal: string,
+  localeValue?: string,
 ): Promise<AvatarActionState> {
+  const locale = onboardingLocale(localeValue ?? null);
+  const messages = await getOnboardingActionMessages(locale);
   const session = await auth();
   if (!session?.user?.id) {
-    return { status: "error", message: "You need to be signed in for this." };
+    return { status: "error", message: messages.signInRequired };
   }
 
   const definition = ANIMALS_BY_KEY.get(animal);
   if (!definition || !definition.available) {
-    return { status: "error", message: "That animal isn't available yet." };
+    return { status: "error", message: messages.animalUnavailable };
   }
 
   await db.learnerAvatar.upsert({
@@ -48,10 +56,12 @@ export async function saveAvatarAnimalAction(
 
 export async function purchaseAccessoryAction(
   accessoryKey: string,
+  localeValue?: string,
 ): Promise<AvatarActionState> {
+  const messages = await getShopActionMessages(shopLocale(localeValue));
   const session = await auth();
   if (!session?.user?.id) {
-    return { status: "error", message: "You need to be signed in for this." };
+    return { status: "error", message: messages.signInRequired };
   }
 
   try {
@@ -59,17 +69,17 @@ export async function purchaseAccessoryAction(
     return idleState;
   } catch (error) {
     if (error instanceof InsufficientCoinsError) {
-      return { status: "error", message: "Not enough HanCoins for this yet." };
+      return { status: "error", message: messages.insufficientCoins };
     }
     if (error instanceof AlreadyOwnedError) {
-      return { status: "error", message: "You already own this." };
+      return { status: "error", message: messages.alreadyOwned };
     }
     if (error instanceof AccessoryNotFoundError) {
-      return { status: "error", message: "That accessory doesn't exist." };
+      return { status: "error", message: messages.accessoryNotFound };
     }
     return {
       status: "error",
-      message: "Couldn't complete the purchase. Please try again.",
+      message: messages.purchaseFailed,
     };
   }
 }
@@ -77,10 +87,12 @@ export async function purchaseAccessoryAction(
 export async function equipAccessoryAction(
   slot: AccessorySlot,
   accessoryKey: string | null,
+  localeValue?: string,
 ): Promise<AvatarActionState> {
+  const messages = await getShopActionMessages(shopLocale(localeValue));
   const session = await auth();
   if (!session?.user?.id) {
-    return { status: "error", message: "You need to be signed in for this." };
+    return { status: "error", message: messages.signInRequired };
   }
 
   try {
@@ -88,11 +100,11 @@ export async function equipAccessoryAction(
     return idleState;
   } catch (error) {
     if (error instanceof NotOwnedError) {
-      return { status: "error", message: "You don't own this yet." };
+      return { status: "error", message: messages.notOwned };
     }
     if (error instanceof AccessoryNotFoundError) {
-      return { status: "error", message: "That accessory doesn't exist." };
+      return { status: "error", message: messages.accessoryNotFound };
     }
-    return { status: "error", message: "Couldn't equip that. Please try again." };
+    return { status: "error", message: messages.equipFailed };
   }
 }

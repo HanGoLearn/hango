@@ -10,6 +10,7 @@ vi.mock("@/lib/actions/google-signin", () => ({ googleSignInAction: vi.fn() }));
 
 import { LoginForm } from "@/components/auth/login-form";
 import { RegisterForm } from "@/components/auth/register-form";
+import { messages } from "@/i18n/messages/en";
 
 afterEach(() => {
   cleanup();
@@ -33,14 +34,18 @@ function expectNoNestedForms(container: HTMLElement) {
 
 describe("LoginForm", () => {
   it("does not nest the Google sign-in form inside the credentials form", () => {
-    const { container } = render(<LoginForm googleEnabled />);
+    const { container } = render(
+      <LoginForm googleEnabled locale="en" messages={messages.auth} />,
+    );
     expectNoNestedForms(container);
   });
 });
 
 describe("RegisterForm", () => {
   it("does not nest the Google sign-in form inside the registration form", () => {
-    const { container } = render(<RegisterForm googleEnabled />);
+    const { container } = render(
+      <RegisterForm googleEnabled locale="en" messages={messages.auth} />,
+    );
     expectNoNestedForms(container);
   });
 });

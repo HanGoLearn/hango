@@ -15,9 +15,7 @@ import {
 } from "@/components/ui/typography";
 import { HandwrittenWritingFeedback } from "@/components/writing/handwritten-writing-feedback";
 import {
-  HANDWRITTEN_LEVEL_CONFIG,
   HANDWRITTEN_LEVELS,
-  HANDWRITTEN_TOPIC_CONFIG,
   HANDWRITTEN_TOPICS,
   type HandwrittenEvaluation,
   type HandwrittenLevel,
@@ -25,6 +23,9 @@ import {
   type HandwrittenTopic,
 } from "@/lib/handwritten-writing";
 import { cn } from "@/lib/cn";
+import type { WritingLabMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
+import { localizeWritingError } from "@/i18n/writing";
 
 const MAX_PHOTOS = 3;
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -42,6 +43,7 @@ async function canvasBlob(
   bitmap: ImageBitmap,
   maxDimension: number,
   quality: number,
+  messages: WritingLabMessages["errors"],
 ): Promise<Blob> {
   const scale = Math.min(
     1,
@@ -53,25 +55,28 @@ async function canvasBlob(
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("This browser could not prepare the photo.");
+  if (!context) throw new Error(messages.browserPhotoFailed);
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
   context.drawImage(bitmap, 0, 0, width, height);
   return new Promise((resolve, reject) =>
     canvas.toBlob(
       (blob) =>
-        blob
-          ? resolve(blob)
-          : reject(new Error("This photo could not be prepared.")),
+        blob ? resolve(blob) : reject(new Error(messages.photoFailed)),
       "image/jpeg",
       quality,
     ),
   );
 }
 
-async function preparePhoto(source: File): Promise<File> {
+async function preparePhoto(
+  source: File,
+  messages: WritingLabMessages["errors"],
+): Promise<File> {
   if (source.size > MAX_SOURCE_BYTES) {
-    throw new Error(`${source.name} is too large. Choose a photo under 15 MB.`);
+    throw new Error(
+      formatMessage(messages.photoTooLarge, { name: source.name }),
+    );
   }
   const bitmap = await createImageBitmap(source);
   try {
@@ -80,17 +85,17 @@ async function preparePhoto(source: File): Promise<File> {
       Math.min(bitmap.width, bitmap.height) < 500
     ) {
       throw new Error(
-        `${source.name} is too small to read Chinese characters clearly.`,
+        formatMessage(messages.photoTooSmall, { name: source.name }),
       );
     }
-    let blob = await canvasBlob(bitmap, MAX_DIMENSION, 0.84);
+    let blob = await canvasBlob(bitmap, MAX_DIMENSION, 0.84, messages);
     if (blob.size > TARGET_FILE_BYTES)
-      blob = await canvasBlob(bitmap, MAX_DIMENSION, 0.72);
+      blob = await canvasBlob(bitmap, MAX_DIMENSION, 0.72, messages);
     if (blob.size > TARGET_FILE_BYTES)
-      blob = await canvasBlob(bitmap, SECONDARY_MAX_DIMENSION, 0.72);
+      blob = await canvasBlob(bitmap, SECONDARY_MAX_DIMENSION, 0.72, messages);
     if (blob.size > 2 * 1024 * 1024) {
       throw new Error(
-        `${source.name} could not be compressed enough. Try a closer crop.`,
+        formatMessage(messages.photoCompressionFailed, { name: source.name }),
       );
     }
     return new File(
@@ -105,7 +110,13 @@ async function preparePhoto(source: File): Promise<File> {
   }
 }
 
-export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
+export function HandwrittenParagraph({
+  onExit,
+  messages,
+}: {
+  onExit: () => void;
+  messages: WritingLabMessages;
+}) {
   const [level, setLevel] = useState<HandwrittenLevel>("BASIC");
   const [topic, setTopic] = useState<HandwrittenTopic>("FAMILY");
   const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
@@ -130,8 +141,8 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
     [],
   );
 
-  const levelConfig = HANDWRITTEN_LEVEL_CONFIG[level];
-  const topicConfig = HANDWRITTEN_TOPIC_CONFIG[topic];
+  const levelConfig = messages.handwritten.levels[level];
+  const topicConfig = messages.handwritten.topics[topic];
 
   async function addPhotos(files: FileList | null) {
     if (!files?.length) return;
@@ -139,7 +150,9 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
     setUnreadableReason(null);
     const available = MAX_PHOTOS - photos.length;
     if (files.length > available) {
-      setError(`You can upload up to ${MAX_PHOTOS} photos in one submission.`);
+      setError(
+        formatMessage(messages.errors.tooManyPhotos, { max: MAX_PHOTOS }),
+      );
       return;
     }
     const selected = Array.from(files);
@@ -149,12 +162,14 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
           !["image/jpeg", "image/png", "image/webp"].includes(file.type),
       )
     ) {
-      setError("Use JPG, PNG, or WebP photos.");
+      setError(messages.errors.photoFormats);
       return;
     }
     setPreparing(true);
     try {
-      const prepared = await Promise.all(selected.map(preparePhoto));
+      const prepared = await Promise.all(
+        selected.map((photo) => preparePhoto(photo, messages.errors)),
+      );
       setPhotos((current) => [
         ...current,
         ...prepared.map((file) => ({
@@ -167,7 +182,7 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
       setError(
         photoError instanceof Error
           ? photoError.message
-          : "The photos could not be prepared.",
+          : messages.errors.photoPreparationFailed,
       );
     } finally {
       setPreparing(false);
@@ -203,21 +218,21 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
       if (!response.ok) {
         setError(
           payload && "error" in payload && payload.error
-            ? payload.error
-            : "The photos could not be evaluated.",
+            ? localizeWritingError(payload.error, messages.errors)
+            : messages.errors.photoEvaluationFailed,
         );
         return;
       }
       const result = payload as HandwrittenSubmissionResult;
       if (!result.readable) {
-        setUnreadableReason(result.reason);
+        setUnreadableReason(
+          localizeWritingError(result.reason, messages.errors),
+        );
         return;
       }
       setEvaluation(result.evaluation);
     } catch {
-      setError(
-        "The photos could not be sent. Check your connection and try again when ready.",
-      );
+      setError(messages.errors.photoSendFailed);
     } finally {
       setSubmitting(false);
     }
@@ -235,13 +250,16 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
     return (
       <div className="flex flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <PageTitle>Your handwriting feedback</PageTitle>
+          <PageTitle>{messages.handwritten.feedbackTitle}</PageTitle>
           <Button type="button" variant="secondary" onClick={startAgain}>
             <RotateCcw className="size-4" aria-hidden="true" />
-            Try another topic
+            {messages.handwritten.tryAnotherTopic}
           </Button>
         </div>
-        <HandwrittenWritingFeedback evaluation={evaluation} />
+        <HandwrittenWritingFeedback
+          evaluation={evaluation}
+          messages={messages.handwritten}
+        />
       </div>
     );
   }
@@ -255,22 +273,21 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
         onClick={onExit}
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Back
+        {messages.common.back}
       </Button>
 
       <div className="flex flex-col gap-1">
-        <PageTitle>Write a Paragraph</PageTitle>
+        <PageTitle>{messages.home.paragraphTitle}</PageTitle>
         <Body className="text-text-secondary">
-          Write Chinese by hand as separate sentences or one continuous text,
-          then upload clear photos for feedback.
+          {messages.handwritten.description}
         </Body>
       </div>
 
       <section className="flex flex-col gap-3">
-        <SectionTitle>1. Choose your level</SectionTitle>
+        <SectionTitle>{messages.handwritten.chooseLevel}</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-3">
           {HANDWRITTEN_LEVELS.map((option) => {
-            const config = HANDWRITTEN_LEVEL_CONFIG[option];
+            const config = messages.handwritten.levels[option];
             const selected = level === option;
             return (
               <Card
@@ -301,10 +318,10 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
       </section>
 
       <section className="flex flex-col gap-3">
-        <SectionTitle>2. Choose a topic</SectionTitle>
+        <SectionTitle>{messages.handwritten.chooseTopic}</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-3">
           {HANDWRITTEN_TOPICS.map((option) => {
-            const config = HANDWRITTEN_TOPIC_CONFIG[option];
+            const config = messages.handwritten.topics[option];
             const selected = topic === option;
             return (
               <Card
@@ -338,25 +355,28 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
       <InformationBanner title={`${topicConfig.label} · ${levelConfig.label}`}>
         <Body>{topicConfig.prompts[level]}</Body>
         <Caption className="mt-1 block">
-          Target: {levelConfig.lineTarget.toLowerCase()} (
-          {levelConfig.characterTarget.toLowerCase()}).
+          {formatMessage(messages.handwritten.target, {
+            lineTarget: levelConfig.lineTarget,
+            characterTarget: levelConfig.characterTarget,
+          })}
         </Caption>
       </InformationBanner>
 
       <section className="flex flex-col gap-3">
-        <SectionTitle>3. Upload your handwriting</SectionTitle>
+        <SectionTitle>{messages.handwritten.uploadTitle}</SectionTitle>
         <Body className="text-text-secondary">
-          Upload 1–3 photos in page order. Use bright, even light and keep the
-          whole text in focus.
+          {messages.handwritten.uploadDescription}
         </Body>
 
         {error && (
           <InformationBanner variant="error">{error}</InformationBanner>
         )}
         {unreadableReason && (
-          <InformationBanner variant="warning" title="Please retake the photo">
-            {unreadableReason} No score was created. Replace the unclear photo
-            and submit again when ready.
+          <InformationBanner
+            variant="warning"
+            title={messages.handwritten.retakeTitle}
+          >
+            {unreadableReason} {messages.handwritten.unreadableSuffix}
           </InformationBanner>
         )}
 
@@ -367,19 +387,27 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
                 <div className="relative aspect-3/4 overflow-hidden rounded-control bg-elevated">
                   <Image
                     src={photo.previewUrl}
-                    alt={`Handwritten page ${index + 1}`}
+                    alt={formatMessage(messages.handwritten.photoAlt, {
+                      page: index + 1,
+                    })}
                     fill
                     unoptimized
                     className="object-contain"
                   />
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <Caption>Page {index + 1}</Caption>
+                  <Caption>
+                    {formatMessage(messages.handwritten.page, {
+                      page: index + 1,
+                    })}
+                  </Caption>
                   <Button
                     type="button"
                     variant="tertiary"
                     className="p-1"
-                    aria-label={`Remove page ${index + 1}`}
+                    aria-label={formatMessage(messages.handwritten.removePage, {
+                      page: index + 1,
+                    })}
                     onClick={() => removePhoto(photo.id)}
                   >
                     <Trash2 className="size-4" aria-hidden="true" />
@@ -401,10 +429,14 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
               <Camera className="size-6 text-primary-500" aria-hidden="true" />
             )}
             <CardTitle>
-              {preparing ? "Preparing photos…" : "Add photos"}
+              {preparing
+                ? messages.handwritten.preparingPhotos
+                : messages.handwritten.addPhotos}
             </CardTitle>
             <Caption>
-              JPG, PNG, or WebP · up to {MAX_PHOTOS} pages total
+              {formatMessage(messages.handwritten.supportedPhotos, {
+                max: MAX_PHOTOS,
+              })}
             </Caption>
             <input
               type="file"
@@ -427,13 +459,9 @@ export function HandwrittenParagraph({ onExit }: { onExit: () => void }) {
           disabled={photos.length === 0 || preparing || submitting}
           onClick={() => void submitPhotos()}
         >
-          Evaluate my handwriting
+          {messages.handwritten.evaluate}
         </Button>
-        <Caption>
-          Han first checks photo quality. A paid evaluation is sent only when
-          you press this button, and failed calls are never retried
-          automatically.
-        </Caption>
+        <Caption>{messages.handwritten.evaluationNote}</Caption>
       </section>
     </div>
   );

@@ -17,15 +17,21 @@ import { SkillsStep } from "@/components/onboarding/steps/skills-step";
 import { DailyTargetStep } from "@/components/onboarding/steps/daily-target-step";
 import { PlacementOfferStep } from "@/components/onboarding/steps/placement-offer-step";
 import { RecommendationStep } from "@/components/onboarding/steps/recommendation-step";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 export interface OnboardingWizardProps {
   initialStep: OnboardingStep;
   initialValues: OnboardingValues;
+  locale: AppLocale;
+  messages: OnboardingMessages;
 }
 
 export function OnboardingWizard({
   initialStep,
   initialValues,
+  locale,
+  messages,
 }: OnboardingWizardProps) {
   const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [values, setValues] = useState<OnboardingValues>(initialValues);
@@ -46,11 +52,13 @@ export function OnboardingWizard({
       {step !== "welcome" && (
         <ProgressBar
           value={(stepIndex / (STEP_ORDER.length - 1)) * 100}
-          label={`Step ${stepIndex} of ${STEP_ORDER.length - 1}`}
+          label={`${messages.progress.step} ${stepIndex} ${messages.progress.of} ${STEP_ORDER.length - 1}`}
         />
       )}
 
-      {step === "welcome" && <WelcomeStep onNext={() => goNext()} />}
+      {step === "welcome" && (
+        <WelcomeStep messages={messages.welcome} onNext={() => goNext()} />
+      )}
       {step === "profile" && (
         <ProfileStep
           initialDisplayName={values.displayName}
@@ -59,6 +67,9 @@ export function OnboardingWizard({
             goNext({ displayName, nickname })
           }
           onBack={goBack}
+          locale={locale}
+          messages={messages.profile}
+          commonMessages={messages.common}
         />
       )}
       {step === "avatar" && (
@@ -66,6 +77,9 @@ export function OnboardingWizard({
           initialAnimal={values.avatarAnimal}
           onNext={(avatarAnimal) => goNext({ avatarAnimal })}
           onBack={goBack}
+          locale={locale}
+          messages={messages.avatar}
+          commonMessages={messages.common}
         />
       )}
       {step === "goal" && (
@@ -73,6 +87,9 @@ export function OnboardingWizard({
           initialValue={values.learningGoals}
           onNext={(learningGoals) => goNext({ learningGoals })}
           onBack={goBack}
+          locale={locale}
+          messages={messages.goal}
+          commonMessages={messages.common}
         />
       )}
       {step === "level" && (
@@ -80,6 +97,9 @@ export function OnboardingWizard({
           initialValue={values.currentLevel}
           onNext={(currentLevel) => goNext({ currentLevel })}
           onBack={goBack}
+          locale={locale}
+          messages={messages.level}
+          commonMessages={messages.common}
         />
       )}
       {step === "explanation-language" && (
@@ -87,6 +107,9 @@ export function OnboardingWizard({
           initialValue={values.explanationLanguage}
           onNext={(explanationLanguage) => goNext({ explanationLanguage })}
           onBack={goBack}
+          locale={locale}
+          messages={messages.explanationLanguage}
+          commonMessages={messages.common}
         />
       )}
       {step === "skills" && (
@@ -94,6 +117,9 @@ export function OnboardingWizard({
           initialValue={values.skillPriorities}
           onNext={(skillPriorities) => goNext({ skillPriorities })}
           onBack={goBack}
+          locale={locale}
+          messages={messages.skills}
+          commonMessages={messages.common}
         />
       )}
       {step === "daily-target" && (
@@ -103,13 +129,29 @@ export function OnboardingWizard({
             goNext({ dailyStudyTargetMinutes })
           }
           onBack={goBack}
+          locale={locale}
+          messages={messages.dailyTarget}
+          commonMessages={messages.common}
         />
       )}
       {step === "placement-offer" && (
-        <PlacementOfferStep onNext={() => goNext()} onBack={goBack} />
+        <PlacementOfferStep
+          locale={locale}
+          messages={messages.placementOffer}
+          examMessages={messages.placementExam}
+          commonMessages={messages.common}
+          onNext={() => goNext()}
+          onBack={goBack}
+        />
       )}
       {step === "recommendation" && (
-        <RecommendationStep values={values} onBack={goBack} />
+        <RecommendationStep
+          locale={locale}
+          messages={messages.recommendation}
+          commonMessages={messages.common}
+          values={values}
+          onBack={goBack}
+        />
       )}
     </div>
   );

@@ -64,6 +64,29 @@ describe("onboarding (integration, real database)", () => {
     expect(await resumeStepFor(user.id)).toBe("welcome");
   });
 
+  it("uses the route locale as the interface language for a new profile", async () => {
+    const user = await createTestUser(
+      `onboarding-spanish-${Date.now()}@hango.dev`,
+    );
+    const profile = await getOrCreateLearnerProfile(user.id, "ES");
+    expect(profile.interfaceLanguage).toBe("ES");
+  });
+
+  it("returns Spanish validation feedback when onboarding is in Spanish", async () => {
+    const user = await createTestUser(
+      `onboarding-spanish-validation-${Date.now()}@hango.dev`,
+    );
+    await getOrCreateLearnerProfile(user.id, "ES");
+    const result = await saveGoalStepAction(
+      { status: "idle" },
+      formDataOf([["locale", "es"]]),
+    );
+    expect(result).toEqual({
+      status: "error",
+      message: "Selecciona al menos un objetivo",
+    });
+  });
+
   it("advances the resume step as each step is saved", async () => {
     const user = await createTestUser(
       `onboarding-flow-${Date.now()}@hango.dev`,

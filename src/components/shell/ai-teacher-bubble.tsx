@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
+import { pathWithoutLocale } from "@/i18n/config";
 
 // Dynamically loaded, ssr:false (2026-09-08 optimization pass) - this
 // bubble is unconditionally part of AppShell (every authenticated page),
@@ -45,7 +46,7 @@ export function AiTeacherBubble() {
   // their own full-page surfaces, both driven by this same shared
   // `open`/`mode`/`context` state - showing the floating trigger there too
   // would pop a second, redundant Han panel over the first.
-  if (pathname?.startsWith("/han")) return null;
+  if (pathname && pathWithoutLocale(pathname).startsWith("/han")) return null;
 
   return (
     <DialogPrimitive.Root

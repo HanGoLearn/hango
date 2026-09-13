@@ -109,13 +109,13 @@ export function ScenarioCompletionSummary({
             +{completion.earnedPoints.toFixed(1)}
           </Display>
           <Caption className="text-on-color-light/75">
-            of {completion.scenarioPointsBudget.toFixed(1)} points toward
-            your General Level
+            of {completion.scenarioPointsBudget.toFixed(1)} points toward your
+            General Level
           </Caption>
         </div>
         <Caption className="mt-1 text-on-color-light/75">
-          {completion.weightedReflectionAverage}% weighted average across
-          this scenario&apos;s lessons
+          {completion.weightedReflectionAverage}% weighted average across this
+          scenario&apos;s lessons
         </Caption>
       </div>
 
@@ -150,8 +150,8 @@ export function ScenarioCompletionSummary({
           <ModalTitle>Redo this scenario?</ModalTitle>
           <ModalDescription>
             This clears your progress and scores for every lesson in this
-            scenario so you can attempt it fresh. Your new result will
-            replace this one — it won&apos;t stack on top of it.
+            scenario so you can attempt it fresh. Your new result will replace
+            this one — it won&apos;t stack on top of it.
           </ModalDescription>
           <div className="mt-4 flex justify-end gap-2">
             <ModalClose asChild>

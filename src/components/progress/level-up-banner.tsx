@@ -3,6 +3,8 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import { Body, Caption } from "@/components/ui/typography";
+import type { DashboardMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 // Storage key kept as-is (not renamed to match levelLabel below) -
 // invalidating it would just re-show this banner once to every existing
@@ -57,8 +59,18 @@ function recordSeen(level: string) {
   listeners.forEach((listener) => listener());
 }
 
-export function LevelUpBanner({ levelLabel }: { levelLabel: string }) {
-  const lastSeen = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+export function LevelUpBanner({
+  levelLabel,
+  messages,
+}: {
+  levelLabel: string;
+  messages?: DashboardMessages["levelUp"];
+}) {
+  const lastSeen = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
   const resolved = lastSeen !== undefined;
   const isLevelUp = resolved && lastSeen !== null && lastSeen !== levelLabel;
 
@@ -75,9 +87,13 @@ export function LevelUpBanner({ levelLabel }: { levelLabel: string }) {
       <HanAvatar pose="heart" size={36} />
       <div className="flex flex-col gap-0.5">
         <Caption className="font-semibold uppercase tracking-wide text-accent-300">
-          Level up
+          {messages?.label ?? "Level up"}
         </Caption>
-        <Body>You&apos;ve reached {levelLabel}</Body>
+        <Body>
+          {messages
+            ? formatMessage(messages.message, { level: levelLabel })
+            : `You've reached ${levelLabel}`}
+        </Body>
       </div>
     </div>
   );

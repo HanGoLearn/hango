@@ -19,7 +19,7 @@ vi.mock("@/components/shell/app-shell", () => ({
 
 // app/ is at the project root, not under src/, so the "@/*" alias (which
 // points at ./src/*) doesn't reach it — a relative import is required here.
-import AppGroupLayout from "../../app/(app)/layout";
+import AppGroupLayout from "../../app/[locale]/(app)/layout";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -30,8 +30,11 @@ describe("AppGroupLayout (backend authorization, independent of proxy.ts)", () =
     auth.mockResolvedValueOnce(null);
 
     await expect(
-      AppGroupLayout({ children: createElement("p", null, "content") }),
-    ).rejects.toThrow("REDIRECT:/login");
+      AppGroupLayout({
+        children: createElement("p", null, "content"),
+        params: Promise.resolve({ locale: "en" }),
+      }),
+    ).rejects.toThrow("REDIRECT:/en/login");
     expect(getOrCreateLearnerProfile).not.toHaveBeenCalled();
   });
 
@@ -42,8 +45,11 @@ describe("AppGroupLayout (backend authorization, independent of proxy.ts)", () =
     });
 
     await expect(
-      AppGroupLayout({ children: createElement("p", null, "content") }),
-    ).rejects.toThrow("REDIRECT:/onboarding");
+      AppGroupLayout({
+        children: createElement("p", null, "content"),
+        params: Promise.resolve({ locale: "en" }),
+      }),
+    ).rejects.toThrow("REDIRECT:/en/onboarding");
   });
 
   it("renders the shell when a session exists and onboarding is complete", async () => {
@@ -54,6 +60,7 @@ describe("AppGroupLayout (backend authorization, independent of proxy.ts)", () =
 
     const result = await AppGroupLayout({
       children: createElement("p", null, "content"),
+      params: Promise.resolve({ locale: "en" }),
     });
 
     expect(result).toBeTruthy();
@@ -73,7 +80,10 @@ describe("AppGroupLayout (backend authorization, independent of proxy.ts)", () =
     // so this redirects to a route handler that does instead - see
     // app/api/auth/invalid-session/route.ts.
     await expect(
-      AppGroupLayout({ children: createElement("p", null, "content") }),
+      AppGroupLayout({
+        children: createElement("p", null, "content"),
+        params: Promise.resolve({ locale: "en" }),
+      }),
     ).rejects.toThrow("REDIRECT:/api/auth/invalid-session");
   });
 
@@ -84,7 +94,10 @@ describe("AppGroupLayout (backend authorization, independent of proxy.ts)", () =
     );
 
     await expect(
-      AppGroupLayout({ children: createElement("p", null, "content") }),
+      AppGroupLayout({
+        children: createElement("p", null, "content"),
+        params: Promise.resolve({ locale: "en" }),
+      }),
     ).rejects.toThrow("some unrelated database failure");
   });
 });

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { registerSchema } from "@/lib/validation/auth";
 import { sendVerificationEmail } from "@/lib/email";
 import { clientEnv } from "@/lib/env/client";
+import { getAuthMessages, resolveAuthLocale } from "@/i18n/auth";
 
 export interface RegisterFormState {
   status: "idle" | "error" | "success";
@@ -19,6 +20,8 @@ export async function registerAction(
   _prevState: RegisterFormState,
   formData: FormData,
 ): Promise<RegisterFormState> {
+  const locale = resolveAuthLocale(formData.get("locale"));
+  const messages = getAuthMessages(locale);
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -30,7 +33,12 @@ export async function registerAction(
     for (const issue of parsed.error.issues) {
       const field = issue.path[0];
       if (field === "name" || field === "email" || field === "password") {
-        fieldErrors[field] = issue.message;
+        fieldErrors[field] =
+          field === "name"
+            ? messages.actions.nameRequired
+            : field === "email"
+              ? messages.actions.invalidEmail
+              : messages.actions.passwordLength;
       }
     }
     return { status: "error", fieldErrors };
@@ -45,16 +53,13 @@ export async function registerAction(
   if (existing) {
     return {
       status: "error",
-      message:
-        "An account with this email already exists. Try logging in instead.",
+      message: messages.actions.accountExists,
     };
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const user = await db.user.create({
-    data: { name, email, passwordHash },
-  });
+  const user = await db.user.create({ data: { name, email, passwordHash } });
 
   const token = randomBytes(32).toString("hex");
   await db.verificationToken.create({
@@ -65,12 +70,11 @@ export async function registerAction(
     },
   });
 
-  const verificationUrl = `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${token}&email=${encodeURIComponent(user.email!)}`;
+  const verificationUrl = `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${token}&email=${encodeURIComponent(user.email!)}&locale=${locale}`;
   await sendVerificationEmail(user.email!, verificationUrl);
 
   return {
     status: "success",
-    message:
-      "Account created. Check your email for a link to verify your account before logging in.",
+    message: messages.actions.accountCreated,
   };
 }

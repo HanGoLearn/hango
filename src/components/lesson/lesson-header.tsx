@@ -3,6 +3,9 @@ import { X, Cloud, CloudUpload, MessageCircle } from "lucide-react";
 import { PageTitle, Caption, Body } from "@/components/ui/typography";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { STEP_TYPE_ICON } from "@/components/lesson/step-navigation";
+import { localePath, type AppLocale } from "@/i18n/config";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 export function LessonHeader({
   scenarioName,
@@ -13,6 +16,7 @@ export function LessonHeader({
   completedCount,
   totalCount,
   saving,
+  locale,
 }: {
   scenarioName: string;
   scenarioSlug: string;
@@ -22,7 +26,9 @@ export function LessonHeader({
   completedCount: number;
   totalCount: number;
   saving: boolean;
+  locale: AppLocale;
 }) {
+  const messages = useLessonMessages();
   const CurrentStepIcon = STEP_TYPE_ICON[currentStepType] ?? MessageCircle;
 
   return (
@@ -44,8 +50,8 @@ export function LessonHeader({
           </div>
         </div>
         <Link
-          href={`/learning-journey/${scenarioSlug}`}
-          aria-label="Exit lesson"
+          href={localePath(locale, `/learning-journey/${scenarioSlug}`)}
+          aria-label={messages.header.exit}
           className="inline-flex size-9 shrink-0 items-center justify-center rounded-control text-text-secondary transition-colors duration-fast ease-standard hover:bg-elevated hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
         >
           <X className="size-5" aria-hidden="true" />
@@ -54,7 +60,10 @@ export function LessonHeader({
 
       <ProgressBar
         value={totalCount === 0 ? 0 : (completedCount / totalCount) * 100}
-        label={`${completedCount} of ${totalCount} steps`}
+        label={formatMessage(messages.header.progress, {
+          completed: completedCount,
+          total: totalCount,
+        })}
         className="h-3"
         indicatorClassName="bg-linear-to-r from-secondary-500 to-accent-500"
       />
@@ -69,12 +78,12 @@ export function LessonHeader({
               className="size-3.5 animate-pulse"
               aria-hidden="true"
             />
-            Saving...
+            {messages.header.saving}
           </>
         ) : (
           <>
             <Cloud className="size-3.5" aria-hidden="true" />
-            Saved
+            {messages.header.saved}
           </>
         )}
       </div>

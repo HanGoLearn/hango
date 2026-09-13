@@ -18,22 +18,7 @@ import { Caption } from "@/components/ui/typography";
 import { HanAvatar } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
 import type { LessonStepStatus } from "@/lib/lesson-progress";
-
-const STEP_LABELS: Record<string, string> = {
-  SITUATION: "Situation",
-  OBJECTIVE: "Objective",
-  DIALOGUE: "Dialogue",
-  COMPREHENSION: "Comprehension",
-  VOCABULARY: "Vocabulary",
-  GRAMMAR: "Grammar",
-  GUIDED_PRACTICE: "Guided Practice",
-  SPEAKING: "Speaking",
-  WRITING: "Writing",
-  AI_CHALLENGE: "AI Challenge",
-  QUIZ: "Quiz",
-  MISSION: "Mission",
-  REFLECTION: "Reflection",
-};
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /**
  * A distinct icon per step *type* (option "A" of the shell redesign, user
@@ -69,8 +54,29 @@ export function StepNavigation({
   currentStepId: string;
   onSelect: (stepId: string) => void;
 }) {
+  const messages = useLessonMessages();
+  const stepLabels: Record<string, string> = {
+    SITUATION: messages.navigation.steps.situation,
+    OBJECTIVE: messages.navigation.steps.objective,
+    DIALOGUE: messages.navigation.steps.dialogue,
+    COMPREHENSION: messages.navigation.steps.comprehension,
+    VOCABULARY: messages.navigation.steps.vocabulary,
+    GRAMMAR: messages.navigation.steps.grammar,
+    GUIDED_PRACTICE: messages.navigation.steps.guidedPractice,
+    SPEAKING: messages.navigation.steps.speaking,
+    WRITING: messages.navigation.steps.writing,
+    AI_CHALLENGE: messages.navigation.steps.aiChallenge,
+    QUIZ: messages.navigation.steps.quiz,
+    MISSION: messages.navigation.steps.mission,
+    REFLECTION: messages.navigation.steps.reflection,
+  };
+  const statusLabels: Record<LessonStepStatus, string> = {
+    COMPLETED: messages.navigation.status.completed,
+    AVAILABLE: messages.navigation.status.available,
+    LOCKED: messages.navigation.status.locked,
+  };
   return (
-    <nav aria-label="Lesson steps" className="overflow-x-auto">
+    <nav aria-label={messages.navigation.ariaLabel} className="overflow-x-auto">
       <ol className="relative flex gap-3 px-1 pt-7 pb-1">
         <div
           aria-hidden="true"
@@ -81,7 +87,7 @@ export function StepNavigation({
           const Icon = STEP_TYPE_ICON[step.type] ?? MessageCircle;
           const isCurrent = step.id === currentStepId;
           const isDisabled = status === "LOCKED";
-          const label = STEP_LABELS[step.type] ?? step.type;
+          const label = stepLabels[step.type] ?? step.type;
 
           return (
             <li key={step.id} className="relative z-10 shrink-0">
@@ -96,7 +102,7 @@ export function StepNavigation({
                 type="button"
                 disabled={isDisabled}
                 aria-current={isCurrent ? "step" : undefined}
-                aria-label={`${label} — ${status.toLowerCase()}`}
+                aria-label={`${label} — ${statusLabels[status]}`}
                 onClick={() => onSelect(step.id)}
                 className={cn(
                   "flex w-16 flex-col items-center gap-1 disabled:pointer-events-none",

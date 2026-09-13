@@ -2,6 +2,7 @@ import { SectionTitle } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/states";
 import { MissionRuntime } from "@/components/mission/mission-runtime";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /** Real interactive mission (12.1), not a placeholder - reuses the same runtime as the Scenario Detail page's final mission. */
 export function MissionStep({
@@ -11,9 +12,10 @@ export function MissionStep({
   mission: LessonWithContent["mission"];
   onContinue: () => void;
 }) {
+  const messages = useLessonMessages();
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Mission</SectionTitle>
+      <SectionTitle>{messages.mission.title}</SectionTitle>
 
       {mission ? (
         <MissionRuntime
@@ -32,9 +34,9 @@ export function MissionStep({
         />
       ) : (
         <EmptyState
-          title="No mission yet"
-          description="This lesson doesn't have a mission."
-          action={{ label: "Continue", onClick: onContinue }}
+          title={messages.mission.emptyTitle}
+          description={messages.mission.emptyDescription}
+          action={{ label: messages.common.continue, onClick: onContinue }}
         />
       )}
     </div>

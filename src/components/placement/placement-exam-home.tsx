@@ -30,6 +30,9 @@ import {
 } from "@/components/placement/placement-speaking-exam";
 import { placementSpeakingStartLevel } from "@/lib/placement-speaking";
 import { tierNameForLevel } from "@/lib/points-system";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 /**
  * Levels 7, 8, and 9 are all diagnostic only - never real placement/points
@@ -57,10 +60,20 @@ function timeTierForLevel(hskLevel: number): TimeTier {
 }
 
 /** Solo Vocabulary/Grammar multiple-choice recall - the original HSK1-2 10s baseline, scaled up per tier. */
-const MC_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 10, 2: 15, 3: 20, 4: 25 };
+const MC_SECONDS_BY_TIER: Record<TimeTier, number> = {
+  1: 10,
+  2: 15,
+  3: 20,
+  4: 25,
+};
 
 /** SENTENCE_ORDERING (Grammar only) needs real time to think through word order, not just recall - +10s over that tier's MC baseline. */
-const ORDERING_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 20, 2: 25, 3: 30, 4: 35 };
+const ORDERING_SECONDS_BY_TIER: Record<TimeTier, number> = {
+  1: 20,
+  2: 25,
+  3: 30,
+  4: 35,
+};
 
 /**
  * A Reading block (PlacementQuestionView.questionGroup - all of one
@@ -69,7 +82,12 @@ const ORDERING_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 20, 2: 25, 3: 30
  * budget for the whole passage, not per question - "read once, answer
  * everything about it, then move on".
  */
-const READING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 120, 2: 150, 3: 180, 4: 210 };
+const READING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = {
+  1: 120,
+  2: 150,
+  3: 180,
+  4: 210,
+};
 
 /**
  * Same shape as Reading's group budget, slightly less generous at every
@@ -77,7 +95,12 @@ const READING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 120, 2: 150
  * maxPlays, 2026-08-27), so there's no "go back and re-read" cost the way
  * Reading has, just recalling what was already heard.
  */
-const LISTENING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = { 1: 100, 2: 130, 3: 160, 4: 190 };
+const LISTENING_GROUP_SECONDS_BY_TIER: Record<TimeTier, number> = {
+  1: 100,
+  2: 130,
+  3: 160,
+  4: 190,
+};
 
 /**
  * How many seconds a given question gets, shared by the initial-state
@@ -164,22 +187,30 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
 export function PlacementExamHome({
   sessionId,
   initialQuestion,
+  locale,
+  messages,
   footer,
 }: {
   sessionId: string;
   initialQuestion: PlacementQuestionView | null;
+  locale: AppLocale;
+  messages: OnboardingMessages["placementExam"];
   /** Rendered at the bottom of the result screen - lets a caller (e.g. the
    * onboarding placement-offer step) add its own "Continue" action without
    * this component needing to know anything about onboarding. */
   footer?: ReactNode;
 }) {
   const [startedAt] = useState(() => Date.now());
-  const [question, setQuestion] = useState<PlacementQuestionView | null>(initialQuestion);
+  const [question, setQuestion] = useState<PlacementQuestionView | null>(
+    initialQuestion,
+  );
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [pool, setPool] = useState<string[]>(initialQuestion?.tokens ?? []);
   const [built, setBuilt] = useState<string[]>([]);
   /** Reading/Listening block only - one selection per grouped sub-question, keyed by questionId. */
-  const [groupSelections, setGroupSelections] = useState<Record<string, string>>({});
+  const [groupSelections, setGroupSelections] = useState<
+    Record<string, string>
+  >({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
@@ -188,7 +219,9 @@ export function PlacementExamHome({
     useState<PlacementSpeakingOutcome | null>(null);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(() =>
-    initialQuestion ? secondsForQuestion(initialQuestion) : MC_SECONDS_BY_TIER[1],
+    initialQuestion
+      ? secondsForQuestion(initialQuestion)
+      : MC_SECONDS_BY_TIER[1],
   );
   const creditAppliedRef = useRef(false);
 
@@ -264,7 +297,9 @@ export function PlacementExamHome({
 
     setSubmitting(true);
     setError(null);
-    applyAdvanceResult(await submitPlacementAnswerAction(sessionId, question.id, answer));
+    applyAdvanceResult(
+      await submitPlacementAnswerAction(sessionId, question.id, answer),
+    );
   }
 
   async function handleTimeout() {
@@ -277,7 +312,9 @@ export function PlacementExamHome({
     }
     setSubmitting(true);
     setError(null);
-    applyAdvanceResult(await recordPlacementTimeoutAction(sessionId, question.id));
+    applyAdvanceResult(
+      await recordPlacementTimeoutAction(sessionId, question.id),
+    );
   }
 
   function isGroupComplete() {
@@ -294,7 +331,9 @@ export function PlacementExamHome({
       questionId: q.id,
       optionId: groupSelections[q.id] ?? null,
     }));
-    applyAdvanceResult(await submitPlacementQuestionBlockAction(sessionId, answers));
+    applyAdvanceResult(
+      await submitPlacementQuestionBlockAction(sessionId, answers),
+    );
   }
 
   async function handleGroupTimeout() {
@@ -308,10 +347,14 @@ export function PlacementExamHome({
       questionId: q.id,
       optionId: groupSelections[q.id] ?? null,
     }));
-    applyAdvanceResult(await submitPlacementQuestionBlockAction(sessionId, answers));
+    applyAdvanceResult(
+      await submitPlacementQuestionBlockAction(sessionId, answers),
+    );
   }
 
-  const isGrouped = Boolean(question?.questionGroup && question.questionGroup.length > 1);
+  const isGrouped = Boolean(
+    question?.questionGroup && question.questionGroup.length > 1,
+  );
   // Every question is timed now (2026-08-27) - kept as a named boolean
   // (rather than inlining `Boolean(question)`) since it's still the right
   // guard for the countdown UI and the timeout effect below.
@@ -343,6 +386,8 @@ export function PlacementExamHome({
     return (
       <PlacementSpeakingExam
         startingLevel={speakingStartLevel}
+        messages={messages.speaking}
+        levelMessages={messages.levels}
         onFinished={(outcome) => {
           setSpeakingOutcome(outcome);
           setFinishedAt(Date.now());
@@ -358,6 +403,7 @@ export function PlacementExamHome({
         speakingOutcome={speakingOutcome}
         answeredCount={answeredCount}
         elapsedMs={finishedAt - startedAt}
+        messages={messages}
         footer={footer}
       />
     );
@@ -366,8 +412,8 @@ export function PlacementExamHome({
   if (!question) {
     return (
       <div className="flex flex-col gap-4">
-        <SectionTitle>Placement Exam</SectionTitle>
-        <Body>No questions are available right now.</Body>
+        <SectionTitle>{messages.title}</SectionTitle>
+        <Body>{messages.unavailable}</Body>
       </div>
     );
   }
@@ -380,10 +426,13 @@ export function PlacementExamHome({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <SectionTitle>Placement Exam</SectionTitle>
+        <SectionTitle>{messages.title}</SectionTitle>
         <div className="flex items-center gap-3">
           {isTimed && (
-            <QuestionCountdown questionId={question.id} secondsLeft={secondsLeft} />
+            <QuestionCountdown
+              questionId={question.id}
+              secondsLeft={secondsLeft}
+            />
           )}
           <ElapsedTimer startedAt={startedAt} />
         </div>
@@ -401,18 +450,19 @@ export function PlacementExamHome({
             <AudioPlayButton
               key={question.listening.id}
               size="md"
-              label="listening passage"
+              label={messages.listeningLabel}
               maxPlays={1}
               fetchUrl={async () => {
-                const response = await getPlacementListeningAudioAction(question.id);
+                const response = await getPlacementListeningAudioAction(
+                  question.id,
+                );
                 return response.ok
                   ? { ok: true, url: response.value.url }
                   : { ok: false };
               }}
             />
             <Caption className="text-text-muted">
-              You can only play this once - listen carefully, then answer
-              below. The text isn&apos;t shown.
+              {messages.listeningInstruction}
             </Caption>
           </div>
         )}
@@ -421,10 +471,10 @@ export function PlacementExamHome({
           <>
             <Caption className="text-text-muted">
               {question.listening
-                ? "Answer every question about this audio, then submit them all together."
+                ? messages.groupedListening
                 : question.passage
-                  ? "Answer every question about this passage, then submit them all together."
-                  : "Answer every question below, then submit them all together."}
+                  ? messages.groupedPassage
+                  : messages.groupedDefault}
             </Caption>
             <div className="flex flex-col gap-5">
               {question.questionGroup.map((groupQuestion, index) => (
@@ -434,7 +484,8 @@ export function PlacementExamHome({
                   </Body>
                   <div className="flex flex-col gap-2">
                     {groupQuestion.options.map((option) => {
-                      const isSelected = groupSelections[groupQuestion.id] === option.id;
+                      const isSelected =
+                        groupSelections[groupQuestion.id] === option.id;
                       return (
                         <button
                           key={option.id}
@@ -448,7 +499,8 @@ export function PlacementExamHome({
                           }
                           className={cn(
                             "rounded-control border-2 border-border px-4 py-3 text-left font-interface text-body transition-colors duration-fast ease-standard disabled:opacity-70",
-                            isSelected && "border-primary-500 bg-primary-500/15",
+                            isSelected &&
+                              "border-primary-500 bg-primary-500/15",
                           )}
                         >
                           {option.content}
@@ -488,7 +540,7 @@ export function PlacementExamHome({
               <div className="flex flex-col gap-2">
                 <div className="flex min-h-11 flex-wrap gap-2 rounded-control border-2 border-dashed border-border p-2">
                   {built.length === 0 && (
-                    <Caption>Tap the words below in the right order.</Caption>
+                    <Caption>{messages.orderingInstruction}</Caption>
                   )}
                   {built.map((token, index) => (
                     <button
@@ -526,15 +578,27 @@ export function PlacementExamHome({
           </>
         )}
 
-        {error && <InformationBanner variant="error">{error}</InformationBanner>}
+        {error && (
+          <InformationBanner variant="error">{error}</InformationBanner>
+        )}
 
         <Button
           type="button"
-          disabled={isGrouped ? !isGroupComplete() || submitting : !canSubmit || submitting}
-          onClick={() => void (isGrouped ? handleGroupSubmit() : handleSubmit())}
+          disabled={
+            isGrouped
+              ? !isGroupComplete() || submitting
+              : !canSubmit || submitting
+          }
+          onClick={() =>
+            void (isGrouped ? handleGroupSubmit() : handleSubmit())
+          }
           className="self-start"
         >
-          {submitting ? <Loader2 className="size-4 animate-spin" /> : "Next"}
+          {submitting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            messages.next
+          )}
         </Button>
       </Card>
     </div>
@@ -546,31 +610,40 @@ function PlacementResultScreen({
   speakingOutcome,
   answeredCount,
   elapsedMs,
+  messages,
   footer,
 }: {
   result: PlacementResult;
   speakingOutcome: PlacementSpeakingOutcome | null;
   answeredCount: number;
   elapsedMs: number;
+  messages: OnboardingMessages["placementExam"];
   footer?: ReactNode;
 }) {
   const totalMinutes = Math.max(1, Math.round(elapsedMs / 60000));
   const rows: { label: string; level: number | null }[] = [
-    { label: "Vocabulary", level: result.vocabularyHskLevel },
-    { label: "Grammar", level: result.grammarHskLevel },
-    { label: "Reading", level: result.readingHskLevel },
-    { label: "Listening", level: result.listeningHskLevel },
-    { label: "Speaking", level: speakingOutcome?.creditedLevel ?? null },
+    { label: messages.skills.vocabulary, level: result.vocabularyHskLevel },
+    { label: messages.skills.grammar, level: result.grammarHskLevel },
+    { label: messages.skills.reading, level: result.readingHskLevel },
+    { label: messages.skills.listening, level: result.listeningHskLevel },
+    {
+      label: messages.skills.speaking,
+      level: speakingOutcome?.creditedLevel ?? null,
+    },
   ];
+  function localizedTier(level: number) {
+    const tier = tierNameForLevel(level);
+    return messages.levels[tier as keyof typeof messages.levels] ?? tier;
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Your placement result</SectionTitle>
+      <SectionTitle>{messages.resultTitle}</SectionTitle>
       <Body className="text-text-secondary">
-        {answeredCount} questions in about {totalMinutes} minute
-        {totalMinutes === 1 ? "" : "s"}. Each skill gets its own level -
-        recognizing and producing Chinese are different abilities, so this is
-        never a single number.
+        {formatMessage(messages.resultSummary, {
+          questions: answeredCount,
+          minutes: totalMinutes,
+        })}
       </Body>
       <Card className="flex flex-col gap-3">
         {rows.map((row) => (
@@ -580,7 +653,9 @@ function PlacementResultScreen({
           >
             <Body>{row.label}</Body>
             <span className="rounded-full bg-accent-300/20 px-3 py-1 font-interface text-supporting font-semibold text-accent-300">
-              {row.level == null ? "Not reached" : tierNameForLevel(row.level)}
+              {row.level == null
+                ? messages.notReached
+                : localizedTier(row.level)}
             </span>
           </div>
         ))}
@@ -588,25 +663,17 @@ function PlacementResultScreen({
       {rows.some(
         (row) => row.level != null && row.level >= DIAGNOSTIC_ONLY_LEVEL,
       ) && (
-        <Caption className="text-text-muted">
-          The top tier shown here is for your reference only - it
-          doesn&apos;t grant real placement or points, since that range is
-          only ever earned through sustained Lab evidence.
-        </Caption>
+        <Caption className="text-text-muted">{messages.diagnosticTop}</Caption>
       )}
       {speakingOutcome?.diagnosticLevel != null && (
         <Caption className="text-text-muted">
-          Your {tierNameForLevel(speakingOutcome.diagnosticLevel)} Speaking
-          attempt is diagnostic only. Your credited Speaking placement
-          remains {tierNameForLevel(6)} or below.
+          {formatMessage(messages.diagnosticSpeaking, {
+            level: localizedTier(speakingOutcome.diagnosticLevel),
+            maximum: localizedTier(6),
+          })}
         </Caption>
       )}
-      <Caption className="text-text-muted">
-        Every lesson at or below your placed level has been credited with
-        General Level points automatically. Those lessons show a
-        &quot;Placed by exam&quot; badge on the Learning Journey - complete
-        one for real anytime to confirm or improve its score.
-      </Caption>
+      <Caption className="text-text-muted">{messages.creditNote}</Caption>
       {footer}
     </div>
   );

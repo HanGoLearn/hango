@@ -1,19 +1,22 @@
 import { googleSignInAction } from "@/lib/actions/google-signin";
 import { Button } from "@/components/ui/button";
+import type { AuthMessages } from "@/i18n/messages/types";
 
 export interface GoogleSignInButtonProps {
   enabled: boolean;
   redirectTo?: string;
+  messages: AuthMessages["google"];
 }
 
 export function GoogleSignInButton({
   enabled,
   redirectTo = "/dashboard",
+  messages,
 }: GoogleSignInButtonProps) {
   if (!enabled) {
     return (
       <Button variant="secondary" type="button" disabled>
-        Continue with Google (not configured)
+        {messages.unavailable}
       </Button>
     );
   }
@@ -23,7 +26,7 @@ export function GoogleSignInButton({
   return (
     <form action={boundAction}>
       <Button variant="secondary" type="submit" className="w-full">
-        Continue with Google
+        {messages.continue}
       </Button>
     </form>
   );

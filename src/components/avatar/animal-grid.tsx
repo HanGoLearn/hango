@@ -15,9 +15,14 @@ import { cn } from "@/lib/cn";
 export function AnimalGrid({
   selected,
   onSelect,
+  messages,
 }: {
   selected: string | null;
   onSelect: (animalKey: string) => void;
+  messages?: {
+    comingSoon: string;
+    animalNames: Record<string, string>;
+  };
 }) {
   return (
     <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
@@ -51,10 +56,12 @@ export function AnimalGrid({
               item.available ? "text-text-primary" : "text-text-muted",
             )}
           >
-            {item.name}
+            {messages?.animalNames[item.key] ?? item.name}
           </span>
           {!item.available && (
-            <Caption className="text-text-muted">Coming soon</Caption>
+            <Caption className="text-text-muted">
+              {messages?.comingSoon ?? "Coming soon"}
+            </Caption>
           )}
         </button>
       ))}

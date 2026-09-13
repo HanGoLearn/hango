@@ -24,17 +24,20 @@ import {
   goToLessonStepAction,
 } from "@/lib/actions/lesson-progress";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { localePath, type AppLocale } from "@/i18n/config";
 
 export interface LessonEngineProps {
   lesson: LessonWithContent;
   initialCurrentStepId: string;
   initialCompletedStepIds: string[];
+  locale: AppLocale;
 }
 
 export function LessonEngine({
   lesson,
   initialCurrentStepId,
   initialCompletedStepIds,
+  locale,
 }: LessonEngineProps) {
   const router = useRouter();
   const [currentStepId, setCurrentStepId] = useState(initialCurrentStepId);
@@ -91,7 +94,12 @@ export function LessonEngine({
         response,
       );
       if (result.completedAt) {
-        router.push(`/learning-journey/${lesson.scenarioLevel.scenario.slug}`);
+        router.push(
+          localePath(
+            locale,
+            `/learning-journey/${lesson.scenarioLevel.scenario.slug}`,
+          ),
+        );
         return;
       }
       const currentIndex = steps.findIndex(
@@ -106,6 +114,7 @@ export function LessonEngine({
     <LessonDisplayPrefsProvider>
       <div className="mx-auto flex max-w-3xl flex-col gap-6 pb-16">
         <LessonHeader
+          locale={locale}
           scenarioName={lesson.scenarioLevel.scenario.name}
           scenarioSlug={lesson.scenarioLevel.scenario.slug}
           lessonTitle={lesson.title}

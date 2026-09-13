@@ -20,8 +20,13 @@ import { StepContinueButton } from "@/components/lesson/step-continue-button";
 import { useLessonDisplayPrefs } from "@/components/lesson/lesson-display-prefs";
 import { getGrammarExampleAudioAction } from "@/lib/actions/grammar-interactivity";
 import { submitExerciseAttemptsAction } from "@/lib/actions/exercise-progress";
-import type { ExerciseAnswer, ExerciseSubmitResult } from "@/lib/exercise-progress";
+import type {
+  ExerciseAnswer,
+  ExerciseSubmitResult,
+} from "@/lib/exercise-progress";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 /** A stub ExerciseItem never actually calls in hideControls mode - its own Submit/Next buttons are hidden, so onSubmit/onNext are unreachable, but the props are still required. */
 async function unusedSubmit(): Promise<ExerciseSubmitResult> {
@@ -61,20 +66,30 @@ export function GrammarStep({
   grammar: LessonWithContent["grammar"];
   onContinue: () => void;
 }) {
-  const [answers, setAnswers] = useState<Record<string, ExerciseAnswer | null>>({});
-  const [results, setResults] = useState<Record<string, ExerciseSubmitResult> | null>(
-    null,
+  const messages = useLessonMessages();
+  const [answers, setAnswers] = useState<Record<string, ExerciseAnswer | null>>(
+    {},
   );
+  const [results, setResults] = useState<Record<
+    string,
+    ExerciseSubmitResult
+  > | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const allExerciseIds = useMemo(
-    () => grammar.flatMap((g) => g.grammarPoint.exercises.map((exercise) => exercise.id)),
+    () =>
+      grammar.flatMap((g) =>
+        g.grammarPoint.exercises.map((exercise) => exercise.id),
+      ),
     [grammar],
   );
   const allAnswered = allExerciseIds.every((id) => answers[id] != null);
 
-  function handleAnswerChange(exerciseId: string, answer: ExerciseAnswer | null) {
+  function handleAnswerChange(
+    exerciseId: string,
+    answer: ExerciseAnswer | null,
+  ) {
     setAnswers((previous) => ({ ...previous, [exerciseId]: answer }));
   }
 
@@ -91,7 +106,7 @@ export function GrammarStep({
       const graded = await submitExerciseAttemptsAction(payload);
       setResults(graded);
     } catch {
-      setError("Couldn't check your answers right now. Please try again.");
+      setError(messages.comprehension.error);
     } finally {
       setChecking(false);
     }
@@ -101,7 +116,7 @@ export function GrammarStep({
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <HanAvatar pose="curious" size={32} />
-        <SectionTitle>Grammar</SectionTitle>
+        <SectionTitle>{messages.grammar.title}</SectionTitle>
       </div>
 
       {grammar.map(({ grammarPoint }) => (
@@ -125,7 +140,7 @@ export function GrammarStep({
           loading={checking}
           className="self-start"
         >
-          Check answers
+          {messages.common.checkAnswers}
         </Button>
       )}
     </div>
@@ -141,6 +156,7 @@ function GrammarPointCard({
   onAnswerChange: (exerciseId: string, answer: ExerciseAnswer | null) => void;
   results: Record<string, ExerciseSubmitResult> | null;
 }) {
+  const messages = useLessonMessages();
   const { showPinyin, showTranslation } = useLessonDisplayPrefs();
   const explanation = grammarPoint.explanation;
   // Both already loaded server-side (content/grammar.ts's
@@ -151,7 +167,9 @@ function GrammarPointCard({
   return (
     <Card
       className="flex flex-col gap-4"
-      style={{ animation: "card-slide-in var(--duration-slow) var(--ease-standard)" }}
+      style={{
+        animation: "card-slide-in var(--duration-slow) var(--ease-standard)",
+      }}
     >
       <div className="flex flex-col gap-1">
         <CardTitle>{grammarPoint.name}</CardTitle>
@@ -164,19 +182,25 @@ function GrammarPointCard({
       </div>
 
       <div className="flex flex-col gap-2 whitespace-pre-line">
-        <Caption className="font-semibold text-accent-300">Explanation</Caption>
+        <Caption className="font-semibold text-accent-300">
+          {messages.grammar.explanation}
+        </Caption>
         <Body className="text-text-secondary">{explanation}</Body>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <Caption className="font-semibold text-accent-300">Examples</Caption>
+        <Caption className="font-semibold text-accent-300">
+          {messages.grammar.examples}
+        </Caption>
         {examples.map((example) => (
           <div
             key={example.id}
             className="flex gap-2 border-t border-border pt-2 first:border-t-0 first:pt-0"
           >
             <AudioPlayButton
-              label={`example ${example.chineseText}`}
+              label={formatMessage(messages.audio.example, {
+                text: example.chineseText,
+              })}
               fetchUrl={() => getGrammarExampleAudioAction(example.id)}
             />
             <div>
@@ -194,12 +218,16 @@ function GrammarPointCard({
         // Fixed during Phase 8 (consistency pass): warning token, not the
         // brand jade "success" color, since this is a caution.
         <Body className="rounded-control bg-warning-500/15 px-3 py-2 text-warning-500">
-          Common mistake: {grammarPoint.commonMistake}
+          {formatMessage(messages.grammar.commonMistake, {
+            mistake: grammarPoint.commonMistake,
+          })}
         </Body>
       )}
 
       <div className="flex flex-col gap-3 border-t border-accent-500 pt-3">
-        <Caption className="font-semibold text-accent-300">Practice</Caption>
+        <Caption className="font-semibold text-accent-300">
+          {messages.grammar.practice}
+        </Caption>
         {exercises.length > 0 ? (
           exercises.map((exercise) => (
             <ExerciseItem
@@ -213,12 +241,12 @@ function GrammarPointCard({
             />
           ))
         ) : (
-          <Caption>No practice questions available right now.</Caption>
+          <Caption>{messages.grammar.noPractice}</Caption>
         )}
       </div>
 
       <AskAiButton
-        label="Ask AI about this grammar point"
+        label={messages.ai.aboutGrammar}
         contextPatch={{
           selectedGrammarPoint: {
             name: grammarPoint.name,

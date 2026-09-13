@@ -2,6 +2,7 @@
 
 import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
+import { getAuthMessages, resolveAuthLocale } from "@/i18n/auth";
 
 export interface LoginFormState {
   status: "idle" | "error";
@@ -13,6 +14,8 @@ export async function loginAction(
   _prevState: LoginFormState,
   formData: FormData,
 ): Promise<LoginFormState> {
+  const locale = resolveAuthLocale(formData.get("locale"));
+  const messages = getAuthMessages(locale);
   try {
     await signIn("credentials", {
       email: formData.get("email"),
@@ -25,7 +28,7 @@ export async function loginAction(
   } catch (error) {
     if (error instanceof AuthError) {
       // Never reveal whether the email exists (authentication.md).
-      return { status: "error", message: "Invalid email or password." };
+      return { status: "error", message: messages.actions.invalidCredentials };
     }
     // signIn() throws Next's internal redirect signal on success — let it propagate.
     throw error;

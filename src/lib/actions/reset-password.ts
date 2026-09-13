@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { resetPasswordSchema } from "@/lib/validation/auth";
+import { getAuthMessages, resolveAuthLocale } from "@/i18n/auth";
 
 export interface ResetPasswordFormState {
   status: "idle" | "error" | "success";
@@ -15,6 +16,8 @@ export async function resetPasswordAction(
   _prevState: ResetPasswordFormState,
   formData: FormData,
 ): Promise<ResetPasswordFormState> {
+  const locale = resolveAuthLocale(formData.get("locale"));
+  const messages = getAuthMessages(locale);
   const parsed = resetPasswordSchema.safeParse({
     password: formData.get("password"),
   });
@@ -22,7 +25,8 @@ export async function resetPasswordAction(
   if (!parsed.success) {
     return {
       status: "error",
-      message: parsed.error.issues[0]?.message ?? "Invalid password",
+      message:
+        parsed.error.issues[0] ? messages.actions.passwordLength : messages.actions.invalidPassword,
     };
   }
 
@@ -38,7 +42,7 @@ export async function resetPasswordAction(
     }
     return {
       status: "error",
-      message: "This reset link is invalid or has expired. Request a new one.",
+      message: messages.actions.invalidReset,
     };
   }
 
@@ -56,6 +60,6 @@ export async function resetPasswordAction(
 
   return {
     status: "success",
-    message: "Password updated. You can now log in with your new password.",
+    message: messages.actions.passwordUpdated,
   };
 }

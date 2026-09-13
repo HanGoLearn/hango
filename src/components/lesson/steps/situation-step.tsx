@@ -8,6 +8,7 @@ import { HanMascot } from "@/components/ui/han-mascot";
 import { DialogueLines } from "@/components/lesson/dialogue-lines";
 import { StepContinueButton } from "@/components/lesson/step-continue-button";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /**
  * Situation and Dialogue merged into one screen (user request, 2026-08-06):
@@ -32,11 +33,12 @@ export function SituationStep({
   lesson: LessonWithContent;
   onContinue: () => void;
 }) {
+  const messages = useLessonMessages();
   const objectives = lesson.learningObjectives;
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionTitle>Situation</SectionTitle>
+      <SectionTitle>{messages.situation.title}</SectionTitle>
 
       <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
         <Display className="max-w-[80%] text-[1.375rem] italic">
@@ -67,7 +69,7 @@ export function SituationStep({
 
       {lesson.dialogues.length > 0 && (
         <div className="flex flex-col gap-3 border-t border-border pt-4">
-          <CardTitle>Conversation</CardTitle>
+          <CardTitle>{messages.situation.conversation}</CardTitle>
           <DialogueLines dialogues={lesson.dialogues} />
         </div>
       )}

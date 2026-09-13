@@ -18,24 +18,26 @@ import {
   type SpeakingAttemptResult,
 } from "@/lib/actions/speaking";
 import { getDialogueAudioAction } from "@/lib/actions/dialogue-audio";
-
-const ACTIVITY_TITLES: Record<string, string> = {
-  SHADOWING: "Shadowing",
-  SCENARIO_ROLE_PLAY: "Scenario Role Play",
-};
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { SpeakingLabMessages } from "@/i18n/messages/types";
+import { localizeSpeakingError } from "@/i18n/speaking";
 
 export function SpeakingSession({
+  locale,
   sessionId,
   activityType,
   prompt,
   pinyin,
   dialogueId,
+  messages,
 }: {
+  locale: AppLocale;
   sessionId: string;
   activityType: string;
   prompt: string;
   pinyin?: string;
   dialogueId?: string;
+  messages: SpeakingLabMessages;
 }) {
   const router = useRouter();
   const [result, setResult] = useState<SpeakingAttemptResult | null>(null);
@@ -45,7 +47,9 @@ export function SpeakingSession({
   const [loadingDialogueAudio, setLoadingDialogueAudio] = useState(false);
   // Defaults to visible - Shadowing's long-text prompts are long enough that pinyin usually helps - but always toggleable (user feedback, 2026-08-08).
   const [showPinyin, setShowPinyin] = useState(true);
-  const [syllableScores, setSyllableScores] = useState<SyllableScore[] | null>(null);
+  const [syllableScores, setSyllableScores] = useState<SyllableScore[] | null>(
+    null,
+  );
 
   async function handlePlayDialogueAudio() {
     if (!dialogueId) return;
@@ -61,7 +65,7 @@ export function SpeakingSession({
       setError(null);
       setResult(attemptResult.result);
     } else {
-      setError(attemptResult.error);
+      setError(localizeSpeakingError(attemptResult.error, messages.errors));
     }
   }
 
@@ -71,14 +75,14 @@ export function SpeakingSession({
       setError(null);
       setResult(attemptResult.result);
     } else {
-      setError(attemptResult.error);
+      setError(localizeSpeakingError(attemptResult.error, messages.errors));
     }
   }
 
   async function handleFinish() {
     setFinishing(true);
     await completeSpeakingSessionAction(sessionId);
-    router.push("/speaking-lab");
+    router.push(localePath(locale, "/speaking-lab"));
   }
 
   function handleTryAgain() {
@@ -90,7 +94,11 @@ export function SpeakingSession({
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle>{ACTIVITY_TITLES[activityType] ?? activityType}</CardTitle>
+          <CardTitle>
+            {messages.session.activityTitles[
+              activityType as keyof typeof messages.session.activityTitles
+            ] ?? activityType}
+          </CardTitle>
           {pinyin && (
             <Button
               type="button"
@@ -103,14 +111,16 @@ export function SpeakingSession({
               ) : (
                 <Eye className="size-4" aria-hidden="true" />
               )}
-              {showPinyin ? "Hide pinyin" : "Show pinyin"}
+              {showPinyin
+                ? messages.common.hidePinyin
+                : messages.common.showPinyin}
             </Button>
           )}
         </div>
         <Body className="text-text-secondary">
           {activityType === "SHADOWING"
-            ? "Say the following out loud:"
-            : "Respond out loud in Chinese:"}
+            ? messages.session.sayOutLoud
+            : messages.session.respondOutLoud}
         </Body>
         {pinyin ? (
           <CharacterToneFeedback
@@ -124,7 +134,7 @@ export function SpeakingSession({
         )}
         {activityType === "SHADOWING" && (
           <Caption className="text-text-secondary">
-            Characters turn green or red once you finish recording.
+            {messages.session.colorFeedback}
           </Caption>
         )}
         {dialogueId && (
@@ -137,7 +147,7 @@ export function SpeakingSession({
               loading={loadingDialogueAudio}
             >
               <Volume2 className="size-4" aria-hidden="true" />
-              Listen to native audio
+              {messages.session.listenNative}
             </Button>
             {dialogueAudioUrl && (
               <audio controls src={dialogueAudioUrl} className="h-10">
@@ -160,23 +170,25 @@ export function SpeakingSession({
           onSubmitText={handleSubmitText}
           expectedPinyin={pinyin}
           onToneAnalysis={(analysis) => setSyllableScores(analysis.perSyllable)}
+          messages={messages.recorder}
         />
       ) : (
         <div className="flex flex-col gap-4">
           <SpeakingFeedbackDisplay
             transcript={result.transcript}
             feedback={result.feedback}
+            messages={messages.feedback}
           />
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={handleTryAgain}>
-              Try again
+              {messages.common.tryAgain}
             </Button>
             <Button
               type="button"
               onClick={() => void handleFinish()}
               loading={finishing}
             >
-              Finish
+              {messages.common.finish}
             </Button>
           </div>
         </div>

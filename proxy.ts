@@ -1,32 +1,93 @@
 import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/lib/auth.config";
+import {
+  isAppLocale,
+  LOCALE_COOKIE_NAME,
+  localeFromAcceptLanguage,
+  localeFromPathname,
+  type AppLocale,
+} from "@/i18n/config";
 
-/**
- * First line of defense for authenticated routes (2.6 "Protect authenticated
- * application routes"). Built from the edge-safe auth.config only — this
- * decrypts the session JWT from the cookie and never touches the database
- * (Next.js's own guidance for Proxy: "optimistic checks" only). See
- * app/(app)/layout.tsx for the second, database-backed enforcement layer
- * that doesn't depend on Proxy running at all.
- */
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
-  if (!req.auth) {
-    const loginUrl = new URL("/login", req.nextUrl.origin);
-    loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+const PROTECTED_PATHS = [
+  "/dashboard",
+  "/learning-journey",
+  "/lesson",
+  "/speaking-lab",
+  "/speaking-test",
+  "/writing-lab",
+  "/progress",
+  "/settings",
+  "/achievements",
+  "/leaderboard",
+  "/tienda",
+  "/han",
+  "/placement-exam",
+  "/welcome-to-chinese",
+  "/onboarding",
+];
+
+function preferredLocale(request: NextRequest): AppLocale {
+  const cookieLocale = request.cookies.get(LOCALE_COOKIE_NAME)?.value;
+  if (isAppLocale(cookieLocale)) return cookieLocale;
+  return localeFromAcceptLanguage(request.headers.get("accept-language"));
+}
+
+function pathWithoutLocale(pathname: string): string {
+  const segments = pathname.split("/");
+  segments.splice(1, 1);
+  return segments.join("/") || "/";
+}
+
+function isProtectedPath(pathname: string): boolean {
+  return PROTECTED_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
+function withLocaleCookie(response: NextResponse, locale: AppLocale) {
+  response.cookies.set(LOCALE_COOKIE_NAME, locale, {
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return response;
+}
+
+export default auth((request) => {
+  const pathname = request.nextUrl.pathname;
+
+  // The private back-office remains intentionally Spanish-only. Its own
+  // server layout still performs the authoritative administrator check.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return NextResponse.next();
   }
+
+  const locale = localeFromPathname(pathname);
+  if (!locale) {
+    const target = request.nextUrl.clone();
+    const selectedLocale = preferredLocale(request);
+    target.pathname = `/${selectedLocale}${pathname === "/" ? "" : pathname}`;
+    return withLocaleCookie(NextResponse.redirect(target), selectedLocale);
+  }
+
+  const learnerPath = pathWithoutLocale(pathname);
+  if (isProtectedPath(learnerPath) && !request.auth) {
+    const loginUrl = new URL(`/${locale}/login`, request.nextUrl.origin);
+    loginUrl.searchParams.set(
+      "callbackUrl",
+      `${pathname}${request.nextUrl.search}`,
+    );
+    return withLocaleCookie(NextResponse.redirect(loginUrl), locale);
+  }
+
+  return withLocaleCookie(NextResponse.next(), locale);
 });
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/learning-journey/:path*",
-    "/speaking-lab/:path*",
-    "/writing-lab/:path*",
-    "/progress/:path*",
-    "/settings/:path*",
+    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)",
   ],
 };

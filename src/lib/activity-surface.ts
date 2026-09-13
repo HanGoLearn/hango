@@ -27,32 +27,34 @@ export function isLearnerActivitySurface(
 export function resolveActivitySurface(
   pathname: string,
 ): LearnerActivitySurface {
+  const routePath = pathWithoutLocale(pathname);
   // /han is a hub containing Tutor, Companion and HanVocabulary. Its
   // view-specific containers provide explicit data-activity-surface markers.
-  if (pathname === "/han" || pathname.startsWith("/han/")) return "GENERAL";
-  if (pathname === "/speaking-lab" || pathname.startsWith("/speaking-lab/")) {
+  if (routePath === "/han" || routePath.startsWith("/han/")) return "GENERAL";
+  if (routePath === "/speaking-lab" || routePath.startsWith("/speaking-lab/")) {
     return "SPEAKING_LAB";
   }
-  if (pathname === "/writing-lab" || pathname.startsWith("/writing-lab/")) {
+  if (routePath === "/writing-lab" || routePath.startsWith("/writing-lab/")) {
     return "WRITING_LAB";
   }
   if (
-    pathname === "/placement-exam" ||
-    pathname.startsWith("/placement-exam/") ||
-    pathname === "/speaking-test" ||
-    pathname.startsWith("/speaking-test/")
+    routePath === "/placement-exam" ||
+    routePath.startsWith("/placement-exam/") ||
+    routePath === "/speaking-test" ||
+    routePath.startsWith("/speaking-test/")
   ) {
     return "PLACEMENT";
   }
   if (
-    pathname === "/learning-journey" ||
-    pathname.startsWith("/learning-journey/") ||
-    pathname === "/lesson" ||
-    pathname.startsWith("/lesson/") ||
-    pathname === "/welcome-to-chinese" ||
-    pathname.startsWith("/welcome-to-chinese/")
+    routePath === "/learning-journey" ||
+    routePath.startsWith("/learning-journey/") ||
+    routePath === "/lesson" ||
+    routePath.startsWith("/lesson/") ||
+    routePath === "/welcome-to-chinese" ||
+    routePath.startsWith("/welcome-to-chinese/")
   ) {
     return "LEARNING_JOURNEY";
   }
   return "GENERAL";
 }
+import { pathWithoutLocale } from "@/i18n/config";

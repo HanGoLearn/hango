@@ -3,12 +3,18 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { HandwrittenParagraph } from "@/components/writing/handwritten-paragraph";
+import { messages } from "@/i18n/messages/en";
 
 afterEach(cleanup);
 
 describe("HandwrittenParagraph", () => {
   it("shows three levels, the shared three-topic catalog, and manual submission", () => {
-    render(<HandwrittenParagraph onExit={() => undefined} />);
+    render(
+      <HandwrittenParagraph
+        onExit={() => undefined}
+        messages={messages.writingLab}
+      />,
+    );
 
     expect(screen.getByText("Basic")).toBeInTheDocument();
     expect(screen.getByText("Intermediate")).toBeInTheDocument();

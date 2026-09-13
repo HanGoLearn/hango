@@ -13,12 +13,16 @@ import { IconButton } from "@/components/ui/icon-button";
 import { AvatarDisplay } from "@/components/avatar/avatar-display";
 import type { AccessorySlot } from "@/lib/avatar-catalog";
 import { cn } from "@/lib/cn";
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { ShellMessages } from "@/i18n/messages/types";
 
 export interface UserMenuProps {
   animal: string | null;
   equipped: Record<AccessorySlot, string | null>;
   /** Only ever true for the account's own real role, checked server-side (session.user.role) - this hides the entry point, it isn't what gates the /admin route itself (requireRole() does that). */
   isAdministrator: boolean;
+  locale: AppLocale;
+  messages: ShellMessages;
 }
 
 /**
@@ -27,7 +31,13 @@ export interface UserMenuProps {
  * back to the generic `User` icon this always showed before, for learners
  * who haven't picked an animal yet.
  */
-export function UserMenu({ animal, equipped, isAdministrator }: UserMenuProps) {
+export function UserMenu({
+  animal,
+  equipped,
+  isAdministrator,
+  locale,
+  messages,
+}: UserMenuProps) {
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
@@ -39,7 +49,7 @@ export function UserMenu({ animal, equipped, isAdministrator }: UserMenuProps) {
               <User className="size-5" aria-hidden="true" />
             )
           }
-          aria-label="User menu"
+          aria-label={messages.userMenu}
         />
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
@@ -50,11 +60,11 @@ export function UserMenu({ animal, equipped, isAdministrator }: UserMenuProps) {
         >
           <DropdownMenuPrimitive.Item asChild>
             <Link
-              href="/settings"
+              href={localePath(locale, "/settings")}
               className="flex cursor-default items-center gap-2 rounded-control px-3 py-2 font-interface text-body text-text-primary outline-none data-[highlighted]:bg-elevated"
             >
               <SettingsIcon className="size-4" aria-hidden="true" />
-              Settings
+              {messages.navigation.settings.label}
             </Link>
           </DropdownMenuPrimitive.Item>
           {isAdministrator && (
@@ -64,13 +74,13 @@ export function UserMenu({ animal, equipped, isAdministrator }: UserMenuProps) {
                 className="flex cursor-default items-center gap-2 rounded-control px-3 py-2 font-interface text-body text-text-primary outline-none data-[highlighted]:bg-elevated"
               >
                 <ShieldCheck className="size-4" aria-hidden="true" />
-                Administrador
+                {messages.administrator}
               </Link>
             </DropdownMenuPrimitive.Item>
           )}
           <DropdownMenuPrimitive.Item
             onSelect={() => {
-              void logoutAction();
+              void logoutAction(locale);
             }}
             className={cn(
               "flex cursor-default items-center gap-2 rounded-control px-3 py-2 font-interface text-body text-text-primary outline-none",
@@ -78,7 +88,7 @@ export function UserMenu({ animal, equipped, isAdministrator }: UserMenuProps) {
             )}
           >
             <LogOut className="size-4" aria-hidden="true" />
-            Log out
+            {messages.logOut}
           </DropdownMenuPrimitive.Item>
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>

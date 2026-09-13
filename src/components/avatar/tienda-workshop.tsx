@@ -17,16 +17,13 @@ import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
 import { HanCoinsInfoTrigger } from "@/components/avatar/hancoins-info";
 import { CardTitle, Caption } from "@/components/ui/typography";
 import { cn } from "@/lib/cn";
+import type { AppLocale } from "@/i18n/config";
+import type { ShellMessages, ShopMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 type Tab = "ANIMAL" | AccessorySlot;
 
 const TAB_ORDER: Tab[] = ["ANIMAL", "HEAD", "FACE", "TORSO"];
-const TAB_LABELS: Record<Tab, string> = {
-  ANIMAL: "Animal",
-  HEAD: "Head",
-  FACE: "Face",
-  TORSO: "Torso",
-};
 const TAB_ICONS: Record<Tab, LucideIcon> = {
   ANIMAL: PawPrint,
   HEAD: Crown,
@@ -41,6 +38,9 @@ export interface TiendaWorkshopProps {
   equipped: Record<AccessorySlot, string | null>;
   ownedAccessoryKeys: string[];
   coinBalance: number;
+  locale: AppLocale;
+  messages: ShopMessages;
+  coinMessages: ShellMessages["hanCoins"];
 }
 
 /**
@@ -67,6 +67,9 @@ export function TiendaWorkshop({
   equipped,
   ownedAccessoryKeys,
   coinBalance,
+  locale,
+  messages,
+  coinMessages,
 }: TiendaWorkshopProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("HEAD");
@@ -93,14 +96,20 @@ export function TiendaWorkshop({
 
   const outfitNames = SLOT_ORDER.map((slot) => displayEquipped[slot])
     .filter((key): key is string => key !== null)
-    .map((key) => ACCESSORIES_BY_KEY.get(key)?.name)
+    .map((key) => {
+      const fallback = ACCESSORIES_BY_KEY.get(key)?.name;
+      return (
+        messages.accessoryNames[key as keyof typeof messages.accessoryNames] ??
+        fallback
+      );
+    })
     .filter((name): name is string => Boolean(name));
 
   const handleAnimalSelect = (animalKey: string) => {
     if (animalKey === animal || isPending) return;
     setError(undefined);
     startTransition(async () => {
-      const result = await saveAvatarAnimalAction(animalKey);
+      const result = await saveAvatarAnimalAction(animalKey, locale);
       if (result.status === "error") {
         setError(result.message);
         return;
@@ -118,6 +127,7 @@ export function TiendaWorkshop({
         const result = await equipAccessoryAction(
           slot,
           isEquipped ? null : accessoryKey,
+          locale,
         );
         if (result.status === "error") {
           setError(result.message);
@@ -136,12 +146,12 @@ export function TiendaWorkshop({
   const handleBuy = (slot: AccessorySlot, accessoryKey: string) => {
     setError(undefined);
     startTransition(async () => {
-      const purchase = await purchaseAccessoryAction(accessoryKey);
+      const purchase = await purchaseAccessoryAction(accessoryKey, locale);
       if (purchase.status === "error") {
         setError(purchase.message);
         return;
       }
-      const equip = await equipAccessoryAction(slot, accessoryKey);
+      const equip = await equipAccessoryAction(slot, accessoryKey, locale);
       if (equip.status === "error") {
         setError(equip.message);
         return;
@@ -166,11 +176,17 @@ export function TiendaWorkshop({
             ?
           </span>
         )}
-        <CardTitle>{animalName ?? "No avatar yet"}</CardTitle>
+        <CardTitle>
+          {animal
+            ? (messages.animalNames[
+                animal as keyof typeof messages.animalNames
+              ] ?? animalName)
+            : messages.noAvatar}
+        </CardTitle>
         <Caption className="text-center text-text-muted italic">
           {outfitNames.length > 0
-            ? `Wearing: ${outfitNames.join(", ")}`
-            : "Nothing equipped yet"}
+            ? formatMessage(messages.wearing, { items: outfitNames.join(", ") })
+            : messages.nothingEquipped}
         </Caption>
       </div>
 
@@ -192,12 +208,16 @@ export function TiendaWorkshop({
                   )}
                 >
                   <Icon className="size-4" aria-hidden="true" />
-                  {TAB_LABELS[t]}
+                  {messages.tabs[t]}
                 </button>
               );
             })}
           </div>
-          <HanCoinsInfoTrigger balance={coinBalance} className="shrink-0">
+          <HanCoinsInfoTrigger
+            balance={coinBalance}
+            messages={coinMessages}
+            className="shrink-0"
+          >
             <span className="flex items-center gap-1.5 rounded-full bg-accent-500 px-3 py-1.5 font-interface text-supporting font-bold text-on-color-dark">
               <HanCoinsIcon size={16} />
               {coinBalance}
@@ -205,10 +225,19 @@ export function TiendaWorkshop({
           </HanCoinsInfoTrigger>
         </div>
 
-        {error && <InformationBanner variant="error">{error}</InformationBanner>}
+        {error && (
+          <InformationBanner variant="error">{error}</InformationBanner>
+        )}
 
         {tab === "ANIMAL" && (
-          <AnimalGrid selected={animal} onSelect={handleAnimalSelect} />
+          <AnimalGrid
+            selected={animal}
+            onSelect={handleAnimalSelect}
+            messages={{
+              comingSoon: messages.comingSoon,
+              animalNames: messages.animalNames,
+            }}
+          />
         )}
         {tab !== "ANIMAL" && animal && (
           <AccessoryPanel
@@ -220,6 +249,7 @@ export function TiendaWorkshop({
             onItemClick={(key) => handleItemClick(tab, key)}
             onBuy={(key) => handleBuy(tab, key)}
             isPending={isPending}
+            messages={messages}
           />
         )}
       </div>

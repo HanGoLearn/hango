@@ -1,12 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { clientEnv } from "@/lib/env/client";
+import { DEFAULT_LOCALE, isAppLocale, localePath } from "@/i18n/config";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   const email = request.nextUrl.searchParams.get("email");
+  const requestedLocale = request.nextUrl.searchParams.get("locale");
+  const locale = isAppLocale(requestedLocale)
+    ? requestedLocale
+    : DEFAULT_LOCALE;
 
-  const loginUrl = new URL("/login", clientEnv.NEXT_PUBLIC_APP_URL);
+  const loginUrl = new URL(
+    localePath(locale, "/login"),
+    clientEnv.NEXT_PUBLIC_APP_URL,
+  );
 
   if (!token || !email) {
     loginUrl.searchParams.set("verifyError", "missing");

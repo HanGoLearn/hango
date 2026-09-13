@@ -11,6 +11,7 @@ import {
   type ScenarioStatus,
 } from "@/lib/content/learning-journey";
 import { cn } from "@/lib/cn";
+import { localePath, type AppLocale } from "@/i18n/config";
 
 /**
  * Was `ScenarioCardProps` (2026-08-29: `scenario-card.tsx`'s `ScenarioCard`
@@ -33,6 +34,7 @@ export interface JourneyChapterScenario {
 
 export interface JourneyChaptersProps {
   scenarios: JourneyChapterScenario[];
+  locale: AppLocale;
 }
 
 /**
@@ -81,7 +83,7 @@ const ACCENT_CLASSES: Record<
  * no dimming on later chapters: every scenario stays clickable, this is
  * organization, not gating.
  */
-export function JourneyChapters({ scenarios }: JourneyChaptersProps) {
+export function JourneyChapters({ scenarios, locale }: JourneyChaptersProps) {
   const chapters = new Map<JourneyChapter, JourneyChapterScenario[]>();
   for (const scenario of scenarios) {
     const chapter = resolveJourneyChapter(scenario.difficultyLevels);
@@ -162,7 +164,10 @@ export function JourneyChapters({ scenarios }: JourneyChaptersProps) {
                 return (
                   <Link
                     key={scenario.slug}
-                    href={`/learning-journey/${scenario.slug}`}
+                    href={localePath(
+                      locale,
+                      `/learning-journey/${scenario.slug}`,
+                    )}
                     className="flex flex-col items-center gap-1.5 rounded-panel text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
                   >
                     {/* size-10, not the old size-14 - smaller, more
@@ -175,7 +180,10 @@ export function JourneyChapters({ scenarios }: JourneyChaptersProps) {
                         "flex size-10 items-center justify-center rounded-full transition-colors",
                         accent.node,
                         isCurrent &&
-                          cn("ring-2 ring-offset-2 ring-offset-surface", accent.nodeCurrentRing),
+                          cn(
+                            "ring-2 ring-offset-2 ring-offset-surface",
+                            accent.nodeCurrentRing,
+                          ),
                       )}
                     >
                       <Icon

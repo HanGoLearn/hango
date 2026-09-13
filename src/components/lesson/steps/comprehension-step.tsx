@@ -10,8 +10,12 @@ import { ExerciseItem } from "@/components/exercise/exercise-item";
 import { StepContinueButton } from "@/components/lesson/step-continue-button";
 import { ConversationPlayer } from "@/components/lesson/dialogue-lines";
 import { submitExerciseAttemptsAction } from "@/lib/actions/exercise-progress";
-import type { ExerciseAnswer, ExerciseSubmitResult } from "@/lib/exercise-progress";
+import type {
+  ExerciseAnswer,
+  ExerciseSubmitResult,
+} from "@/lib/exercise-progress";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /** A stub ExerciseItem never actually calls in hideControls mode - its own Submit/Next buttons are hidden, so onSubmit/onNext are unreachable, but the props are still required. */
 async function unusedSubmit(): Promise<ExerciseSubmitResult> {
@@ -49,14 +53,18 @@ export function ComprehensionStep({
   dialogues: LessonWithContent["dialogues"];
   onContinue: () => void;
 }) {
+  const messages = useLessonMessages();
   const dialogue = dialogues.length === 1 ? dialogues[0] : null;
   const canListenFirst = Boolean(dialogue && dialogue.lines.length > 0);
   const [questionsRevealed, setQuestionsRevealed] = useState(!canListenFirst);
 
-  const [answers, setAnswers] = useState<Record<string, ExerciseAnswer | null>>({});
-  const [results, setResults] = useState<Record<string, ExerciseSubmitResult> | null>(
-    null,
+  const [answers, setAnswers] = useState<Record<string, ExerciseAnswer | null>>(
+    {},
   );
+  const [results, setResults] = useState<Record<
+    string,
+    ExerciseSubmitResult
+  > | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +74,10 @@ export function ComprehensionStep({
   );
   const allAnswered = allExerciseIds.every((id) => answers[id] != null);
 
-  function handleAnswerChange(exerciseId: string, answer: ExerciseAnswer | null) {
+  function handleAnswerChange(
+    exerciseId: string,
+    answer: ExerciseAnswer | null,
+  ) {
     setAnswers((previous) => ({ ...previous, [exerciseId]: answer }));
   }
 
@@ -83,7 +94,7 @@ export function ComprehensionStep({
       const graded = await submitExerciseAttemptsAction(payload);
       setResults(graded);
     } catch {
-      setError("Couldn't check your answers right now. Please try again.");
+      setError(messages.comprehension.error);
     } finally {
       setChecking(false);
     }
@@ -93,7 +104,7 @@ export function ComprehensionStep({
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <HanAvatar pose="curious" size={32} />
-        <SectionTitle>Comprehension</SectionTitle>
+        <SectionTitle>{messages.comprehension.title}</SectionTitle>
       </div>
 
       {canListenFirst && dialogue && !questionsRevealed && (
@@ -101,21 +112,21 @@ export function ComprehensionStep({
           <div className="flex items-center gap-2">
             <Headphones className="size-5 text-accent-300" aria-hidden="true" />
             <Body className="font-display text-[1.1rem]">
-              Listen before you read
+              {messages.comprehension.listenFirst}
             </Body>
           </div>
-          <Caption>
-            Play the conversation and see how much you understand by ear — the
-            questions (and the Chinese text) show up once you&apos;re ready.
-          </Caption>
-          <ConversationPlayer dialogueId={dialogue.id} />
+          <Caption>{messages.comprehension.listenDescription}</Caption>
+          <ConversationPlayer
+            dialogueId={dialogue.id}
+            messages={messages.audio.conversation}
+          />
           <Button
             type="button"
             variant="primary"
             className="self-start"
             onClick={() => setQuestionsRevealed(true)}
           >
-            I&apos;m ready for the questions
+            {messages.comprehension.ready}
           </Button>
         </div>
       )}
@@ -125,7 +136,10 @@ export function ComprehensionStep({
           <>
             <div
               className="flex flex-col gap-3"
-              style={{ animation: "card-slide-in var(--duration-slow) var(--ease-standard)" }}
+              style={{
+                animation:
+                  "card-slide-in var(--duration-slow) var(--ease-standard)",
+              }}
             >
               {exercises.map((exercise) => (
                 <ExerciseItem
@@ -134,7 +148,9 @@ export function ComprehensionStep({
                   feedbackMode="assessment"
                   hideControls
                   externalResult={results?.[exercise.id] ?? null}
-                  onAnswerChange={(answer) => handleAnswerChange(exercise.id, answer)}
+                  onAnswerChange={(answer) =>
+                    handleAnswerChange(exercise.id, answer)
+                  }
                   onSubmit={unusedSubmit}
                   onNext={unusedNext}
                 />
@@ -153,15 +169,15 @@ export function ComprehensionStep({
                 loading={checking}
                 className="self-start"
               >
-                Check answers
+                {messages.common.checkAnswers}
               </Button>
             )}
           </>
         ) : (
           <EmptyState
-            title="Nothing to check yet"
-            description="This lesson doesn't have comprehension questions."
-            action={{ label: "Continue", onClick: onContinue }}
+            title={messages.comprehension.emptyTitle}
+            description={messages.comprehension.emptyDescription}
+            action={{ label: messages.common.continue, onClick: onContinue }}
           />
         ))}
     </div>

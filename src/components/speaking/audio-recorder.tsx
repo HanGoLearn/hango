@@ -13,6 +13,8 @@ import {
   scoreToneMatchPerSyllable,
   type SyllableScore,
 } from "@/lib/tone-analysis";
+import type { SpeakingLabMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 export interface ToneAnalysisResult {
   overall: number | null;
@@ -75,6 +77,7 @@ export function AudioRecorder({
   onSubmitText,
   expectedPinyin,
   onToneAnalysis,
+  messages,
 }: {
   onSubmitRecording: (formData: FormData) => Promise<void>;
   onSubmitText: (text: string) => Promise<void>;
@@ -82,6 +85,7 @@ export function AudioRecorder({
   expectedPinyin?: string;
   /** Fires with the full per-syllable breakdown as soon as local analysis finishes - lets a parent shade the prompt text (CharacterToneFeedback) before the recording is even submitted. */
   onToneAnalysis?: (result: ToneAnalysisResult) => void;
+  messages: SpeakingLabMessages["recorder"];
 }) {
   const [state, setState] = useState<RecorderState>("idle");
   const [useTextFallback, setUseTextFallback] = useState(false);
@@ -184,15 +188,18 @@ export function AudioRecorder({
     return (
       <div className="flex flex-col gap-3">
         {state === "permission-denied" && (
-          <InformationBanner variant="warning" title="Microphone access denied">
-            You can type your answer instead.
+          <InformationBanner
+            variant="warning"
+            title={messages.microphoneDenied}
+          >
+            {messages.typeInsteadDescription}
           </InformationBanner>
         )}
         <Textarea
           value={textDraft}
           onChange={(event) => setTextDraft(event.target.value)}
-          placeholder="Type what you would say in Chinese"
-          aria-label="Your answer"
+          placeholder={messages.textPlaceholder}
+          aria-label={messages.yourAnswer}
           disabled={state === "submitting"}
         />
         <div className="flex items-center gap-2">
@@ -204,7 +211,7 @@ export function AudioRecorder({
             className="w-fit"
           >
             <Send className="size-4" aria-hidden="true" />
-            Submit
+            {messages.submit}
           </Button>
           {state !== "permission-denied" && (
             <Button
@@ -213,7 +220,7 @@ export function AudioRecorder({
               onClick={() => setUseTextFallback(false)}
             >
               <Mic className="size-4" aria-hidden="true" />
-              Use microphone instead
+              {messages.useMicrophone}
             </Button>
           )}
         </div>
@@ -228,7 +235,9 @@ export function AudioRecorder({
           <button
             type="button"
             aria-label={
-              state === "recording" ? "Stop recording" : "Start recording"
+              state === "recording"
+                ? messages.stopRecording
+                : messages.startRecording
             }
             onClick={() =>
               void (state === "recording" ? stopRecording() : startRecording())
@@ -248,11 +257,13 @@ export function AudioRecorder({
           </button>
         )}
         {state === "requesting-permission" && (
-          <Caption>Requesting microphone access...</Caption>
+          <Caption>{messages.requestingAccess}</Caption>
         )}
         {state === "recording" && (
           <Caption role="status">
-            Recording — {formatTime(elapsedSeconds)}
+            {formatMessage(messages.recording, {
+              time: formatTime(elapsedSeconds),
+            })}
           </Caption>
         )}
         {(state === "recorded" || state === "submitting") && audioUrl && (
@@ -264,14 +275,14 @@ export function AudioRecorder({
               <div className="flex items-center gap-1.5 text-text-secondary">
                 <Waves className="size-4" aria-hidden="true" />
                 {toneScore === "analyzing" && (
-                  <Caption>Analyzing your tones…</Caption>
+                  <Caption>{messages.analyzingTones}</Caption>
                 )}
                 {toneScore === null && (
-                  <Caption>Not enough voiced audio to score tones.</Caption>
+                  <Caption>{messages.insufficientAudio}</Caption>
                 )}
                 {typeof toneScore === "number" && (
                   <Caption className="font-semibold text-text-primary">
-                    Tone match: {toneScore}%
+                    {formatMessage(messages.toneMatch, { score: toneScore })}
                   </Caption>
                 )}
               </div>
@@ -284,7 +295,7 @@ export function AudioRecorder({
                 loading={state === "submitting"}
               >
                 <Send className="size-4" aria-hidden="true" />
-                Submit
+                {messages.submit}
               </Button>
               <Button
                 type="button"
@@ -293,7 +304,7 @@ export function AudioRecorder({
                 disabled={state === "submitting"}
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
-                Retry
+                {messages.retry}
               </Button>
             </div>
           </div>
@@ -308,7 +319,7 @@ export function AudioRecorder({
           onClick={() => setUseTextFallback(true)}
         >
           <Keyboard className="size-4" aria-hidden="true" />
-          Type instead
+          {messages.typeInstead}
         </Button>
       )}
     </div>

@@ -17,6 +17,10 @@ export interface ReviewItem {
   estimatedMinutes: number;
   actionLabel: string;
   actionHref?: string;
+  /** Structured display context used by the interface translator. */
+  sourceLessonTitle?: string;
+  /** Original dialogue title before the English presentation prefix is added. */
+  contentTitle?: string;
 }
 
 export const REVIEW_COOLDOWN_HOURS = 24;

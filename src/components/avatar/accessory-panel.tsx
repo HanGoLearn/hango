@@ -12,6 +12,7 @@ import { Chip } from "@/components/ui/chip";
 import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
 import { Caption } from "@/components/ui/typography";
 import { cn } from "@/lib/cn";
+import type { ShopMessages } from "@/i18n/messages/types";
 
 export interface AccessoryPanelProps {
   slot: AccessorySlot;
@@ -25,6 +26,7 @@ export interface AccessoryPanelProps {
   onItemClick: (accessoryKey: string) => void;
   onBuy: (accessoryKey: string) => void;
   isPending: boolean;
+  messages: ShopMessages;
 }
 
 /**
@@ -65,6 +67,7 @@ export function AccessoryPanel({
   onItemClick,
   onBuy,
   isPending,
+  messages,
 }: AccessoryPanelProps) {
   const owned = new Set(ownedAccessoryKeys);
   const items = ACCESSORIES.filter((item) => item.slot === slot);
@@ -98,7 +101,11 @@ export function AccessoryPanel({
               <span className="relative flex size-28 shrink-0 items-center justify-center">
                 <Image
                   src={`/avatar/icons/accessory-${item.key}.png`}
-                  alt={item.name}
+                  alt={
+                    messages.accessoryNames[
+                      item.key as keyof typeof messages.accessoryNames
+                    ] ?? item.name
+                  }
                   fill
                   sizes="112px"
                   style={{ objectFit: "contain" }}
@@ -110,17 +117,22 @@ export function AccessoryPanel({
                 )}
               </span>
               <span className="font-interface text-supporting font-semibold text-text-primary">
-                {item.name}
+                {messages.accessoryNames[
+                  item.key as keyof typeof messages.accessoryNames
+                ] ?? item.name}
               </span>
-              <Chip tone={item.rarity === "SPECIAL" ? "accent" : "neutral"} size="sm">
-                {item.rarity === "SPECIAL" ? "Special" : "Common"}
+              <Chip
+                tone={item.rarity === "SPECIAL" ? "accent" : "neutral"}
+                size="sm"
+              >
+                {messages.rarity[item.rarity]}
               </Chip>
             </button>
 
             {isEquipped ? (
               <span className="flex items-center gap-1 font-interface text-caption font-semibold text-secondary-300">
                 <Check className="size-3.5" aria-hidden="true" />
-                Equipped
+                {messages.equipped}
               </span>
             ) : isOwned ? (
               <Button
@@ -130,12 +142,14 @@ export function AccessoryPanel({
                 disabled={isPending}
                 onClick={() => onItemClick(item.key)}
               >
-                Equip
+                {messages.equip}
               </Button>
             ) : (
               <>
                 {isPreviewing && (
-                  <Caption className="text-accent-300">Previewing</Caption>
+                  <Caption className="text-accent-300">
+                    {messages.previewing}
+                  </Caption>
                 )}
                 <Button
                   type="button"

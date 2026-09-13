@@ -4,6 +4,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { CardTitle } from "@/components/ui/typography";
 import { cn } from "@/lib/cn";
 import type { CompetencyProgressSummary } from "@/lib/progress-data";
+import type { DashboardMessages } from "@/i18n/messages/types";
 
 const STAGE_LABELS: Record<string, string> = {
   EXPOSURE: "Exposure",
@@ -43,6 +44,7 @@ export function CompetencyList({
   className,
   strengthNames,
   priorityNames,
+  messages,
 }: {
   competencies: CompetencyProgressSummary[];
   /** Optional override for the wrapping Card - e.g. Dashboard's sidebar "scorecard" treatment (rounded-panel/bg-elevated instead of the default bordered card). */
@@ -55,6 +57,7 @@ export function CompetencyList({
    */
   strengthNames?: ReadonlySet<string>;
   priorityNames?: ReadonlySet<string>;
+  messages?: DashboardMessages["competency"];
 }) {
   return (
     <Card className={cn("flex flex-col gap-3", className)}>
@@ -62,22 +65,40 @@ export function CompetencyList({
         <div key={competency.name} className="flex flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-body">
-              {NAME_LABELS[competency.name] ?? competency.name}
+              {messages?.names[
+                competency.name as keyof typeof messages.names
+              ] ??
+                NAME_LABELS[competency.name] ??
+                competency.name}
             </CardTitle>
             {strengthNames?.has(competency.name) && (
-              <Chip tone="secondary" variant="solid" size="sm" className="shrink-0">
-                Strong
+              <Chip
+                tone="secondary"
+                variant="solid"
+                size="sm"
+                className="shrink-0"
+              >
+                {messages?.strong ?? "Strong"}
               </Chip>
             )}
             {priorityNames?.has(competency.name) && (
-              <Chip tone="accent" variant="solid" size="sm" className="shrink-0">
-                Focus area
+              <Chip
+                tone="accent"
+                variant="solid"
+                size="sm"
+                className="shrink-0"
+              >
+                {messages?.focus ?? "Focus area"}
               </Chip>
             )}
           </div>
           <ProgressBar
             value={Math.round(competency.weightedScore * 100)}
-            label={STAGE_LABELS[competency.stage]}
+            label={
+              messages?.stages[
+                competency.stage as keyof typeof messages.stages
+              ] ?? STAGE_LABELS[competency.stage]
+            }
             className="h-3"
             indicatorClassName={BAR_COLORS[index % BAR_COLORS.length]}
           />

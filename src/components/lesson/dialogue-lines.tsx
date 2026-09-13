@@ -16,6 +16,8 @@ import {
 } from "@/lib/actions/dialogue-audio";
 import { cn } from "@/lib/cn";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 type LineAudioState = "idle" | "loading" | "playing" | "error";
 
@@ -35,7 +37,18 @@ function formatTime(seconds: number): string {
  * (user feedback, 2026-08-08). The range input *is* the native scrubber,
  * just restyled - dragging/keyboard seeking still works for free.
  */
-export function ConversationPlayer({ dialogueId }: { dialogueId: string }) {
+export function ConversationPlayer({
+  dialogueId,
+  messages,
+}: {
+  dialogueId: string;
+  messages: {
+    play: string;
+    pause: string;
+    seek: string;
+    unavailable: string;
+  };
+}) {
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [url, setUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -75,7 +88,7 @@ export function ConversationPlayer({ dialogueId }: { dialogueId: string }) {
         type="button"
         onClick={() => void handlePlayClick()}
         disabled={status === "loading"}
-        aria-label={isPlaying ? "Pause conversation" : "Play conversation"}
+        aria-label={isPlaying ? messages.pause : messages.play}
         className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-500 text-on-color-light transition-transform duration-fast ease-standard hover:scale-105 disabled:opacity-60"
       >
         {status === "loading" ? (
@@ -89,7 +102,7 @@ export function ConversationPlayer({ dialogueId }: { dialogueId: string }) {
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="font-interface text-supporting font-semibold text-text-primary">
-          Play conversation
+          {messages.play}
         </span>
         {url ? (
           <div className="flex items-center gap-2">
@@ -100,7 +113,7 @@ export function ConversationPlayer({ dialogueId }: { dialogueId: string }) {
               step={0.1}
               value={currentTime}
               onChange={handleSeek}
-              aria-label="Seek conversation audio"
+              aria-label={messages.seek}
               className={cn(
                 "h-1.5 flex-1 cursor-pointer appearance-none rounded-full",
                 "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent-300",
@@ -122,7 +135,7 @@ export function ConversationPlayer({ dialogueId }: { dialogueId: string }) {
             className="font-interface text-caption text-error-500"
             role="alert"
           >
-            Conversation audio unavailable
+            {messages.unavailable}
           </span>
         )}
       </div>
@@ -166,6 +179,7 @@ export function DialogueLines({
   dialogues: LessonWithContent["dialogues"];
 }) {
   const { showPinyin, showTranslation } = useLessonDisplayPrefs();
+  const messages = useLessonMessages();
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [audioStates, setAudioStates] = useState<
     Record<string, LineAudioState>
@@ -223,7 +237,10 @@ export function DialogueLines({
           )}
 
           {dialogue.lines.length > 0 && (
-            <ConversationPlayer dialogueId={dialogue.id} />
+            <ConversationPlayer
+              dialogueId={dialogue.id}
+              messages={messages.audio.conversation}
+            />
           )}
 
           <div className="flex flex-col gap-3">
@@ -276,8 +293,12 @@ export function DialogueLines({
                       type="button"
                       aria-label={
                         audioState === "playing"
-                          ? `Stop line by ${line.speaker.name}`
-                          : `Play line by ${line.speaker.name}`
+                          ? formatMessage(messages.audio.stopLine, {
+                              speaker: line.speaker.name,
+                            })
+                          : formatMessage(messages.audio.playLine, {
+                              speaker: line.speaker.name,
+                            })
                       }
                       disabled={audioState === "loading"}
                       onClick={(event) => {
@@ -309,7 +330,9 @@ export function DialogueLines({
                           here. Measured 12.65:1 dark / 1.06:1 light (nearly
                           invisible) before this fix - left bubbles sit on
                           the inverting bg-elevated and need no override. */}
-                      <Caption className={isRight ? "text-on-color-light" : undefined}>
+                      <Caption
+                        className={isRight ? "text-on-color-light" : undefined}
+                      >
                         {line.speaker.name}
                       </Caption>
                       <ChineseText
@@ -319,14 +342,18 @@ export function DialogueLines({
                       </ChineseText>
                       {showPinyin && (
                         <Pinyin
-                          className={isRight ? "text-on-color-light/85" : undefined}
+                          className={
+                            isRight ? "text-on-color-light/85" : undefined
+                          }
                         >
                           {line.pinyin}
                         </Pinyin>
                       )}
                       {showTranslation && (
                         <Translation
-                          className={isRight ? "text-on-color-light/85" : undefined}
+                          className={
+                            isRight ? "text-on-color-light/85" : undefined
+                          }
                         >
                           {line.translation}
                         </Translation>
@@ -336,7 +363,7 @@ export function DialogueLines({
                           className="font-interface text-caption text-error-500"
                           role="alert"
                         >
-                          Audio unavailable
+                          {messages.common.audioUnavailable}
                         </span>
                       )}
                     </div>
@@ -350,7 +377,7 @@ export function DialogueLines({
 
       {selectedLine && (
         <AskAiButton
-          label="Ask AI about this line"
+          label={messages.ai.aboutLine}
           contextPatch={{
             selectedDialogueLine: {
               chineseText: selectedLine.chineseText,

@@ -19,6 +19,8 @@ import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
 import { lookupVocabularyWordAction } from "@/lib/actions/vocabulary-lookup";
 import { VocabularyLookupCard } from "@/components/han/vocabulary-lookup-card";
 import type { VocabularyLookupResult } from "@/lib/vocabulary-lookup-prompt";
+import type { HanVocabularyMessages } from "@/i18n/messages/types";
+import { localizeVocabularyError } from "@/i18n/vocabulary";
 
 type View = "hub" | "tutor" | "companion" | "vocabulary";
 
@@ -36,13 +38,6 @@ const COMPANION_BENEFITS = [
   "Notices your progress and brings it up on its own",
   "Open-ended conversation — just tap and start talking",
   "Corrects gently, by example — no grading, no red X's",
-];
-
-const VOCABULARY_BENEFITS = [
-  "Type a word — in characters or pinyin, your choice",
-  "Explained at your real level, automatically",
-  "Examples, related words, common mistakes, and more",
-  "One lookup, one answer — no manual difficulty picker",
 ];
 
 const CLASS_BENEFITS = [
@@ -155,7 +150,7 @@ function HanCompanionView() {
  * per press). Never touches points/achievements/coins - same "pure
  * reference, no scoring" spirit as Han Companion.
  */
-function HanVocabularyView() {
+function HanVocabularyView({ messages }: { messages: HanVocabularyMessages }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +164,7 @@ function HanVocabularyView() {
     const response = await lookupVocabularyWordAction(trimmed);
     setLoading(false);
     if (!response.ok) {
-      setError(response.error);
+      setError(localizeVocabularyError(response.error, messages.errors));
       setResult(null);
       return;
     }
@@ -191,8 +186,8 @@ function HanVocabularyView() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a word — 要, or yao — in characters or pinyin"
-            aria-label="Word or pinyin to look up"
+            placeholder={messages.lookup.placeholder}
+            aria-label={messages.lookup.inputLabel}
             className="min-h-11 w-full"
             rows={1}
           />
@@ -206,18 +201,18 @@ function HanVocabularyView() {
           {loading && (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           )}
-          {loading ? "Looking up..." : "Explain"}
+          {loading ? messages.lookup.loading : messages.lookup.explain}
         </Button>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      {result && <VocabularyLookupCard result={result} />}
+      {result && (
+        <VocabularyLookupCard result={result} messages={messages.card} />
+      )}
 
       {!result && !error && !loading && (
-        <Caption className="text-text-muted">
-          Explained at your real level, automatically — no need to pick one.
-        </Caption>
+        <Caption className="text-text-muted">{messages.lookup.hint}</Caption>
       )}
     </div>
   );
@@ -243,7 +238,7 @@ const VIEW_TITLE: Record<Exclude<View, "hub">, string> = {
  * teaser - explicitly out of scope for this build (user's own call,
  * 2026-08-31).
  */
-export function HanHub() {
+export function HanHub({ messages }: { messages: HanVocabularyMessages }) {
   const { setMode, openTeacher } = useAiTeacher();
   const [view, setView] = useState<View>("hub");
 
@@ -280,7 +275,7 @@ export function HanHub() {
           onClick={() => setView("hub")}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Back to Han
+          {view === "vocabulary" ? messages.backToHan : "Back to Han"}
         </Button>
         <div className="flex items-center gap-2">
           <HanAvatar
@@ -298,7 +293,7 @@ export function HanHub() {
         {view === "companion" ? (
           <HanCompanionView />
         ) : view === "vocabulary" ? (
-          <HanVocabularyView />
+          <HanVocabularyView messages={messages} />
         ) : (
           <div className="min-h-[32rem] flex-1 rounded-panel border border-border bg-surface p-4">
             <AiTeacherChat rolePlayEnabled={false} spacious />
@@ -391,7 +386,7 @@ export function HanHub() {
               <HanAvatar pose="curious" size={48} />
               <SectionTitle>Han Vocabulary</SectionTitle>
             </div>
-            <BenefitList items={VOCABULARY_BENEFITS} />
+            <BenefitList items={[...messages.benefits]} />
           </Card>
         </button>
       </div>

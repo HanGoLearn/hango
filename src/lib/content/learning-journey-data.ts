@@ -2,6 +2,8 @@ import { cache } from "react";
 import { db } from "@/lib/db";
 import { getScenarioBySlug } from "@/lib/content/scenario";
 import { createTtlCache } from "@/lib/ttl-cache";
+import type { AppLocale } from "@/i18n/config";
+import { localizeContentRecord } from "@/lib/content/localization";
 import {
   JOURNEY_CHAPTER_ORDER,
   resolveJourneyChapter,
@@ -95,14 +97,22 @@ const getCachedPublishedScenarioTree = createTtlCache(
       where: { status: "PUBLISHED" },
       orderBy: [{ domain: { order: "asc" } }, { order: "asc" }],
       include: {
-        domain: true,
+        translations: true,
+        domain: { include: { translations: true } },
         levels: {
           orderBy: { order: "asc" },
           include: {
             lessons: {
               where: { status: "PUBLISHED" },
               orderBy: { order: "asc" },
-              select: { id: true, order: true, slug: true, title: true },
+              select: {
+                id: true,
+                order: true,
+                slug: true,
+                title: true,
+                communicationObjective: true,
+                translations: true,
+              },
             },
           },
         },
@@ -111,14 +121,53 @@ const getCachedPublishedScenarioTree = createTtlCache(
   PUBLISHED_SCENARIO_TREE_TTL_MS,
 );
 
+type PublishedScenarioTree = Awaited<
+  ReturnType<typeof getCachedPublishedScenarioTree>
+>;
+
+function localizePublishedScenarioTree(
+  scenarios: PublishedScenarioTree,
+  locale: AppLocale,
+) {
+  return scenarios.map((scenario) => {
+    const localized = localizeContentRecord(scenario, locale, [
+      "name",
+      "description",
+      "context",
+      "communicationOutcomes",
+    ]);
+    return {
+      ...localized,
+      domain: localizeContentRecord(localized.domain, locale, [
+        "name",
+        "description",
+      ]),
+      levels: localized.levels.map((level) => ({
+        ...level,
+        lessons: level.lessons.map((lesson) =>
+          localizeContentRecord(lesson, locale, [
+            "title",
+            "communicationObjective",
+          ]),
+        ),
+      })),
+    };
+  });
+}
+
 /**
  * The exact curriculum sequence rendered by Learning Journey: chapters first,
  * then the already ordered domain/scenario tree, followed by each scenario's
  * ordered levels and lessons. Consumers such as the temporary Speaking QA
  * picker must use this instead of inventing a second, subtly different order.
  */
-export async function getPublishedJourneyLessonSequence() {
-  const scenarios = await getCachedPublishedScenarioTree();
+export async function getPublishedJourneyLessonSequence(
+  locale: AppLocale = "en",
+) {
+  const scenarios = localizePublishedScenarioTree(
+    await getCachedPublishedScenarioTree(),
+    locale,
+  );
 
   return JOURNEY_CHAPTER_ORDER.flatMap((chapter) =>
     scenarios
@@ -161,15 +210,19 @@ export async function getPublishedJourneyCatalog() {
   }));
 }
 
-export async function getScenariosWithProgress(userId: string) {
+export async function getScenariosWithProgress(
+  userId: string,
+  locale: AppLocale = "en",
+) {
   const [scenarios, completedIdsList] = await Promise.all([
     getCachedPublishedScenarioTree(),
     getCompletedLessonIds(userId),
   ]);
 
   const completedIds = new Set(completedIdsList);
+  const localizedScenarios = localizePublishedScenarioTree(scenarios, locale);
 
-  return scenarios.map((scenario) => {
+  return localizedScenarios.map((scenario) => {
     const allLessons = scenario.levels.flatMap((level) => level.lessons);
     const completedLessons = allLessons.filter((lesson) =>
       completedIds.has(lesson.id),
@@ -187,8 +240,9 @@ export async function getScenariosWithProgress(userId: string) {
 export async function getScenarioDetailWithProgress(
   slug: string,
   userId: string,
+  locale: AppLocale = "en",
 ) {
-  const scenario = await getScenarioBySlug(slug);
+  const scenario = await getScenarioBySlug(slug, locale);
   if (!scenario) return null;
 
   const allLessonIds = scenario.levels.flatMap((level) =>
@@ -212,7 +266,9 @@ export async function getScenarioDetailWithProgress(
     }),
   ]);
   const completedIds = new Set(completions.map((c) => c.lessonId));
-  const sourceByLesson = new Map(completions.map((c) => [c.lessonId, c.source]));
+  const sourceByLesson = new Map(
+    completions.map((c) => [c.lessonId, c.source]),
+  );
   const totalScoreByLesson = new Map(
     reflectionReports.map((r) => [r.lessonId, r.totalScore]),
   );
@@ -244,12 +300,18 @@ export async function getScenarioDetailWithProgress(
   };
 }
 
-export async function getContinueLearningTarget(userId: string) {
+export async function getContinueLearningTarget(
+  userId: string,
+  locale: AppLocale = "en",
+) {
   const [scenarios, completedIdsList] = await Promise.all([
     getCachedPublishedScenarioTree(),
     getCompletedLessonIds(userId),
   ]);
 
   const completedIds = new Set(completedIdsList);
-  return resolveContinueLearning(scenarios, completedIds);
+  return resolveContinueLearning(
+    localizePublishedScenarioTree(scenarios, locale),
+    completedIds,
+  );
 }

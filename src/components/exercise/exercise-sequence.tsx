@@ -10,6 +10,7 @@ import type {
   ExerciseAnswer,
   ExerciseSubmitResult,
 } from "@/lib/exercise-progress";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /** Walks a list of exercises one at a time, used for the lesson's Comprehension/Guided Practice steps. */
 export function ExerciseSequence({
@@ -23,6 +24,7 @@ export function ExerciseSequence({
   onComplete: () => void;
   feedbackMode?: "learning" | "assessment";
 }) {
+  const messages = useLessonMessages();
   const [index, setIndex] = useState(0);
   const { setContext } = useAiTeacher();
 
@@ -57,14 +59,16 @@ export function ExerciseSequence({
   return (
     <div className="flex flex-col gap-3">
       <Caption>
-        {title} · {index + 1} of {exercises.length}
+        {title} · {index + 1} {messages.common.of} {exercises.length}
       </Caption>
       <ExerciseItem
         key={exercise.id}
         item={exercise}
         onSubmit={handleSubmit}
         onNext={handleNext}
-        nextLabel={isLast ? "Continue" : "Next question"}
+        nextLabel={
+          isLast ? messages.common.continue : messages.common.nextQuestion
+        }
         feedbackMode={feedbackMode}
       />
     </div>

@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { HanMascot, type HanPose } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { MarketingMessages } from "@/i18n/messages/types";
 
 /**
  * Interactive hero demo (2026-09-03, replacing a static "01/02/03" grid
@@ -25,23 +27,12 @@ import { cn } from "@/lib/cn";
 
 type TabKey = "contexto" | "practica" | "mision";
 
-const TABS: { key: TabKey; number: string; label: string }[] = [
-  { key: "contexto", number: "01", label: "Contexto" },
-  { key: "practica", number: "02", label: "Práctica" },
-  { key: "mision", number: "03", label: "Misión" },
-];
+const TAB_KEYS: TabKey[] = ["contexto", "practica", "mision"];
 
 const PRACTICE_OPTIONS = [
   { chinese: "可以少放辣吗？", correct: true },
   { chinese: "我不喜欢辣的。", correct: false },
   { chinese: "辣一点吧。", correct: false },
-];
-
-/** Real evaluation dimensions already used across HanGo's scenarios (prisma/seed.ts), not invented for this demo. */
-const MISSION_EVALUATION = [
-  "Cumplir el objetivo",
-  "Uso del vocabulario",
-  "Qué tan natural suena",
 ];
 
 const MISSION_VOCAB = ["太辣了", "可以换一个吗", "谢谢"];
@@ -53,9 +44,20 @@ function poseForState(tab: TabKey, selected: number | null): HanPose {
   return PRACTICE_OPTIONS[selected]!.correct ? "celebrating" : "wrong";
 }
 
-export function HeroDemoCard() {
+export function HeroDemoCard({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: MarketingMessages["demo"];
+}) {
   const [tab, setTab] = useState<TabKey>("contexto");
   const [selected, setSelected] = useState<number | null>(null);
+  const tabs = TAB_KEYS.map((key, index) => ({
+    key,
+    number: `0${index + 1}`,
+    label: messages.tabs[index]!,
+  }));
 
   return (
     <div className="relative mx-auto w-full max-w-[34rem] lg:mr-0">
@@ -72,25 +74,25 @@ export function HeroDemoCard() {
             </span>
             <div>
               <p className="text-caption font-semibold uppercase tracking-[0.14em] text-text-muted">
-                Situación real
+                {messages.situationLabel}
               </p>
               <p className="mt-0.5 font-semibold text-text-primary">
-                En un restaurante
+                {messages.restaurant}
               </p>
             </div>
           </div>
           <span className="rounded-full bg-accent-500/15 px-3 py-1 text-caption font-semibold text-accent-300">
-            A tu nivel
+            {messages.level}
           </span>
         </div>
 
         {/* Tabs - real navigation, not a static "01/02/03" label row */}
         <div
           role="tablist"
-          aria-label="Demostración de una lección de HanGo"
+          aria-label={messages.tablistLabel}
           className="grid grid-cols-3 gap-2 border-b border-border px-5 pt-4 sm:gap-3 sm:px-7"
         >
-          {TABS.map((item) => {
+          {tabs.map((item) => {
             const active = item.key === tab;
             return (
               <button
@@ -163,21 +165,21 @@ export function HeroDemoCard() {
                     without affecting the bubbles above it. */}
                 <div className="flex flex-col gap-3 sm:max-w-[19rem]">
                   <DialogueLine
-                    speaker="Mesero"
+                    speaker={messages.waiter}
                     chinese="您好，想吃点什么？"
                     pinyin="Nín hǎo, xiǎng chī diǎn shénme?"
-                    translation="Hola, ¿qué desea comer?"
+                    translation={messages.greetingTranslation}
                   />
                   <DialogueLine
-                    speaker="Tú"
+                    speaker={messages.you}
                     chinese="我想要这个，可以少放辣吗？"
                     pinyin="Wǒ xiǎng yào zhège, kěyǐ shǎo fàng là ma?"
-                    translation="Quiero esto. ¿Podría ponerle menos picante?"
+                    translation={messages.orderTranslation}
                     align="end"
                   />
                 </div>
                 <HanNote className="text-center">
-                  Así descubres las frases que vas a necesitar.
+                  {messages.contextNote}
                 </HanNote>
               </motion.div>
             )}
@@ -194,10 +196,10 @@ export function HeroDemoCard() {
                 <div className="rounded-panel rounded-bl-sm border border-border bg-elevated p-5 shadow-elevated sm:max-w-[16rem]">
                   <div className="mb-3 flex items-center gap-2 text-caption font-semibold text-accent-300">
                     <MessageCircleMore className="size-4" aria-hidden="true" />
-                    PRÁCTICA CONTEXTUAL
+                    {messages.practiceLabel}
                   </div>
                   <p className="text-body font-medium text-text-primary">
-                    ¿Cómo le pedirías al mesero que le pongan menos picante?
+                    {messages.practiceQuestion}
                   </p>
                   <div className="mt-4 flex flex-col gap-2">
                     {PRACTICE_OPTIONS.map((option, index) => {
@@ -225,8 +227,8 @@ export function HeroDemoCard() {
                 {selected !== null && (
                   <HanNote className="text-center">
                     {PRACTICE_OPTIONS[selected]!.correct
-                      ? "¡Correcto! “少放辣” significa “poner menos picante” - la forma más natural de pedirlo."
-                      : "Casi - con el mesero, “可以少放辣吗？” se entiende mejor y suena más natural."}
+                      ? messages.correctFeedback
+                      : messages.incorrectFeedback}
                   </HanNote>
                 )}
               </motion.div>
@@ -244,11 +246,10 @@ export function HeroDemoCard() {
                 <div className="rounded-panel rounded-bl-sm border border-border bg-elevated p-5 shadow-elevated sm:max-w-[16rem]">
                   <div className="mb-3 flex items-center gap-2 text-caption font-semibold text-accent-300">
                     <Target className="size-4" aria-hidden="true" />
-                    MISIÓN
+                    {messages.missionLabel}
                   </div>
                   <p className="text-supporting leading-6 text-text-primary">
-                    Tu plato llegó demasiado picante. Explícale el problema al
-                    mesero y pide un cambio.
+                    {messages.missionDescription}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {MISSION_VOCAB.map((word) => (
@@ -261,10 +262,10 @@ export function HeroDemoCard() {
                     ))}
                   </div>
                   <p className="mt-4 text-caption font-semibold uppercase tracking-[0.12em] text-text-muted">
-                    HanGo evaluaría
+                    {messages.evaluationLabel}
                   </p>
                   <ul className="mt-1.5 flex flex-col gap-1">
-                    {MISSION_EVALUATION.map((item) => (
+                    {messages.evaluationItems.map((item) => (
                       <li
                         key={item}
                         className="flex items-center gap-2 text-caption text-text-secondary"
@@ -279,10 +280,10 @@ export function HeroDemoCard() {
                   </ul>
                 </div>
                 <Link
-                  href="/register"
+                  href={localePath(locale, "/register")}
                   className="flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-control bg-primary-500 px-4 py-2.5 text-supporting font-semibold text-on-color-light transition-colors duration-fast ease-standard hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
                 >
-                  Practicar esta misión en HanGo
+                  {messages.missionCta}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </Link>
               </motion.div>
@@ -294,10 +295,10 @@ export function HeroDemoCard() {
       <div className="mt-4 flex items-center justify-between gap-4 rounded-card border border-border bg-elevated px-4 py-3 shadow-elevated sm:mx-5">
         <div>
           <p className="text-caption font-semibold uppercase tracking-[0.12em] text-text-muted">
-            Próximo paso claro
+            {messages.nextStepLabel}
           </p>
           <p className="mt-1 text-supporting font-semibold text-text-primary">
-            Resolver un cambio en el pedido
+            {messages.nextStep}
           </p>
         </div>
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-500/15 text-primary-500">

@@ -16,6 +16,7 @@ import { getLessonReflectionReportAction } from "@/lib/actions/reflection";
 import { redoLessonAction } from "@/lib/actions/scenario-completion";
 import { ReflectionReport } from "@/components/lesson/steps/reflection-step";
 import type { LessonReflectionReportView } from "@/lib/reflection";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 type ReportState =
   | { status: "loading" }
@@ -39,6 +40,7 @@ export function LessonResultsView({
   lessonSlug: string;
   scenarioSlug: string;
 }) {
+  const messages = useLessonMessages();
   const router = useRouter();
   const [state, setState] = useState<ReportState>({ status: "loading" });
   const [redoing, setRedoing] = useState(false);
@@ -76,13 +78,13 @@ export function LessonResultsView({
       {state.status === "loading" && (
         <div className="flex items-center gap-2 rounded-panel border border-border bg-surface px-4 py-6 text-text-secondary">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          <Body>Loading your results...</Body>
+          <Body>{messages.results.loading}</Body>
         </div>
       )}
 
       {state.status === "error" && (
         <Body className="text-error-500" role="alert">
-          Couldn&apos;t load your results right now.
+          {messages.results.error}
         </Body>
       )}
 
@@ -98,23 +100,21 @@ export function LessonResultsView({
           className="self-start"
         >
           <RotateCcw className="size-4" aria-hidden="true" />
-          Try again
+          {messages.common.tryAgain}
         </Button>
         <ModalContent>
-          <ModalTitle>Try this lesson again?</ModalTitle>
+          <ModalTitle>{messages.results.tryAgainTitle}</ModalTitle>
           <ModalDescription>
-            This clears your progress and score for this lesson so you can
-            attempt it fresh. Your new result will replace this one — it
-            won&apos;t stack on top of it.
+            {messages.results.tryAgainDescription}
           </ModalDescription>
           <div className="mt-4 flex justify-end gap-2">
             <ModalClose asChild>
               <Button type="button" variant="tertiary">
-                Cancel
+                {messages.common.cancel}
               </Button>
             </ModalClose>
             <Button type="button" onClick={handleRedo} loading={redoing}>
-              Yes, try again
+              {messages.common.confirmTryAgain}
             </Button>
           </div>
         </ModalContent>

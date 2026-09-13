@@ -17,6 +17,20 @@ const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "system", label: "System", icon: Monitor },
 ];
 
+export interface ThemeToggleMessages {
+  change: string;
+  light: string;
+  dark: string;
+  system: string;
+}
+
+const DEFAULT_MESSAGES: ThemeToggleMessages = {
+  change: "Change theme",
+  light: "Light",
+  dark: "Dark",
+  system: "System",
+};
+
 /**
  * Theme toggle (2026-08-21) - reads/writes a plain cookie directly, no
  * server action, so switching feels instant. `app/layout.tsx` used to read
@@ -89,7 +103,11 @@ if (typeof window !== "undefined") {
     });
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({
+  messages = DEFAULT_MESSAGES,
+}: {
+  messages?: ThemeToggleMessages;
+}) {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const ActiveIcon =
@@ -100,7 +118,7 @@ export function ThemeToggle() {
       <DropdownMenuPrimitive.Trigger asChild>
         <IconButton
           icon={<ActiveIcon className="size-5" aria-hidden="true" />}
-          aria-label="Change theme"
+          aria-label={messages.change}
         />
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
@@ -122,7 +140,7 @@ export function ThemeToggle() {
                 )}
               >
                 <Icon className="size-4" aria-hidden="true" />
-                <span className="flex-1">{option.label}</span>
+                <span className="flex-1">{messages[option.value]}</span>
                 {isActive && (
                   <Check
                     className="size-4 text-primary-500"

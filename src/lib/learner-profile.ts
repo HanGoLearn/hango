@@ -13,10 +13,20 @@ import { db } from "@/lib/db";
  * general-level.ts), none of which read this cached getter afterward
  * within the same request.
  */
-export const getOrCreateLearnerProfile = cache(async (userId: string) => {
+export const getOrCreateLearnerProfile = cache(async (
+  userId: string,
+  initialInterfaceLanguage?: "EN" | "ES",
+) => {
   const existing = await db.learnerProfile.findUnique({ where: { userId } });
   if (existing) return existing;
-  return db.learnerProfile.create({ data: { userId } });
+  return db.learnerProfile.create({
+    data: {
+      userId,
+      ...(initialInterfaceLanguage
+        ? { interfaceLanguage: initialInterfaceLanguage }
+        : {}),
+    },
+  });
 });
 
 export type OnboardingStep =

@@ -40,6 +40,8 @@ import {
 } from "@/lib/content/vocabulary-quiz";
 import { cn } from "@/lib/cn";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 type ScenarioDifficulty =
   "BEGINNER" | "INTERMEDIATE" | "UPPER_INTERMEDIATE" | "ADVANCED";
@@ -95,6 +97,7 @@ export function VocabularyStep({
   lessonId: string;
   onContinue: () => void;
 }) {
+  const messages = useLessonMessages();
   const { showPinyin, showTranslation } = useLessonDisplayPrefs();
   const [mode, setMode] = useState<VocabularyMode>("choose");
   const [activeVocabulary, setActiveVocabulary] = useState(vocabulary);
@@ -186,10 +189,10 @@ export function VocabularyStep({
         data-activity-surface="HAN_VOCABULARY"
         className="flex flex-col gap-4"
       >
-        <SectionTitle>Vocabulary</SectionTitle>
-        <Body>No vocabulary in this lesson.</Body>
+        <SectionTitle>{messages.vocabulary.title}</SectionTitle>
+        <Body>{messages.vocabulary.empty}</Body>
         <Button type="button" onClick={onContinue} className="self-start">
-          Continue
+          {messages.common.continue}
         </Button>
       </div>
     );
@@ -259,7 +262,7 @@ export function VocabularyStep({
         data-activity-surface="HAN_VOCABULARY"
         className="flex flex-col gap-4"
       >
-        <SectionTitle>Vocabulary</SectionTitle>
+        <SectionTitle>{messages.vocabulary.title}</SectionTitle>
 
         <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
           <Body className="max-w-[70%] font-display text-[1.15rem] italic">
@@ -281,24 +284,25 @@ export function VocabularyStep({
 
         <div className="rounded-card bg-surface p-4">
           <Body className="font-semibold">
-            Already know these {vocabulary.length} words?
+            {formatMessage(messages.vocabulary.alreadyKnow, {
+              count: vocabulary.length,
+            })}
           </Body>
           <Caption className="mt-1 text-text-muted">
-            Take a quick test - score{" "}
-            {Math.round(QUICK_TEST_PASS_THRESHOLD * 100)}%+ and skip straight to
-            Grammar. Anything you miss, you&rsquo;ll practice properly right
-            after.
+            {formatMessage(messages.vocabulary.quickTestDescription, {
+              threshold: Math.round(QUICK_TEST_PASS_THRESHOLD * 100),
+            })}
           </Caption>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <Button type="button" onClick={() => setMode("quick-test")}>
-              Quick test
+              {messages.vocabulary.quickTest}
             </Button>
             <Button
               type="button"
               variant="secondary"
               onClick={() => startWalkthrough(vocabulary)}
             >
-              Normal walkthrough
+              {messages.vocabulary.normalWalkthrough}
             </Button>
           </div>
         </div>
@@ -318,14 +322,14 @@ export function VocabularyStep({
         data-activity-surface="HAN_VOCABULARY"
         className="flex flex-col gap-4"
       >
-        <SectionTitle>Quick test</SectionTitle>
+        <SectionTitle>{messages.vocabulary.quickTest}</SectionTitle>
         <div
           className="flex items-center justify-center gap-1.5"
           role="progressbar"
           aria-valuenow={quickTestIndex + 1}
           aria-valuemin={1}
           aria-valuemax={vocabulary.length}
-          aria-label="Quick test progress"
+          aria-label={messages.vocabulary.quickTestProgress}
         >
           {vocabulary.map((v, i) => (
             <span
@@ -342,7 +346,9 @@ export function VocabularyStep({
 
         <VocabularyQuizCheck
           key={qtItem.id}
-          question={`What does ${qtItem.chineseForm} mean?`}
+          question={formatMessage(messages.vocabulary.whatDoesMean, {
+            word: qtItem.chineseForm,
+          })}
           items={quizItems}
           currentItemId={qtItem.id}
           field="meaning"
@@ -357,7 +363,7 @@ export function VocabularyStep({
 
         <div className="mt-2 flex items-center justify-between gap-3">
           <Caption className="text-text-muted">
-            {quickTestIndex + 1} of {vocabulary.length}
+            {quickTestIndex + 1} {messages.common.of} {vocabulary.length}
           </Caption>
           <Button
             type="button"
@@ -369,7 +375,9 @@ export function VocabularyStep({
               }
             }}
           >
-            {isLastQt ? "Finish quick test" : "Next"}
+            {isLastQt
+              ? messages.vocabulary.finishQuickTest
+              : messages.common.next}
           </Button>
         </div>
       </div>
@@ -380,7 +388,7 @@ export function VocabularyStep({
 
   return (
     <div data-activity-surface="HAN_VOCABULARY" className="flex flex-col gap-4">
-      <SectionTitle>Vocabulary</SectionTitle>
+      <SectionTitle>{messages.vocabulary.title}</SectionTitle>
 
       <div
         className="flex items-center justify-center gap-1.5"
@@ -388,7 +396,7 @@ export function VocabularyStep({
         aria-valuenow={index + 1}
         aria-valuemin={1}
         aria-valuemax={activeVocabulary.length}
-        aria-label="Word progress"
+        aria-label={messages.vocabulary.wordProgress}
       >
         {activeVocabulary.map((v, i) => (
           <span
@@ -411,7 +419,9 @@ export function VocabularyStep({
         <div className="relative overflow-hidden rounded-panel bg-elevated px-6 py-7 text-center">
           <div className="absolute top-3 right-3">
             <AudioPlayButton
-              label={`pronunciation of ${currentItem.chineseForm}`}
+              label={formatMessage(messages.audio.pronunciation, {
+                word: currentItem.chineseForm,
+              })}
               size="md"
               fetchUrl={() => getVocabularyItemAudioAction(currentItem.id)}
             />
@@ -434,10 +444,12 @@ export function VocabularyStep({
         </div>
 
         <div className="rounded-card bg-surface p-4">
-          <Caption className="text-text-muted">Example</Caption>
+          <Caption className="text-text-muted">
+            {messages.vocabulary.example}
+          </Caption>
 
           {currentExamples.length === 0 && (
-            <Caption className="mt-2">No examples available.</Caption>
+            <Caption className="mt-2">{messages.vocabulary.noExamples}</Caption>
           )}
 
           {currentExamples.map((example) => (
@@ -446,7 +458,9 @@ export function VocabularyStep({
               className="mt-2 flex gap-2 border-t border-border pt-2 first:border-t-0 first:pt-0"
             >
               <AudioPlayButton
-                label={`example ${example.chineseText}`}
+                label={formatMessage(messages.audio.example, {
+                  text: example.chineseText,
+                })}
                 fetchUrl={() => getVocabularyExampleAudioAction(example.id)}
               />
               <div className="flex flex-col gap-0.5">
@@ -462,7 +476,7 @@ export function VocabularyStep({
           ))}
 
           <AskAiButton
-            label="Practice this with AI"
+            label={messages.ai.practiceVocabulary}
             contextPatch={{
               selectedDialogueLine: {
                 chineseText: currentItem.chineseForm,
@@ -482,7 +496,9 @@ export function VocabularyStep({
             return (
               <VocabularyQuizCheck
                 key={entry.key}
-                question={`What does ${currentItem.chineseForm} mean?`}
+                question={formatMessage(messages.vocabulary.whatDoesMean, {
+                  word: currentItem.chineseForm,
+                })}
                 items={quizItems}
                 currentItemId={currentItem.id}
                 field="meaning"
@@ -495,7 +511,9 @@ export function VocabularyStep({
             return (
               <VocabularyQuizCheck
                 key={entry.key}
-                question={`Which word means "${currentItem.meaning}"?`}
+                question={formatMessage(messages.vocabulary.whichWordMeans, {
+                  meaning: currentItem.meaning,
+                })}
                 items={quizItems}
                 currentItemId={currentItem.id}
                 field="chineseForm"
@@ -513,7 +531,7 @@ export function VocabularyStep({
                 items={quizItems}
                 currentItemId={currentItem.id}
                 exampleText={example.chineseText}
-                hint="Complete the sentence"
+                hint={messages.vocabulary.completeSentence}
                 selectedOptionId={selectedOptionId}
                 onAnswer={onAnswer}
               />
@@ -543,11 +561,11 @@ export function VocabularyStep({
           className="flex items-center gap-1 font-interface text-supporting text-text-secondary transition-opacity duration-fast ease-standard hover:text-text-primary disabled:pointer-events-none disabled:opacity-0"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
-          Back
+          {messages.common.back}
         </button>
 
         <Caption className="text-text-muted">
-          {index + 1} of {activeVocabulary.length}
+          {index + 1} {messages.common.of} {activeVocabulary.length}
         </Caption>
 
         <Button
@@ -561,7 +579,7 @@ export function VocabularyStep({
             }
           }}
         >
-          {isLast ? "Continue" : "Next word"}
+          {isLast ? messages.common.continue : messages.vocabulary.nextWord}
         </Button>
       </div>
     </div>
@@ -577,6 +595,7 @@ function QuizOptionList({
   selectedOptionId: string | undefined;
   onAnswer: (optionId: string, isCorrect: boolean) => void;
 }) {
+  const messages = useLessonMessages();
   const revealResult = Boolean(selectedOptionId);
 
   return (
@@ -598,9 +617,13 @@ function QuizOptionList({
             disabled={revealResult}
             aria-label={
               showCorrect
-                ? `${option.label} (correct answer)`
+                ? formatMessage(messages.vocabulary.correctAnswer, {
+                    option: option.label,
+                  })
                 : showIncorrect
-                  ? `${option.label} (your answer, incorrect)`
+                  ? formatMessage(messages.vocabulary.incorrectAnswer, {
+                      option: option.label,
+                    })
                   : undefined
             }
             className={cn(
@@ -741,6 +764,7 @@ function VocabularySentenceOrderCheck({
   answered: boolean;
   onAnswer: (optionId: string, isCorrect: boolean) => void;
 }) {
+  const messages = useLessonMessages();
   // Memoized for the same reason as the other checks — keeps token order
   // stable across the re-render that submitting triggers. Seeded for the
   // same hydration-consistency reason too.
@@ -783,12 +807,14 @@ function VocabularySentenceOrderCheck({
 
   return (
     <div className="rounded-card bg-surface p-4">
-      <Caption className="text-text-muted">Put the sentence in order</Caption>
+      <Caption className="text-text-muted">
+        {messages.vocabulary.orderSentence}
+      </Caption>
       <Body className="mt-1 font-semibold">{question.translation}</Body>
 
       <div className="mt-2.5 flex min-h-11 flex-wrap gap-2 rounded-control border-2 border-dashed border-border p-2">
         {displayTokens.length === 0 && (
-          <Caption>Tap the words below in the right order.</Caption>
+          <Caption>{messages.vocabulary.tapInOrder}</Caption>
         )}
         {displayTokens.map((token, index) => (
           <button
@@ -832,7 +858,9 @@ function VocabularySentenceOrderCheck({
           ) : (
             <X className="size-3.5 shrink-0" aria-hidden="true" />
           )}
-          {submittedCorrect ? "Correct!" : "Not quite"}
+          {submittedCorrect
+            ? messages.common.correctExcited
+            : messages.common.notQuiteShort}
         </span>
       )}
 
@@ -862,13 +890,15 @@ function VocabularySentenceOrderCheck({
           disabled={!isComplete}
           onClick={handleSubmit}
         >
-          Check
+          {messages.common.check}
         </Button>
       )}
 
       {submittedCorrect === false && (
         <Caption className="mt-2 text-error-500">
-          Correct order: {question.correctOrder.join(" ")}
+          {formatMessage(messages.vocabulary.correctOrder, {
+            order: question.correctOrder.join(" "),
+          })}
         </Caption>
       )}
     </div>

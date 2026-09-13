@@ -17,15 +17,23 @@ import {
 import { Loader2 } from "lucide-react";
 import type { OnboardingValues } from "@/components/onboarding/types";
 import type { Recommendation } from "@/lib/recommendation";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 export interface RecommendationStepProps {
   values: OnboardingValues;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["recommendation"];
+  commonMessages: OnboardingMessages["common"];
 }
 
 export function RecommendationStep({
   values,
   onBack,
+  locale,
+  messages,
+  commonMessages,
 }: RecommendationStepProps) {
   const [isPending, setIsPending] = useState(false);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(
@@ -38,6 +46,7 @@ export function RecommendationStep({
       values.currentLevel as never,
       values.learningGoals,
       values.skillPriorities,
+      locale,
     ).then((result) => {
       if (!cancelled) setRecommendation(result);
     });
@@ -49,24 +58,24 @@ export function RecommendationStep({
 
   const handleStart = async () => {
     setIsPending(true);
-    await completeOnboardingAction();
+    await completeOnboardingAction(locale);
   };
 
   if (!recommendation) {
     return (
       <div className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">
         <Loader2 className="size-8 animate-spin text-primary-500" aria-hidden="true" />
-        <Body className="text-text-secondary">Finding your starting point...</Body>
+        <Body className="text-text-secondary">{messages.loading}</Body>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4 text-center">
-      <PageTitle>You&apos;re ready to start</PageTitle>
+      <PageTitle>{messages.ready}</PageTitle>
 
       {recommendation.primary ? (
-        <InformationBanner variant="info" title="Recommended for you">
+        <InformationBanner variant="info" title={messages.recommended}>
           <CardTitle className="mb-1 text-card-title">
             {recommendation.primary.scenarioName}
           </CardTitle>
@@ -78,7 +87,7 @@ export function RecommendationStep({
 
       {recommendation.goalMatches.length > 0 && (
         <div className="flex flex-col gap-3 text-left">
-          <SectionTitle>Sessions that match your goals</SectionTitle>
+          <SectionTitle>{messages.matchingSessions}</SectionTitle>
           {recommendation.goalMatches.map((entry) => (
             <div key={entry.goal} className="flex flex-col gap-1">
               <Caption className="font-semibold text-text-secondary">
@@ -103,10 +112,10 @@ export function RecommendationStep({
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <Button size="lg" onClick={handleStart} loading={isPending} className="flex-1">
-          Start learning
+          {messages.start}
         </Button>
       </div>
     </div>

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
 import { Body, Caption } from "@/components/ui/typography";
+import type { LeaderboardMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
-function formatRemaining(ms: number): string {
-  if (ms <= 0) return "any moment now";
+function formatRemaining(ms: number, messages: LeaderboardMessages): string {
+  if (ms <= 0) return messages.weeklyBonusNow;
   const totalMinutes = Math.floor(ms / 60_000);
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
@@ -23,7 +25,13 @@ function formatRemaining(ms: number): string {
  * is wired up yet (deferred separately) - the countdown itself doesn't
  * promise the trigger exists, only when the scoring week ends.
  */
-export function WeeklyBonusCountdown({ weekEndsAt }: { weekEndsAt: string }) {
+export function WeeklyBonusCountdown({
+  weekEndsAt,
+  messages,
+}: {
+  weekEndsAt: string;
+  messages: LeaderboardMessages;
+}) {
   const target = new Date(weekEndsAt).getTime();
   const [remaining, setRemaining] = useState(() => target - Date.now());
 
@@ -37,10 +45,12 @@ export function WeeklyBonusCountdown({ weekEndsAt }: { weekEndsAt: string }) {
       <HanCoinsIcon size={24} />
       <div className="flex flex-col">
         <Body className="font-semibold text-text-primary">
-          Weekly bonus in {formatRemaining(remaining)}
+          {formatMessage(messages.weeklyBonus, {
+            time: formatRemaining(remaining, messages),
+          })}
         </Body>
         <Caption className="text-text-secondary">
-          Top 3 this week win 50 / 30 / 10 HanCoins
+          {messages.weeklyPrize}
         </Caption>
       </div>
     </div>

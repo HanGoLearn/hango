@@ -21,6 +21,8 @@ import {
 } from "@/lib/placement-speaking";
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import type { RealtimeConversationDiagnostics } from "@/components/ai-teacher/han-voice-conversation";
+import type { OnboardingMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 export interface PlacementSpeakingAttemptView {
   level: PlacementSpeakingLevel;
@@ -37,9 +39,13 @@ export interface PlacementSpeakingOutcome {
 export function PlacementSpeakingExam({
   startingLevel,
   onFinished,
+  messages,
+  levelMessages,
 }: {
   startingLevel: PlacementSpeakingLevel;
   onFinished: (outcome: PlacementSpeakingOutcome) => void;
+  messages: OnboardingMessages["placementExam"]["speaking"];
+  levelMessages: OnboardingMessages["placementExam"]["levels"];
 }) {
   const [level, setLevel] = useState(startingLevel);
   const [attempts, setAttempts] = useState<PlacementSpeakingAttemptView[]>([]);
@@ -53,6 +59,10 @@ export function PlacementSpeakingExam({
     [],
   );
   const handleActiveChange = useCallback((_active: boolean) => undefined, []);
+  function localizedTier(level: number) {
+    const tier = tierNameForLevel(level);
+    return levelMessages[tier as keyof typeof levelMessages] ?? tier;
+  }
 
   const handleComplete = useCallback(
     async (
@@ -105,11 +115,13 @@ export function PlacementSpeakingExam({
   if (grading) {
     return (
       <Card className="flex min-h-80 flex-col items-center justify-center gap-3 text-center">
-        <Loader2 className="size-8 animate-spin text-primary-500" aria-hidden="true" />
-        <SectionTitle>Evaluating your speaking</SectionTitle>
+        <Loader2
+          className="size-8 animate-spin text-primary-500"
+          aria-hidden="true"
+        />
+        <SectionTitle>{messages.evaluating}</SectionTitle>
         <Body className="max-w-md text-text-secondary">
-          Han is checking your fluency, accuracy, complexity, communication,
-          pronunciation evidence, and completion of the scene.
+          {messages.evaluatingDescription}
         </Body>
       </Card>
     );
@@ -118,27 +130,25 @@ export function PlacementSpeakingExam({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <SectionTitle>Speaking placement · {scenario.rolePlay.level}</SectionTitle>
-        <Body className="text-text-secondary">
-          Have a short, natural conversation in Mandarin. The character will
-          close the scene after it has enough evidence, normally within two
-          to five of your turns.
-        </Body>
+        <SectionTitle>
+          {formatMessage(messages.title, {
+            level: scenario.rolePlay.level ?? localizedTier(level),
+          })}
+        </SectionTitle>
+        <Body className="text-text-secondary">{messages.instructions}</Body>
       </div>
 
       {lastPassedScore != null && (
         <InformationBanner variant="success">
           <span className="inline-flex items-center gap-2">
             <CheckCircle2 className="size-4" aria-hidden="true" />
-            Previous band confirmed ({lastPassedScore}/100). Now trying the
-            next level.
+            {formatMessage(messages.previousBand, { score: lastPassedScore })}
           </span>
         </InformationBanner>
       )}
       {error && (
         <InformationBanner variant="error">
-          {error} Your transcript was kept on this screen; start this level
-          again when you&apos;re ready.
+          {error} {messages.errorSuffix}
         </InformationBanner>
       )}
 
@@ -163,12 +173,15 @@ export function PlacementSpeakingExam({
       />
 
       <Caption className="text-text-muted">
-        Speak naturally. The character&apos;s words never count as your own exam
-        evidence, and {tierNameForLevel(7)} remains diagnostic only.
+        {formatMessage(messages.evidenceNote, { level: localizedTier(7) })}
       </Caption>
       {error && (
-        <Button type="button" variant="secondary" onClick={() => setError(null)}>
-          Dismiss message
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setError(null)}
+        >
+          {messages.dismiss}
         </Button>
       )}
     </div>

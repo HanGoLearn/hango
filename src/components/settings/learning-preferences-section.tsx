@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   Select,
   SelectContent,
@@ -18,41 +19,11 @@ import {
   type SettingsActionState,
 } from "@/lib/actions/settings";
 import { DAILY_TARGET_OPTIONS } from "@/lib/validation/onboarding";
-
-const INTERFACE_LANGUAGE_OPTIONS = [
-  { value: "EN", label: "English" },
-  { value: "ES", label: "Español" },
-];
-
-const EXPLANATION_LANGUAGE_OPTIONS = [
-  { value: "EN", label: "English" },
-  { value: "ES", label: "Español" },
-  { value: "ZH", label: "中文 (Chinese)" },
-];
-
-const GOAL_OPTIONS = [
-  { value: "SPEAK_CONFIDENTLY", label: "Speak confidently" },
-  { value: "HSK_PREPARATION", label: "Prepare for HSK" },
-  { value: "TRAVEL", label: "Travel" },
-  { value: "WORK", label: "Work" },
-  { value: "STUDY", label: "Study" },
-  { value: "PERSONAL_INTEREST", label: "Personal interest" },
-];
-
-const SKILL_OPTIONS = [
-  { value: "LISTENING", label: "Listening" },
-  { value: "SPEAKING", label: "Speaking" },
-  { value: "READING", label: "Reading" },
-  { value: "WRITING", label: "Writing" },
-  { value: "GRAMMAR", label: "Grammar" },
-  { value: "VOCABULARY", label: "Vocabulary" },
-];
-
-const CORRECTION_STYLE_OPTIONS = [
-  { value: "IMMEDIATE", label: "Correct me immediately" },
-  { value: "AFTER_CONVERSATION", label: "Correct me after the conversation" },
-  { value: "ONLY_IMPORTANT", label: "Only correct important mistakes" },
-];
+import type { AppLocale } from "@/i18n/config";
+import { localePath } from "@/i18n/config";
+import type { SettingsMessages } from "@/i18n/messages/types";
+import { setInterfaceLocaleAction } from "@/lib/actions/locale";
+import { formatMessage } from "@/i18n/format";
 
 export interface LearningPreferencesValues {
   interfaceLanguage: string;
@@ -65,13 +36,51 @@ export interface LearningPreferencesValues {
 
 export function LearningPreferencesSection({
   initialValues,
+  locale,
+  messages,
 }: {
   initialValues: LearningPreferencesValues;
+  locale: AppLocale;
+  messages: SettingsMessages["learning"];
 }) {
+  const pathname = usePathname();
   const [values, setValues] = useState(initialValues);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const interfaceLanguageOptions = [
+    { value: "EN", label: messages.languages.english },
+    { value: "ES", label: messages.languages.spanish },
+  ];
+  const explanationLanguageOptions = [
+    { value: "EN", label: messages.languages.english },
+    { value: "ES", label: messages.languages.spanish },
+    { value: "ZH", label: messages.languages.chinese },
+  ];
+  const goalOptions = [
+    { value: "SPEAK_CONFIDENTLY", label: messages.goals.speakConfidently },
+    { value: "HSK_PREPARATION", label: messages.goals.hskPreparation },
+    { value: "TRAVEL", label: messages.goals.travel },
+    { value: "WORK", label: messages.goals.work },
+    { value: "STUDY", label: messages.goals.study },
+    { value: "PERSONAL_INTEREST", label: messages.goals.personalInterest },
+  ];
+  const skillOptions = [
+    { value: "LISTENING", label: messages.skills.listening },
+    { value: "SPEAKING", label: messages.skills.speaking },
+    { value: "READING", label: messages.skills.reading },
+    { value: "WRITING", label: messages.skills.writing },
+    { value: "GRAMMAR", label: messages.skills.grammar },
+    { value: "VOCABULARY", label: messages.skills.vocabulary },
+  ];
+  const correctionStyleOptions = [
+    { value: "IMMEDIATE", label: messages.corrections.immediate },
+    {
+      value: "AFTER_CONVERSATION",
+      label: messages.corrections.afterConversation,
+    },
+    { value: "ONLY_IMPORTANT", label: messages.corrections.onlyImportant },
+  ];
 
   function toggleGoal(value: string) {
     setValues((current) => ({
@@ -97,6 +106,7 @@ export function LearningPreferencesSection({
     setSaved(false);
 
     const formData = new FormData();
+    formData.set("locale", locale);
     formData.set("interfaceLanguage", values.interfaceLanguage);
     formData.set("explanationLanguage", values.explanationLanguage);
     for (const goal of values.learningGoals)
@@ -119,27 +129,37 @@ export function LearningPreferencesSection({
       setError(result.message);
       return;
     }
+    const nextLocale = values.interfaceLanguage === "EN" ? "en" : "es";
+    if (nextLocale !== locale) {
+      await setInterfaceLocaleAction(nextLocale);
+      window.location.assign(localePath(nextLocale, pathname));
+      return;
+    }
     setSaved(true);
   }
 
   return (
     <div className="flex flex-col gap-4">
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
-      {saved && <InformationBanner variant="success">Saved.</InformationBanner>}
+      {saved && (
+        <InformationBanner variant="success">
+          {messages.saved}
+        </InformationBanner>
+      )}
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Interface language</Caption>
+        <Caption>{messages.interfaceLanguage}</Caption>
         <Select
           value={values.interfaceLanguage}
           onValueChange={(value) =>
             setValues((current) => ({ ...current, interfaceLanguage: value }))
           }
         >
-          <SelectTrigger aria-label="Interface language">
+          <SelectTrigger aria-label={messages.interfaceLanguage}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {INTERFACE_LANGUAGE_OPTIONS.map((option) => (
+            {interfaceLanguageOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
@@ -149,18 +169,18 @@ export function LearningPreferencesSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Han fallback explanation language</Caption>
+        <Caption>{messages.explanationLanguage}</Caption>
         <Select
           value={values.explanationLanguage}
           onValueChange={(value) =>
             setValues((current) => ({ ...current, explanationLanguage: value }))
           }
         >
-          <SelectTrigger aria-label="Explanation language">
+          <SelectTrigger aria-label={messages.explanationLanguage}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {EXPLANATION_LANGUAGE_OPTIONS.map((option) => (
+            {explanationLanguageOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
@@ -170,9 +190,9 @@ export function LearningPreferencesSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Learning goals</Caption>
+        <Caption>{messages.learningGoals}</Caption>
         <div className="flex flex-col gap-2">
-          {GOAL_OPTIONS.map((option) => (
+          {goalOptions.map((option) => (
             <Checkbox
               key={option.value}
               label={option.label}
@@ -184,9 +204,9 @@ export function LearningPreferencesSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Skill priorities</Caption>
+        <Caption>{messages.skillPriorities}</Caption>
         <div className="flex flex-col gap-2">
-          {SKILL_OPTIONS.map((option) => (
+          {skillOptions.map((option) => (
             <Checkbox
               key={option.value}
               label={option.label}
@@ -198,7 +218,7 @@ export function LearningPreferencesSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Daily study target</Caption>
+        <Caption>{messages.dailyTarget}</Caption>
         <Select
           value={String(values.dailyStudyTargetMinutes)}
           onValueChange={(value) =>
@@ -208,13 +228,13 @@ export function LearningPreferencesSection({
             }))
           }
         >
-          <SelectTrigger aria-label="Daily study target">
+          <SelectTrigger aria-label={messages.dailyTarget}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {DAILY_TARGET_OPTIONS.map((minutes) => (
               <SelectItem key={minutes} value={String(minutes)}>
-                {minutes} minutes
+                {formatMessage(messages.minutes, { minutes })}
               </SelectItem>
             ))}
           </SelectContent>
@@ -222,14 +242,14 @@ export function LearningPreferencesSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Caption>Correction style</Caption>
+        <Caption>{messages.correctionStyle}</Caption>
         <RadioGroup
           value={values.correctionStyle}
           onValueChange={(value) =>
             setValues((current) => ({ ...current, correctionStyle: value }))
           }
         >
-          {CORRECTION_STYLE_OPTIONS.map((option) => (
+          {correctionStyleOptions.map((option) => (
             <RadioGroupItem
               key={option.value}
               value={option.value}
@@ -245,7 +265,7 @@ export function LearningPreferencesSection({
         loading={saving}
         className="w-fit"
       >
-        Save
+        {messages.save}
       </Button>
     </div>
   );

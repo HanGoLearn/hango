@@ -9,8 +9,20 @@ import {
   MessageCircle,
   type LucideIcon,
 } from "lucide-react";
+import { pathWithoutLocale } from "@/i18n/config";
+
+export type NavItemKey =
+  | "dashboard"
+  | "learningJourney"
+  | "speakingLab"
+  | "writingLab"
+  | "han"
+  | "progress"
+  | "shop"
+  | "settings";
 
 export interface NavItem {
+  key: NavItemKey;
   label: string;
   /** Shorter label for constrained mobile bottom-nav width (ui.md lists "Home" there for Dashboard). */
   mobileLabel?: string;
@@ -47,6 +59,7 @@ export interface NavItem {
  */
 export const primaryNavItems: NavItem[] = [
   {
+    key: "dashboard",
     label: "Dashboard",
     mobileLabel: "Home",
     href: "/dashboard",
@@ -55,6 +68,7 @@ export const primaryNavItems: NavItem[] = [
     badgeIconClassName: "text-on-color-dark",
   },
   {
+    key: "learningJourney",
     label: "Learning Journey",
     mobileLabel: "Journey",
     href: "/learning-journey",
@@ -63,6 +77,7 @@ export const primaryNavItems: NavItem[] = [
     badgeIconClassName: "text-on-color-light",
   },
   {
+    key: "speakingLab",
     label: "Speaking Lab",
     mobileLabel: "Speaking",
     href: "/speaking-lab",
@@ -71,6 +86,7 @@ export const primaryNavItems: NavItem[] = [
     badgeIconClassName: "text-on-color-light",
   },
   {
+    key: "writingLab",
     label: "Writing Lab",
     mobileLabel: "Writing",
     href: "/writing-lab",
@@ -88,6 +104,7 @@ export const primaryNavItems: NavItem[] = [
     // versus the already-verified primary-500/on-color-light pairing
     // (design_system.md's WCAG audit note above), not a fresh unverified
     // combination.
+    key: "han",
     label: "Han",
     href: "/han",
     icon: MessageCircle,
@@ -95,6 +112,7 @@ export const primaryNavItems: NavItem[] = [
     badgeIconClassName: "text-on-color-light",
   },
   {
+    key: "progress",
     label: "Progress",
     href: "/progress",
     icon: TrendingUp,
@@ -107,6 +125,7 @@ export const primaryNavItems: NavItem[] = [
     // Leaderboard/Achievements. warning-500/on-color-dark is an
     // already-verified pairing (see Chip's solidClasses), not a new,
     // unchecked contrast combination.
+    key: "shop",
     label: "Shop",
     href: "/tienda",
     icon: Store,
@@ -114,6 +133,7 @@ export const primaryNavItems: NavItem[] = [
     badgeIconClassName: "text-on-color-dark",
   },
   {
+    key: "settings",
     label: "Settings",
     href: "/settings",
     icon: Settings,
@@ -124,7 +144,7 @@ export const primaryNavItems: NavItem[] = [
 
 /** Mobile bottom navigation omits Settings (docs/04_design/components.md). */
 export const mobileNavItems: NavItem[] = primaryNavItems.filter(
-  (item) => item.label !== "Settings",
+  (item) => item.key !== "settings",
 );
 
 /**
@@ -139,9 +159,12 @@ export const mobileNavItems: NavItem[] = primaryNavItems.filter(
  * additive.
  */
 export function resolveCurrentPageName(pathname: string): string | null {
+  const localeNeutralPathname = pathWithoutLocale(pathname);
   const match = primaryNavItems
     .filter(
-      (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+      (item) =>
+        localeNeutralPathname === item.href ||
+        localeNeutralPathname.startsWith(`${item.href}/`),
     )
     .sort((a, b) => b.href.length - a.href.length)[0];
   return match?.label ?? null;

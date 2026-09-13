@@ -16,6 +16,7 @@ import type {
   ExerciseAnswer,
   ExerciseSubmitResult,
 } from "@/lib/exercise-progress";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 /**
  * The shared Exercise Container (7.1) - one interactive item, all 6
@@ -42,7 +43,7 @@ export function ExerciseItem({
   item,
   onSubmit,
   onNext,
-  nextLabel = "Continue",
+  nextLabel,
   feedbackMode = "learning",
   hideControls = false,
   externalResult,
@@ -60,6 +61,7 @@ export function ExerciseItem({
   /** Only called when `hideControls` - fires whenever the locally-built answer changes, so the parent can collect it. */
   onAnswerChange?: (answer: ExerciseAnswer | null) => void;
 }) {
+  const messages = useLessonMessages();
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState("");
   const [pool, setPool] = useState<string[]>(item.tokens);
@@ -67,7 +69,8 @@ export function ExerciseItem({
   const [pairs, setPairs] = useState<[string, string][]>([]);
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [internalResult, setInternalResult] = useState<ExerciseSubmitResult | null>(null);
+  const [internalResult, setInternalResult] =
+    useState<ExerciseSubmitResult | null>(null);
   const [visibleHints, setVisibleHints] = useState(0);
   const reduceMotion = useReducedMotion();
 
@@ -189,8 +192,8 @@ export function ExerciseItem({
           value={textAnswer}
           onChange={(event) => setTextAnswer(event.target.value)}
           disabled={!!result}
-          placeholder="Type your answer"
-          aria-label="Your answer"
+          placeholder={messages.exercise.answerPlaceholder}
+          aria-label={messages.exercise.answerLabel}
         />
       )}
 
@@ -199,8 +202,8 @@ export function ExerciseItem({
           value={textAnswer}
           onChange={(event) => setTextAnswer(event.target.value)}
           disabled={!!result}
-          placeholder="Write your response"
-          aria-label="Your response"
+          placeholder={messages.exercise.responsePlaceholder}
+          aria-label={messages.exercise.responseLabel}
           showCharacterCount
           maxLength={500}
         />
@@ -210,7 +213,7 @@ export function ExerciseItem({
         <div className="flex flex-col gap-2">
           <div className="flex min-h-11 flex-wrap gap-2 rounded-2xl border-2 border-dashed border-border p-2">
             {built.length === 0 && (
-              <Caption>Tap the words below in the right order.</Caption>
+              <Caption>{messages.exercise.tapInOrder}</Caption>
             )}
             {built.map((token, index) => (
               <button
@@ -323,7 +326,7 @@ export function ExerciseItem({
               className="self-start px-0"
               onClick={() => setVisibleHints(visibleHints + 1)}
             >
-              Show hint
+              {messages.common.showHint}
             </Button>
           )}
         </div>
@@ -368,12 +371,14 @@ export function ExerciseItem({
                 <X className="size-4" aria-hidden="true" />
               )}
               {result.isCorrect === true
-                ? "Correct."
+                ? messages.common.correct
                 : result.isCorrect === false
-                  ? "Not quite."
-                  : "Submitted."}
+                  ? messages.common.notQuite
+                  : messages.common.submitted}
             </span>
-            {feedbackMode === "learning" && result.explanation && ` ${result.explanation}`}
+            {feedbackMode === "learning" &&
+              result.explanation &&
+              ` ${result.explanation}`}
           </InformationBanner>
         </div>
       )}
@@ -386,26 +391,28 @@ export function ExerciseItem({
           loading={submitting}
           className="self-start"
         >
-          Submit
+          {messages.common.submit}
         </Button>
       )}
 
-      {!hideControls && feedbackMode === "learning" && result?.isCorrect === false && (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleRetry}
-          className="self-start"
-        >
-          Try again
-        </Button>
-      )}
+      {!hideControls &&
+        feedbackMode === "learning" &&
+        result?.isCorrect === false && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleRetry}
+            className="self-start"
+          >
+            {messages.common.tryAgain}
+          </Button>
+        )}
 
       {!hideControls &&
         result &&
         (feedbackMode === "assessment" || result.isCorrect !== false) && (
           <Button type="button" onClick={onNext} className="self-start">
-            {nextLabel}
+            {nextLabel ?? messages.common.continue}
           </Button>
         )}
     </Card>

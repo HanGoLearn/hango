@@ -1,6 +1,8 @@
 import { SectionTitle, Body } from "@/components/ui/typography";
 import { InformationBanner } from "@/components/ui/banner";
 import { StepContinueButton } from "@/components/lesson/step-continue-button";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 /**
  * Shared shell for the step types 6.3 explicitly allows as placeholders
@@ -18,13 +20,18 @@ export function PlaceholderStep({
   comingIn: string;
   onContinue: () => void;
 }) {
+  const messages = useLessonMessages();
   return (
     <div className="flex flex-col gap-4">
       <SectionTitle>{title}</SectionTitle>
       <Body>{description}</Body>
-      <InformationBanner variant="info" title={`Coming in ${comingIn}`}>
-        This step is a placeholder for now - it will become fully interactive
-        once that phase is built.
+      <InformationBanner
+        variant="info"
+        title={formatMessage(messages.placeholder.comingIn, {
+          area: comingIn,
+        })}
+      >
+        {messages.placeholder.description}
       </InformationBanner>
       <StepContinueButton onClick={onContinue} />
     </div>

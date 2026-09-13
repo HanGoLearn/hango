@@ -11,6 +11,8 @@ import {
   endMissionAttemptAction,
 } from "@/lib/actions/mission";
 import type { MissionReport } from "@/lib/mission-evaluation";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 export interface MissionSummary {
   id: string;
@@ -35,6 +37,7 @@ export function MissionRuntime({
   mission: MissionSummary;
   onDone: () => void;
 }) {
+  const messages = useLessonMessages();
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
   const [report, setReport] = useState<MissionReport | null>(null);
@@ -63,10 +66,10 @@ export function MissionRuntime({
             variant="secondary"
             onClick={() => void handleStart()}
           >
-            Retry
+            {messages.mission.retry}
           </Button>
           <Button type="button" onClick={onDone}>
-            Done
+            {messages.mission.done}
           </Button>
         </div>
       </div>
@@ -83,7 +86,7 @@ export function MissionRuntime({
           loading={ending}
           className="w-fit"
         >
-          End Mission
+          {messages.mission.end}
         </Button>
       </div>
     );
@@ -99,14 +102,16 @@ export function MissionRuntime({
 
       {(mission.learnerRole || mission.aiRole) && (
         <Caption>
-          You play {mission.learnerRole ?? "the learner"}. The AI plays{" "}
-          {mission.aiRole ?? "the other role"}.
+          {formatMessage(messages.mission.roles, {
+            learner: mission.learnerRole ?? messages.mission.learnerFallback,
+            ai: mission.aiRole ?? messages.mission.aiFallback,
+          })}
         </Caption>
       )}
 
       {mission.successConditions.length > 0 && (
         <div className="flex flex-col gap-1">
-          <Caption>Success looks like</Caption>
+          <Caption>{messages.mission.success}</Caption>
           <ul className="flex flex-col gap-1">
             {mission.successConditions.map((condition) => (
               <li key={condition}>
@@ -122,7 +127,7 @@ export function MissionRuntime({
         onClick={() => void handleStart()}
         className="mt-2 w-fit"
       >
-        Start Mission
+        {messages.mission.start}
       </Button>
     </Card>
   );

@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { AlertCircle, Check, Loader2, Play, Square } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 type AudioState = "idle" | "loading" | "playing" | "error" | "used-up";
 
@@ -29,6 +31,7 @@ export function AudioPlayButton({
    * permanently instead of allowing pause/resume/replay. */
   maxPlays?: number;
 }) {
+  const messages = useLessonMessages();
   const [state, setState] = useState<AudioState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -50,17 +53,27 @@ export function AudioPlayButton({
       // reverting to the idle Play icon, which used to look identical to
       // "never clicked" (2026-08-19 fix - a real failure was indistinguishable
       // from doing nothing, see project/TASKS.md).
-      setErrorMessage(result.error ?? "Couldn't load audio.");
+      setErrorMessage(result.error ?? messages.audio.couldntLoad);
       return;
     }
     playsUsedRef.current += 1;
     const audio = new Audio(result.url);
     audio.onplay = () => setState("playing");
-    audio.onended = () => setState(maxPlays != null && playsUsedRef.current >= maxPlays ? "used-up" : "idle");
-    audio.onpause = () => setState(maxPlays != null && playsUsedRef.current >= maxPlays ? "used-up" : "idle");
+    audio.onended = () =>
+      setState(
+        maxPlays != null && playsUsedRef.current >= maxPlays
+          ? "used-up"
+          : "idle",
+      );
+    audio.onpause = () =>
+      setState(
+        maxPlays != null && playsUsedRef.current >= maxPlays
+          ? "used-up"
+          : "idle",
+      );
     audio.onerror = () => {
       setState("error");
-      setErrorMessage("This audio file couldn't be played.");
+      setErrorMessage(messages.audio.couldntPlay);
     };
     audioRef.current = audio;
     void audio.play();
@@ -82,18 +95,21 @@ export function AudioPlayButton({
       type="button"
       aria-label={
         state === "playing"
-          ? `Stop ${label}`
+          ? formatMessage(messages.audio.stop, { label })
           : state === "used-up"
-            ? `${label} already played - it can only be heard once`
+            ? formatMessage(messages.audio.alreadyPlayed, { label })
             : state === "error"
-              ? `${errorMessage ?? "Couldn't load audio"} - tap to retry playing ${label}`
-              : `Play ${label}`
+              ? formatMessage(messages.audio.retry, {
+                  error: errorMessage ?? messages.audio.couldntLoad,
+                  label,
+                })
+              : formatMessage(messages.audio.play, { label })
       }
       title={
         state === "used-up"
-          ? "Already played - it can only be heard once"
+          ? messages.audio.alreadyPlayedTitle
           : state === "error"
-            ? (errorMessage ?? "Couldn't load audio - tap to retry")
+            ? (errorMessage ?? messages.audio.retryTitle)
             : undefined
       }
       disabled={state === "loading" || state === "used-up"}

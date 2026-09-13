@@ -10,6 +10,12 @@ import { lookupVocabularyWordAction } from "@/lib/actions/vocabulary-lookup";
 import { VocabularyLookupCard } from "@/components/han/vocabulary-lookup-card";
 import type { VocabularyLookupResult } from "@/lib/vocabulary-lookup-prompt";
 import type { WordOfTheDay } from "@/lib/words-of-the-day";
+import type {
+  DashboardMessages,
+  HanVocabularyMessages,
+} from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
+import { localizeVocabularyError } from "@/i18n/vocabulary";
 
 /**
  * Dashboard teaser (2026-09-01) - same 3 words for every learner at this
@@ -26,7 +32,15 @@ import type { WordOfTheDay } from "@/lib/words-of-the-day";
  * screen, and the swap gets focus trapping/ESC/overlay-click dismissal for
  * free from Radix instead of only a hand-rolled close button.
  */
-export function WordsOfTheDayCard({ words }: { words: WordOfTheDay[] }) {
+export function WordsOfTheDayCard({
+  words,
+  messages,
+  vocabularyMessages,
+}: {
+  words: WordOfTheDay[];
+  messages: DashboardMessages["words"];
+  vocabularyMessages: HanVocabularyMessages;
+}) {
   const [openWord, setOpenWord] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +56,9 @@ export function WordsOfTheDayCard({ words }: { words: WordOfTheDay[] }) {
     const response = await lookupVocabularyWordAction(chineseForm);
     setLoading(false);
     if (!response.ok) {
-      setError(response.error);
+      setError(
+        localizeVocabularyError(response.error, vocabularyMessages.errors),
+      );
       return;
     }
     setResult(response.result);
@@ -64,7 +80,7 @@ export function WordsOfTheDayCard({ words }: { words: WordOfTheDay[] }) {
       <div className="flex items-center gap-2">
         <HanAvatar pose="curious" size={28} />
         <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-          Words for you today
+          {messages.title}
         </Caption>
       </div>
 
@@ -93,12 +109,14 @@ export function WordsOfTheDayCard({ words }: { words: WordOfTheDay[] }) {
                 shows the word prominently; this only satisfies Radix's
                 accessible-name requirement for the dialog. */}
             <ModalTitle className="sr-only">
-              {openWord ?? "Word of the day"}
+              {openWord ?? messages.modalTitle}
             </ModalTitle>
             {loading && (
               <div className="flex items-center justify-center gap-2 p-10 text-text-secondary">
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                <Body>Looking up {openWord}...</Body>
+                <Body>
+                  {formatMessage(messages.loading, { word: openWord ?? "" })}
+                </Body>
               </div>
             )}
             {error && (
@@ -106,7 +124,12 @@ export function WordsOfTheDayCard({ words }: { words: WordOfTheDay[] }) {
                 <InformationBanner variant="error">{error}</InformationBanner>
               </div>
             )}
-            {result && <VocabularyLookupCard result={result} />}
+            {result && (
+              <VocabularyLookupCard
+                result={result}
+                messages={vocabularyMessages.card}
+              />
+            )}
           </div>
         </ModalContent>
       </Modal>

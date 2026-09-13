@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
+import type { AppLocale } from "@/i18n/config";
 import {
   computeCompetencyProgress,
   type CompetencyProgress,
@@ -127,7 +128,8 @@ export async function getEstimatedLevel(userId: string): Promise<{
   const profile = await getOrCreateLearnerProfile(userId);
   if (!profile.currentLevel) return null;
   return {
-    startingLevelLabel: STARTING_LEVEL_LABELS[profile.currentLevel] ?? profile.currentLevel,
+    startingLevelLabel:
+      STARTING_LEVEL_LABELS[profile.currentLevel] ?? profile.currentLevel,
   };
 }
 
@@ -192,9 +194,10 @@ export interface ScenarioMasterySummary {
  */
 export async function getScenarioMastery(
   userId: string,
+  locale: AppLocale = "en",
 ): Promise<ScenarioMasterySummary[]> {
   const [scenarios, competencyProgress] = await Promise.all([
-    getScenariosWithProgress(userId),
+    getScenariosWithProgress(userId, locale),
     getCompetencyProgress(userId),
   ]);
 

@@ -6,6 +6,7 @@ import { getExercisesForLesson } from "@/lib/content/exercise";
 import { getQuizzesForLesson } from "@/lib/content/quiz";
 import { getMissionForLesson } from "@/lib/content/mission";
 import { toClientExercise } from "@/lib/exercise-progress";
+import type { AppLocale } from "@/i18n/config";
 
 /**
  * Aggregates every piece of content a lesson's steps can render, in one
@@ -23,18 +24,21 @@ import { toClientExercise } from "@/lib/exercise-progress";
  * again, independently, in src/lib/exercise-progress-data.ts /
  * quiz-progress-data.ts).
  */
-export async function getLessonWithContent(slug: string) {
-  const lesson = await getLessonBySlug(slug);
+export async function getLessonWithContent(
+  slug: string,
+  locale: AppLocale = "en",
+) {
+  const lesson = await getLessonBySlug(slug, locale);
   if (!lesson) return null;
 
   const [dialogues, vocabulary, grammar, exercises, quizzes, mission] =
     await Promise.all([
-      getDialoguesForLesson(lesson.id),
-      getVocabularyForLesson(lesson.id),
-      getGrammarForLesson(lesson.id),
-      getExercisesForLesson(lesson.id),
-      getQuizzesForLesson(lesson.id),
-      getMissionForLesson(lesson.id),
+      getDialoguesForLesson(lesson.id, locale),
+      getVocabularyForLesson(lesson.id, locale),
+      getGrammarForLesson(lesson.id, locale),
+      getExercisesForLesson(lesson.id, locale),
+      getQuizzesForLesson(lesson.id, locale),
+      getMissionForLesson(lesson.id, locale),
     ]);
 
   const clientExercises = exercises.map((exercise) =>

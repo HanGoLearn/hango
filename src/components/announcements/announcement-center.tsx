@@ -10,6 +10,7 @@ import {
   type LearnerAnnouncement,
 } from "@/lib/actions/learner-notices";
 import { Button } from "@/components/ui/button";
+import { localeAwareHref, type AppLocale } from "@/i18n/config";
 import {
   Modal,
   ModalContent,
@@ -17,7 +18,7 @@ import {
   ModalTitle,
 } from "@/components/ui/modal";
 
-export function AnnouncementCenter() {
+export function AnnouncementCenter({ locale }: { locale: AppLocale }) {
   const pathname = usePathname();
   const [queue, setQueue] = useState<LearnerAnnouncement[]>([]);
 
@@ -77,7 +78,7 @@ export function AnnouncementCenter() {
           </Button>
           {current.ctaHref && current.ctaLabel && (
             <Link
-              href={current.ctaHref}
+              href={localeAwareHref(locale, current.ctaHref)}
               onClick={dismiss}
               className="inline-flex items-center justify-center rounded-control bg-primary-500 px-4 py-2 font-interface text-body font-medium text-on-color-light transition-colors hover:bg-primary-600"
             >

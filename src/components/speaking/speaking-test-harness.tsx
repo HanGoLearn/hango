@@ -17,13 +17,20 @@ import {
   CHAPTER_CONFIG,
   DIFFICULTY_LABELS,
 } from "@/lib/content/learning-journey";
+import { localePath, type AppLocale } from "@/i18n/config";
+import type { SpeakingLabMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 export function SpeakingTestHarness({
+  locale,
   lesson,
   lessonOptions,
+  messages,
 }: {
+  locale: AppLocale;
   lesson: LessonWithContent;
   lessonOptions: SpeakingLessonOption[];
+  messages: SpeakingLabMessages["testHarness"];
 }) {
   const router = useRouter();
   const currentIndex = lessonOptions.findIndex(
@@ -36,7 +43,7 @@ export function SpeakingTestHarness({
       : null;
 
   function openLesson(lessonId: string) {
-    router.push(`/speaking-test?lessonId=${lessonId}`);
+    router.push(localePath(locale, `/speaking-test?lessonId=${lessonId}`));
   }
 
   return (
@@ -46,29 +53,29 @@ export function SpeakingTestHarness({
           <div className="flex items-center gap-2 text-primary-500">
             <FlaskConical className="size-5" aria-hidden="true" />
             <Caption className="font-semibold uppercase tracking-wide">
-              Temporary local QA tool
+              {messages.eyebrow}
             </Caption>
           </div>
-          <PageTitle>Speaking test mode</PageTitle>
-          <Body className="text-text-secondary">
-            Test the exact real-time Speaking step without changing lesson
-            progress, scores, or Reflection.
-          </Body>
+          <PageTitle>{messages.title}</PageTitle>
+          <Body className="text-text-secondary">{messages.description}</Body>
         </div>
         <Button
           type="button"
           variant="tertiary"
-          onClick={() => router.push("/speaking-lab")}
+          onClick={() => router.push(localePath(locale, "/speaking-lab"))}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Exit test mode
+          {messages.exit}
         </Button>
       </div>
 
       <Card className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <label className="flex min-w-0 flex-1 flex-col gap-1.5">
           <Caption className="font-semibold text-text-secondary">
-            Lesson {currentIndex + 1} of {lessonOptions.length}
+            {formatMessage(messages.lessonCount, {
+              current: currentIndex + 1,
+              total: lessonOptions.length,
+            })}
           </Caption>
           <select
             value={lesson.id}
@@ -94,7 +101,7 @@ export function SpeakingTestHarness({
             onClick={() => previous && openLesson(previous.id)}
           >
             <ChevronLeft className="size-4" aria-hidden="true" />
-            Previous
+            {messages.previous}
           </Button>
           <Button
             type="button"
@@ -102,7 +109,7 @@ export function SpeakingTestHarness({
             disabled={!next}
             onClick={() => next && openLesson(next.id)}
           >
-            Next
+            {messages.next}
             <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
         </div>
@@ -118,8 +125,9 @@ export function SpeakingTestHarness({
           {lesson.scenarioLevel.scenario.name} — {lesson.title}
         </Body>
         <Caption className="text-text-secondary">
-          Objective:{" "}
-          {lesson.mission?.objective ?? "No Speaking mission is configured."}
+          {formatMessage(messages.objective, {
+            objective: lesson.mission?.objective ?? messages.noMission,
+          })}
         </Caption>
       </Card>
 

@@ -2,8 +2,10 @@
 
 import { Toggle } from "@/components/ui/toggle";
 import { useLessonDisplayPrefs } from "@/components/lesson/lesson-display-prefs";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
 
 export function DisplayToggles() {
+  const messages = useLessonMessages();
   const {
     showPinyin,
     showTranslation,
@@ -14,12 +16,12 @@ export function DisplayToggles() {
   return (
     <div className="flex flex-wrap items-center gap-4">
       <Toggle
-        label="Pinyin"
+        label={messages.display.pinyin}
         checked={showPinyin}
         onCheckedChange={toggleShowPinyin}
       />
       <Toggle
-        label="Translation"
+        label={messages.display.translation}
         checked={showTranslation}
         onCheckedChange={toggleShowTranslation}
       />

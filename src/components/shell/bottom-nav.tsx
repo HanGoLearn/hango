@@ -4,26 +4,36 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { mobileNavItems } from "@/lib/navigation";
 import { cn } from "@/lib/cn";
+import { localePath, pathWithoutLocale, type AppLocale } from "@/i18n/config";
+import type { ShellMessages } from "@/i18n/messages/types";
 
 /**
  * Fixed mobile navigation (docs/04_design/ui.md). AI Teacher access stays
  * separate — see AiTeacherBubble.
  */
-export function BottomNav() {
+export function BottomNav({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: ShellMessages;
+}) {
   const pathname = usePathname();
+  const localeNeutralPathname = pathWithoutLocale(pathname);
 
   return (
     <nav
-      aria-label="Primary navigation (mobile)"
+      aria-label={messages.mobileNavigation}
       className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface md:hidden"
     >
       {mobileNavItems.map((item) => {
-        const isActive = pathname?.startsWith(item.href);
+        const isActive = localeNeutralPathname.startsWith(item.href);
         const Icon = item.icon;
+        const copy = messages.navigation[item.key];
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={localePath(locale, item.href)}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "flex flex-1 flex-col items-center gap-1 py-2 font-interface text-caption transition-colors duration-fast ease-standard",
@@ -52,7 +62,7 @@ export function BottomNav() {
                 aria-hidden="true"
               />
             </span>
-            {item.mobileLabel ?? item.label}
+            {copy.mobile}
           </Link>
         );
       })}

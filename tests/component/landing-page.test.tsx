@@ -11,8 +11,13 @@ vi.mock("@/components/ui/han-mascot", () => ({
     <div role="img" aria-label={`Han, pose ${pose}`} />
   ),
 }));
+vi.mock("@/components/i18n/language-switcher", () => ({
+  LanguageSwitcher: () => <div role="group" aria-label="language switcher" />,
+}));
 
 import { HomeHero } from "@/components/marketing/home-hero";
+import { messages as spanishMessages } from "@/i18n/messages/es";
+import { messages as englishMessages } from "@/i18n/messages/en";
 
 afterEach(() => {
   cleanup();
@@ -20,7 +25,7 @@ afterEach(() => {
 
 describe("HanGo public landing page", () => {
   it("communicates the audience, outcome, method, and account actions", () => {
-    render(<HomeHero />);
+    render(<HomeHero locale="es" messages={spanishMessages.marketing} />);
 
     expect(
       screen.getByRole("heading", {
@@ -39,10 +44,10 @@ describe("HanGo public landing page", () => {
 
     expect(
       screen.getAllByRole("link", { name: /crear (mi )?cuenta/i })[0],
-    ).toHaveAttribute("href", "/register");
+    ).toHaveAttribute("href", "/es/register");
     expect(
       screen.getAllByRole("link", { name: /iniciar sesión/i })[0],
-    ).toHaveAttribute("href", "/login");
+    ).toHaveAttribute("href", "/es/login");
     expect(
       screen.getByRole("heading", { name: /crea tu personaje/i }),
     ).toBeInTheDocument();
@@ -53,7 +58,7 @@ describe("HanGo public landing page", () => {
   });
 
   it("keeps Chinese, pinyin, and translation together in the product example", () => {
-    render(<HomeHero />);
+    render(<HomeHero locale="es" messages={spanishMessages.marketing} />);
 
     expect(screen.getByText("我想要这个，可以少放辣吗？")).toHaveAttribute(
       "lang",
@@ -68,7 +73,23 @@ describe("HanGo public landing page", () => {
   });
 
   it("has no automatically detectable accessibility violations", async () => {
-    const { container } = render(<HomeHero />);
+    const { container } = render(
+      <HomeHero locale="es" messages={spanishMessages.marketing} />,
+    );
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("renders the English version with localized account links", () => {
+    render(<HomeHero locale="en" messages={englishMessages.marketing} />);
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: /start from zero. take your chinese as far as you want/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: /create (my )?account/i })[0],
+    ).toHaveAttribute("href", "/en/register");
   });
 });

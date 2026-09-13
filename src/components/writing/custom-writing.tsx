@@ -14,11 +14,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Body, Caption, CardTitle, PageTitle } from "@/components/ui/typography";
+import {
+  Body,
+  Caption,
+  CardTitle,
+  PageTitle,
+} from "@/components/ui/typography";
 import { WritingFeedbackDisplay } from "@/components/writing/writing-feedback-display";
 import { submitCustomWritingAction } from "@/lib/actions/writing";
 import type { WritingFeedback } from "@/lib/writing-feedback";
 import { tierNameForLevel } from "@/lib/points-system";
+import type {
+  DashboardMessages,
+  WritingLabMessages,
+} from "@/i18n/messages/types";
+import { localizeWritingError } from "@/i18n/writing";
 
 // Radix Select rejects an empty-string item value (same workaround as Speaking Lab's free-topic practice).
 const PROFILE_LEVEL = "PROFILE";
@@ -39,17 +49,20 @@ const LEVEL_OPTIONS = [
   { value: "HSK 7-9", label: tierNameForLevel(7) },
 ];
 
-const FORMAT_OPTIONS = [
-  { value: "a short message (2-3 sentences)", label: "Short message" },
-  { value: "a paragraph (4-6 sentences)", label: "Paragraph" },
-  { value: "a practical piece of writing, like a review or note", label: "Practical writing" },
-  { value: "a longer essay (8+ sentences)", label: "Essay" },
+const FORMAT_OPTIONS: {
+  key: keyof WritingLabMessages["custom"]["formats"];
+  value: string;
+}[] = [
+  { key: "short", value: "a short message (2-3 sentences)" },
+  { key: "paragraph", value: "a paragraph (4-6 sentences)" },
+  {
+    key: "practical",
+    value: "a practical piece of writing, like a review or note",
+  },
+  { key: "essay", value: "a longer essay (8+ sentences)" },
 ];
 
-const TONE_OPTIONS: { value: "casual" | "formal"; label: string }[] = [
-  { value: "casual", label: "Casual" },
-  { value: "formal", label: "Formal" },
-];
+const TONE_OPTIONS = ["casual", "formal"] as const;
 
 type Stage = "setup" | "write" | "result";
 
@@ -65,7 +78,15 @@ type Stage = "setup" | "write" | "result";
  * intentionally starts a brand new attempt rather than editing the graded
  * one, same as the fixed-task Writing Lab flow.
  */
-export function CustomWriting({ onExit }: { onExit: () => void }) {
+export function CustomWriting({
+  onExit,
+  messages,
+  levelMessages,
+}: {
+  onExit: () => void;
+  messages: WritingLabMessages;
+  levelMessages: DashboardMessages["levels"];
+}) {
   const [stage, setStage] = useState<Stage>("setup");
   const [topic, setTopic] = useState("");
   const [level, setLevel] = useState(PROFILE_LEVEL);
@@ -84,7 +105,10 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
     tone,
     extra: extra.trim() || undefined,
   };
-  const formatLabel = FORMAT_OPTIONS.find((option) => option.value === format)?.label ?? format;
+  const formatOption = FORMAT_OPTIONS.find((option) => option.value === format);
+  const formatLabel = formatOption
+    ? messages.custom.formats[formatOption.key]
+    : format;
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -95,7 +119,7 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
       setFeedback(result.feedback);
       setStage("result");
     } else {
-      setError(result.error);
+      setError(localizeWritingError(result.error, messages.errors));
     }
   }
 
@@ -109,46 +133,58 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
   if (stage === "setup") {
     return (
       <div className="flex flex-col gap-6">
-        <Button type="button" variant="tertiary" className="w-fit gap-1.5 px-0" onClick={onExit}>
+        <Button
+          type="button"
+          variant="tertiary"
+          className="w-fit gap-1.5 px-0"
+          onClick={onExit}
+        >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          Back
+          {messages.common.back}
         </Button>
 
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <Sparkles className="size-5 text-primary-500" aria-hidden="true" />
-            <PageTitle>Custom Writing</PageTitle>
+            <PageTitle>{messages.home.customTitle}</PageTitle>
           </div>
           <Body className="text-text-secondary">
-            Set your own topic, level, format, and tone — Han grades your writing against exactly what you asked for.
+            {messages.custom.description}
           </Body>
         </div>
 
         <Card className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Topic
+              {messages.custom.topic}
             </Caption>
             <Textarea
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
-              placeholder="e.g. Write about a memorable trip you took"
-              aria-label="Topic"
+              placeholder={messages.custom.topicPlaceholder}
+              aria-label={messages.custom.topic}
             />
           </label>
 
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Level
+              {messages.custom.level}
             </Caption>
             <Select value={level} onValueChange={setLevel}>
-              <SelectTrigger aria-label="Level" className="max-w-xs">
+              <SelectTrigger
+                aria-label={messages.custom.level}
+                className="max-w-xs"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {LEVEL_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                    {option.value === PROFILE_LEVEL
+                      ? messages.custom.useProfileLevel
+                      : (levelMessages[
+                          option.label as keyof typeof levelMessages
+                        ] ?? option.label)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -157,16 +193,19 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
 
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Format
+              {messages.custom.format}
             </Caption>
             <Select value={format} onValueChange={setFormat}>
-              <SelectTrigger aria-label="Format" className="max-w-xs">
+              <SelectTrigger
+                aria-label={messages.custom.format}
+                className="max-w-xs"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {FORMAT_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                    {messages.custom.formats[option.key]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -175,7 +214,7 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
 
           <div className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Tone
+              {messages.custom.tone}
             </Caption>
             <RadioGroup
               value={tone}
@@ -183,20 +222,24 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
               className="flex flex-row gap-4"
             >
               {TONE_OPTIONS.map((option) => (
-                <RadioGroupItem key={option.value} value={option.value} label={option.label} />
+                <RadioGroupItem
+                  key={option}
+                  value={option}
+                  label={messages.custom.tones[option]}
+                />
               ))}
             </RadioGroup>
           </div>
 
           <label className="flex flex-col gap-1.5">
             <Caption className="font-semibold uppercase tracking-wide text-text-secondary">
-              Anything else? (optional)
+              {messages.custom.extra}
             </Caption>
             <Textarea
               value={extra}
               onChange={(event) => setExtra(event.target.value)}
-              placeholder="e.g. Focus on restaurant vocabulary. Use at least one time expression."
-              aria-label="Additional instructions"
+              placeholder={messages.custom.extraPlaceholder}
+              aria-label={messages.custom.extraLabel}
             />
           </label>
 
@@ -206,7 +249,7 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
             disabled={!topic.trim()}
             onClick={() => setStage("write")}
           >
-            Start writing
+            {messages.custom.start}
           </Button>
         </Card>
       </div>
@@ -219,8 +262,8 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
         <Card className="flex flex-col gap-1">
           <CardTitle>{topic}</CardTitle>
           <Body className="text-text-secondary">
-            {formatLabel} · {tone === "formal" ? "Formal" : "Casual"} ·{" "}
-            {level === PROFILE_LEVEL ? "Your profile level" : level}
+            {formatLabel} · {messages.custom.tones[tone]} ·{" "}
+            {level === PROFILE_LEVEL ? messages.custom.profileLevel : level}
           </Body>
         </Card>
 
@@ -233,8 +276,8 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
         <Textarea
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="Write your response in Chinese"
-          aria-label="Your writing"
+          placeholder={messages.custom.writingPlaceholder}
+          aria-label={messages.custom.writingLabel}
           maxLength={2000}
           showCharacterCount
           disabled={submitting}
@@ -247,7 +290,7 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
           disabled={!text.trim() || submitting}
           loading={submitting}
         >
-          Submit
+          {messages.common.submit}
         </Button>
       </div>
     );
@@ -255,13 +298,17 @@ export function CustomWriting({ onExit }: { onExit: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <WritingFeedbackDisplay original={text} feedback={feedback!} />
+      <WritingFeedbackDisplay
+        original={text}
+        feedback={feedback!}
+        messages={messages.feedback}
+      />
       <div className="flex gap-2">
         <Button type="button" variant="secondary" onClick={handleTryAgain}>
-          Try again
+          {messages.common.tryAgain}
         </Button>
         <Button type="button" onClick={onExit}>
-          Done
+          {messages.common.done}
         </Button>
       </div>
     </div>

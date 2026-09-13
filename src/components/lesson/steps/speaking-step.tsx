@@ -22,6 +22,8 @@ import {
   type SpeakingHelpPhrase,
 } from "@/lib/speaking-help";
 import { speakingSessionTiming } from "@/lib/speaking-session-timing";
+import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { formatMessage } from "@/i18n/format";
 
 const CHINESE_ROLE_LABELS: Record<string, string> = {
   waiter: "服务员",
@@ -56,6 +58,7 @@ export function SpeakingStep({
   /** Local QA only: exercises the real Speaking UI without retaining the transcript. */
   testMode?: boolean;
 }) {
+  const messages = useLessonMessages();
   const {
     setMode,
     setContext,
@@ -129,11 +132,9 @@ export function SpeakingStep({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <SectionTitle>Speaking</SectionTitle>
+        <SectionTitle>{messages.speaking.title}</SectionTitle>
         <Body className="text-text-secondary">
-          Have a new, unscripted conversation in the lesson&apos;s scenario. You
-          can explore naturally; your partner will help guide the conversation
-          back to the goal.
+          {messages.speaking.description}
         </Body>
       </div>
 
@@ -152,7 +153,9 @@ export function SpeakingStep({
             ) : (
               <CircleHelp className="size-4" aria-hidden="true" />
             )}
-            {helpVisible ? "Hide help" : "Need help?"}
+            {helpVisible
+              ? messages.speaking.hideHelp
+              : messages.speaking.needHelp}
           </Button>
 
           <div
@@ -193,18 +196,18 @@ export function SpeakingStep({
               <aside
                 id="speaking-conversation-help"
                 className="flex max-h-[40rem] flex-col gap-5 overflow-y-auto rounded-panel border border-border bg-surface p-5 text-left"
-                aria-label="Conversation help"
+                aria-label={messages.speaking.helpLabel}
               >
                 <div className="flex items-center gap-2 text-text-primary">
                   <CircleHelp className="size-5" aria-hidden="true" />
                   <h3 className="font-display text-lg font-semibold">
-                    Conversation help
+                    {messages.speaking.helpLabel}
                   </h3>
                 </div>
 
                 <div className="flex flex-col gap-2">
                   <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                    Your goal
+                    {messages.speaking.yourGoal}
                   </Caption>
                   <Body className="font-semibold text-text-primary">
                     {mission.objective}
@@ -212,18 +215,18 @@ export function SpeakingStep({
                 </div>
 
                 <HelpPhraseSection
-                  title="Questions you can ask"
+                  title={messages.speaking.questions}
                   phrases={help.questions}
                 />
                 <HelpPhraseSection
-                  title="Useful things to say"
+                  title={messages.speaking.usefulPhrases}
                   phrases={help.thingsToSay}
                 />
 
                 {help.grammar.length > 0 && (
                   <div className="flex flex-col gap-3">
                     <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                      Grammar to use
+                      {messages.speaking.grammar}
                     </Caption>
                     {help.grammar.map((item) => (
                       <div
@@ -257,7 +260,7 @@ export function SpeakingStep({
                 {help.vocabulary.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                      Lesson vocabulary
+                      {messages.speaking.vocabulary}
                     </Caption>
                     <div className="grid grid-cols-2 gap-2">
                       {help.vocabulary.map((item) => (
@@ -277,8 +280,7 @@ export function SpeakingStep({
                 )}
 
                 <Caption className="mt-auto text-text-secondary">
-                  Choose one short phrase for your next turn. Adapt it to the
-                  conversation instead of reading the whole list.
+                  {messages.speaking.helpTip}
                 </Caption>
               </aside>
             )}
@@ -297,17 +299,27 @@ export function SpeakingStep({
           <div className="flex items-center gap-2 text-success-500">
             <CheckCircle2 className="size-5" aria-hidden="true" />
             <Body className="font-semibold text-success-500">
-              {testMode ? "Test conversation finished" : "Conversation saved"}
+              {testMode
+                ? messages.speaking.testFinished
+                : messages.speaking.saved}
             </Body>
           </div>
           <Caption>
             {testMode
-              ? `${finishedTranscript.length} transcribed turns were captured for this test only. They were not added to Progress or Reflection.`
-              : `${finishedTranscript.length} transcribed turns will be used in your Reflection feedback.`}
+              ? formatMessage(messages.speaking.testTurns, {
+                  count: finishedTranscript.length,
+                })
+              : formatMessage(messages.speaking.reflectionTurns, {
+                  count: finishedTranscript.length,
+                })}
           </Caption>
           <StepContinueButton
             onClick={onContinue}
-            label={testMode ? "Test next lesson" : "Continue"}
+            label={
+              testMode
+                ? messages.speaking.testNextLesson
+                : messages.common.continue
+            }
           />
         </div>
       )}
@@ -320,7 +332,7 @@ export function SpeakingStep({
               aria-hidden="true"
             />
             <Body className="text-text-secondary">
-              Microphone unavailable — continue the same role-play by text.
+              {messages.speaking.microphoneUnavailable}
             </Body>
           </div>
           <div className="h-[28rem] rounded-card border border-border bg-surface p-4">
@@ -328,7 +340,11 @@ export function SpeakingStep({
           </div>
           <StepContinueButton
             onClick={onContinue}
-            label={testMode ? "Test next lesson" : "Continue"}
+            label={
+              testMode
+                ? messages.speaking.testNextLesson
+                : messages.common.continue
+            }
           />
         </div>
       )}
@@ -340,7 +356,7 @@ export function SpeakingStep({
           className="self-start"
           onClick={() => setFallbackVisible(true)}
         >
-          Use text instead
+          {messages.speaking.useText}
         </Button>
       )}
     </div>

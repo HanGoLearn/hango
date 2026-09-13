@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { HandwrittenWritingFeedback } from "@/components/writing/handwritten-writing-feedback";
+import { messages } from "@/i18n/messages/en";
 
 afterEach(cleanup);
 
@@ -38,6 +39,7 @@ describe("HandwrittenWritingFeedback", () => {
           strokeOrderDisclaimer:
             "Stroke order cannot be verified from a static photo.",
         }}
+        messages={messages.writingLab.handwritten}
       />,
     );
 

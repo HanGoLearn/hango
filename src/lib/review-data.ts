@@ -83,6 +83,7 @@ export async function getReviewQueue(userId: string): Promise<ReviewItem[]> {
       estimatedMinutes: 2,
       actionLabel: "Review",
       actionHref: `/lesson/${row.lesson.slug}`,
+      sourceLessonTitle: row.lesson.title,
     });
   }
 
@@ -100,6 +101,7 @@ export async function getReviewQueue(userId: string): Promise<ReviewItem[]> {
       estimatedMinutes: 3,
       actionLabel: "Review",
       actionHref: `/lesson/${row.lesson.slug}`,
+      sourceLessonTitle: row.lesson.title,
     });
   }
 
@@ -153,6 +155,8 @@ export async function getReviewQueue(userId: string): Promise<ReviewItem[]> {
       estimatedMinutes: 3,
       actionLabel: "Replay",
       actionHref: `/lesson/${dialogue.lesson.slug}`,
+      sourceLessonTitle: dialogue.lesson.title,
+      contentTitle: dialogue.title,
     });
   }
 

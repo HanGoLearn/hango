@@ -8,23 +8,35 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
 import { HanMascot } from "@/components/ui/han-mascot";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 const OPTIONS = [
-  { value: "LISTENING", label: "Listening", icon: Headphones },
-  { value: "SPEAKING", label: "Speaking", icon: Mic },
-  { value: "READING", label: "Reading", icon: BookOpen },
-  { value: "WRITING", label: "Writing", icon: PenLine },
-  { value: "GRAMMAR", label: "Grammar", icon: SpellCheck },
-  { value: "VOCABULARY", label: "Vocabulary", icon: Type },
-];
+  { value: "LISTENING", key: "listening", icon: Headphones },
+  { value: "SPEAKING", key: "speaking", icon: Mic },
+  { value: "READING", key: "reading", icon: BookOpen },
+  { value: "WRITING", key: "writing", icon: PenLine },
+  { value: "GRAMMAR", key: "grammar", icon: SpellCheck },
+  { value: "VOCABULARY", key: "vocabulary", icon: Type },
+] as const;
 
 export interface SkillsStepProps {
   initialValue: string[];
   onNext: (value: string[]) => void;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["skills"];
+  commonMessages: OnboardingMessages["common"];
 }
 
-export function SkillsStep({ initialValue, onNext, onBack }: SkillsStepProps) {
+export function SkillsStep({
+  initialValue,
+  onNext,
+  onBack,
+  locale,
+  messages,
+  commonMessages,
+}: SkillsStepProps) {
   const [selected, setSelected] = useState<string[]>(initialValue);
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
@@ -41,6 +53,7 @@ export function SkillsStep({ initialValue, onNext, onBack }: SkillsStepProps) {
     setIsPending(true);
     const formData = new FormData();
     for (const value of selected) formData.append("skillPriorities", value);
+    formData.set("locale", locale);
     const result = await saveSkillsStepAction({ status: "idle" }, formData);
     setIsPending(false);
     if (result.status === "error") {
@@ -54,8 +67,8 @@ export function SkillsStep({ initialValue, onNext, onBack }: SkillsStepProps) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 text-center">
         <HanMascot pose="curious" size={110} />
-        <SectionTitle>What do you want to focus on?</SectionTitle>
-        <Body className="text-text-secondary">Select all that apply.</Body>
+        <SectionTitle>{messages.title}</SectionTitle>
+        <Body className="text-text-secondary">{messages.selectAll}</Body>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
@@ -65,7 +78,7 @@ export function SkillsStep({ initialValue, onNext, onBack }: SkillsStepProps) {
           <CheckboxTile
             key={option.value}
             value={option.value}
-            label={option.label}
+            label={messages.options[option.key]}
             icon={<option.icon className="size-5" aria-hidden="true" />}
             layout="row"
             checked={selected.includes(option.value)}
@@ -76,7 +89,7 @@ export function SkillsStep({ initialValue, onNext, onBack }: SkillsStepProps) {
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <Button
           size="lg"
@@ -84,7 +97,7 @@ export function SkillsStep({ initialValue, onNext, onBack }: SkillsStepProps) {
           loading={isPending}
           disabled={selected.length === 0}
         >
-          Continue
+          {commonMessages.continue}
         </Button>
       </div>
     </div>

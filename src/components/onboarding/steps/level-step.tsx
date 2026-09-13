@@ -17,8 +17,9 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle } from "@/components/ui/typography";
 import { HanMascot } from "@/components/ui/han-mascot";
-import { tierNameForLevel } from "@/lib/points-system";
 import { cn } from "@/lib/cn";
+import type { AppLocale } from "@/i18n/config";
+import type { OnboardingMessages } from "@/i18n/messages/types";
 
 // Increasing height per bar (2026-08-28: "que crezcan verticalmente ... se
 // ve como progreso para arriba") - a staircase read as growing progress,
@@ -55,26 +56,36 @@ function LevelBars({ filled }: { filled: number }) {
 // has none since it isn't a real level.
 const OPTIONS: {
   value: string;
-  label: string;
+  key: keyof OnboardingMessages["level"]["options"];
   icon: typeof Sprout;
   filled?: number;
 }[] = [
-  { value: "HSK_1_2", label: tierNameForLevel(1), icon: Sprout, filled: 0 },
-  { value: "HSK_3", label: tierNameForLevel(3), icon: MessageCircle, filled: 1 },
-  { value: "HSK_4", label: tierNameForLevel(4), icon: MessagesSquare, filled: 2 },
-  { value: "HSK_5", label: tierNameForLevel(5), icon: Users, filled: 3 },
-  { value: "HSK_6", label: tierNameForLevel(6), icon: Briefcase, filled: 4 },
-  { value: "HSK_7_9", label: tierNameForLevel(7), icon: GraduationCap, filled: 5 },
-  { value: "UNSURE", label: "Unsure", icon: HelpCircle },
+  { value: "HSK_1_2", key: "hsk12", icon: Sprout, filled: 0 },
+  { value: "HSK_3", key: "hsk3", icon: MessageCircle, filled: 1 },
+  { value: "HSK_4", key: "hsk4", icon: MessagesSquare, filled: 2 },
+  { value: "HSK_5", key: "hsk5", icon: Users, filled: 3 },
+  { value: "HSK_6", key: "hsk6", icon: Briefcase, filled: 4 },
+  { value: "HSK_7_9", key: "hsk79", icon: GraduationCap, filled: 5 },
+  { value: "UNSURE", key: "unsure", icon: HelpCircle },
 ];
 
 export interface LevelStepProps {
   initialValue: string | null;
   onNext: (value: string) => void;
   onBack: () => void;
+  locale: AppLocale;
+  messages: OnboardingMessages["level"];
+  commonMessages: OnboardingMessages["common"];
 }
 
-export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
+export function LevelStep({
+  initialValue,
+  onNext,
+  onBack,
+  locale,
+  messages,
+  commonMessages,
+}: LevelStepProps) {
   const [value, setValue] = useState<string | undefined>(
     initialValue ?? undefined,
   );
@@ -86,6 +97,7 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
     setIsPending(true);
     const formData = new FormData();
     formData.set("currentLevel", value);
+    formData.set("locale", locale);
     const result = await saveLevelStepAction({ status: "idle" }, formData);
     setIsPending(false);
     if (result.status === "error") {
@@ -99,7 +111,7 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 text-center">
         <HanMascot pose="curious" size={110} />
-        <SectionTitle>What&apos;s your current Chinese level?</SectionTitle>
+        <SectionTitle>{messages.title}</SectionTitle>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
@@ -109,7 +121,7 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
           <RadioTile
             key={option.value}
             value={option.value}
-            label={option.label}
+            label={messages.options[option.key]}
             icon={<option.icon className="size-5" aria-hidden="true" />}
             layout="row"
             className="min-h-[112px]"
@@ -120,7 +132,7 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
 
       <div className="flex justify-between gap-3">
         <Button variant="tertiary" onClick={onBack} type="button">
-          Back
+          {commonMessages.back}
         </Button>
         <Button
           size="lg"
@@ -128,7 +140,7 @@ export function LevelStep({ initialValue, onNext, onBack }: LevelStepProps) {
           loading={isPending}
           disabled={!value}
         >
-          Continue
+          {commonMessages.continue}
         </Button>
       </div>
     </div>

@@ -3,11 +3,15 @@ import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { CardTitle } from "@/components/ui/typography";
 import type { ScenarioMasterySummary } from "@/lib/progress-data";
+import type { ProgressMessages } from "@/i18n/messages/types";
+import { formatMessage } from "@/i18n/format";
 
 export function ScenarioMasteryList({
   scenarios,
+  messages,
 }: {
   scenarios: ScenarioMasterySummary[];
+  messages: Pick<ProgressMessages, "mastered" | "complete">;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -27,14 +31,16 @@ export function ScenarioMasteryList({
               <div className="flex items-center gap-1 rounded-full bg-linear-to-br from-accent-500 to-primary-500 px-2.5 py-1 text-on-color-light">
                 <Award className="size-3.5" aria-hidden="true" />
                 <span className="font-interface text-caption font-semibold">
-                  Mastered
+                  {messages.mastered}
                 </span>
               </div>
             )}
           </div>
           <ProgressBar
             value={scenario.completionPercent}
-            label={`${scenario.completionPercent}% complete`}
+            label={formatMessage(messages.complete, {
+              percent: scenario.completionPercent,
+            })}
             className="h-3"
             indicatorClassName="bg-secondary-500"
           />
