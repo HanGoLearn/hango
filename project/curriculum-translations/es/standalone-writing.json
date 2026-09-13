@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "targetLocale": "es",
+  "tasks": [
+    {
+      "id": "cmstlalwv002d3weoi30814jm",
+      "sourceTitle": "Weather",
+      "sourcePrompt": "Translate the following into Chinese: \"It's very cold today. Please wear a coat.\"",
+      "translation": {
+        "title": "Clima",
+        "prompt": "Traduce lo siguiente al mandarín: «Hoy hace mucho frío. Por favor, ponte un abrigo»."
+      }
+    },
+    {
+      "id": "cmstlalwv002e3weog0l1lb1r",
+      "sourceTitle": "Family",
+      "sourcePrompt": "Translate the following into Chinese: \"I have two older brothers and one younger sister. We often eat together.\"",
+      "translation": {
+        "title": "Familia",
+        "prompt": "Traduce lo siguiente al mandarín: «Tengo dos hermanos mayores y una hermana menor. A menudo comemos juntos»."
+      }
+    },
+    {
+      "id": "cmstlalwv002f3weo2tzt5n13",
+      "sourceTitle": "Hobbies",
+      "sourcePrompt": "Translate the following into Chinese: \"On weekends, I like to watch movies and read books.\"",
+      "translation": {
+        "title": "Pasatiempos",
+        "prompt": "Traduce lo siguiente al mandarín: «Los fines de semana me gusta ver películas y leer libros»."
+      }
+    },
+    {
+      "id": "cmstlalwv002g3weor5ox2sl7",
+      "sourceTitle": "Work",
+      "sourcePrompt": "Translate the following into Chinese: \"I work at a hospital. My job is very busy but interesting.\"",
+      "translation": {
+        "title": "Trabajo",
+        "prompt": "Traduce lo siguiente al mandarín: «Trabajo en un hospital. Mi trabajo es muy exigente, pero interesante»."
+      }
+    },
+    {
+      "id": "cmstlalwv002h3weofwmoq7d0",
+      "sourceTitle": "Health",
+      "sourcePrompt": "Translate the following into Chinese: \"I have a headache and a fever. I need to see a doctor.\"",
+      "translation": {
+        "title": "Salud",
+        "prompt": "Traduce lo siguiente al mandarín: «Me duele la cabeza y tengo fiebre. Necesito ir al médico»."
+      }
+    },
+    {
+      "id": "cmstlalwv002i3weo361laqju",
+      "sourceTitle": "Technology",
+      "sourcePrompt": "Translate the following into Chinese: \"My phone is broken. Can you help me fix it?\"",
+      "translation": {
+        "title": "Tecnología",
+        "prompt": "Traduce lo siguiente al mandarín: «Mi teléfono está averiado. ¿Puedes ayudarme a repararlo?»."
+      }
+    },
+    {
+      "id": "cmstlalwv002j3weo3ojkf58y",
+      "sourceTitle": "Directions",
+      "sourcePrompt": "Translate the following into Chinese: \"Excuse me, how do I get to the train station? Is it far from here?\"",
+      "translation": {
+        "title": "Indicaciones",
+        "prompt": "Traduce lo siguiente al mandarín: «Disculpe, ¿cómo llego a la estación de tren? ¿Está lejos de aquí?»."
+      }
+    },
+    {
+      "id": "cmstlalwv002k3weogdbd5ljg",
+      "sourceTitle": "Celebrations",
+      "sourcePrompt": "Translate the following into Chinese: \"Happy birthday! I wish you health and happiness.\"",
+      "translation": {
+        "title": "Celebraciones",
+        "prompt": "Traduce lo siguiente al mandarín: «¡Feliz cumpleaños! Te deseo salud y felicidad»."
+      }
+    },
+    {
+      "id": "cmstlalwv002l3weolnvtso2f",
+      "sourceTitle": "Complaints",
+      "sourcePrompt": "Translate the following into Chinese: \"This coffee is too cold, and the service is very slow.\"",
+      "translation": {
+        "title": "Quejas",
+        "prompt": "Traduce lo siguiente al mandarín: «Este café está demasiado frío y el servicio es muy lento»."
+      }
+    },
+    {
+      "id": "cmstlalwv002m3weoa49fkhvg",
+      "sourceTitle": "Apologies",
+      "sourcePrompt": "Translate the following into Chinese: \"I'm sorry I'm late. There was a lot of traffic.\"",
+      "translation": {
+        "title": "Disculpas",
+        "prompt": "Traduce lo siguiente al mandarín: «Lamento llegar tarde. Había mucho tráfico»."
+      }
+    },
+    {
+      "id": "cmstlalwv002n3weo2zekq96g",
+      "sourceTitle": "Transportation",
+      "sourcePrompt": "Translate the following into Chinese: \"I usually take the subway to work. It's faster than driving.\"",
+      "translation": {
+        "title": "Transporte",
+        "prompt": "Traduce lo siguiente al mandarín: «Normalmente voy al trabajo en metro. Es más rápido que conducir»."
+      }
+    },
+    {
+      "id": "cmstlalwv002o3weo9c80kvsx",
+      "sourceTitle": "School",
+      "sourcePrompt": "Translate the following into Chinese: \"I'm studying Chinese at university. It's difficult but very useful.\"",
+      "translation": {
+        "title": "Estudios",
+        "prompt": "Traduce lo siguiente al mandarín: «Estudio chino en la universidad. Es difícil, pero muy útil»."
+      }
+    },
+    {
+      "id": "cmstlalwv002p3weo1mnwsrbm",
+      "sourceTitle": "Movies",
+      "sourcePrompt": "Translate the following into Chinese: \"Last night I watched a very interesting movie with my friends.\"",
+      "translation": {
+        "title": "Películas",
+        "prompt": "Traduce lo siguiente al mandarín: «Anoche vi una película muy interesante con mis amigos»."
+      }
+    },
+    {
+      "id": "cmstlalwv002q3weoqkanyctd",
+      "sourceTitle": "Pets",
+      "sourcePrompt": "Translate the following into Chinese: \"I have a small dog. Every morning I take it for a walk.\"",
+      "translation": {
+        "title": "Mascotas",
+        "prompt": "Traduce lo siguiente al mandarín: «Tengo un perro pequeño. Todas las mañanas lo saco a pasear»."
+      }
+    },
+    {
+      "id": "cmstlalwv002r3weorfi17ut8",
+      "sourceTitle": "Banking",
+      "sourcePrompt": "Translate the following into Chinese: \"I want to open a bank account. What documents do I need?\"",
+      "translation": {
+        "title": "Operaciones bancarias",
+        "prompt": "Traduce lo siguiente al mandarín: «Quiero abrir una cuenta bancaria. ¿Qué documentos necesito?»."
+      }
+    }
+  ]
+}
