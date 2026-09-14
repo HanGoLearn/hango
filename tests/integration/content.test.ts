@@ -118,6 +118,25 @@ describe("content services (integration, real seeded database)", () => {
     expect(options.map((option) => option.id)).toEqual(expectedIds);
   });
 
+  it("localizes the Speaking Lab lesson picker without changing its lesson ids", async () => {
+    const [english, spanish] = await Promise.all([
+      getSpeakingLessonOptions("en"),
+      getSpeakingLessonOptions("es"),
+    ]);
+
+    expect(spanish.map((option) => option.id)).toEqual(
+      english.map((option) => option.id),
+    );
+    expect(english[0]).toMatchObject({
+      scenarioTitle: "Getting Started",
+      title: "Greetings and Introductions",
+    });
+    expect(spanish[0]).toMatchObject({
+      scenarioTitle: "Primeros pasos",
+      title: "Saludos y presentaciones",
+    });
+  });
+
   it("passes its own publish validation", async () => {
     const lesson = await db.lesson.findFirstOrThrow({
       where: { slug: "restaurant-entering-and-ordering" },

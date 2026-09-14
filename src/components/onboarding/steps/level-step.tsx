@@ -86,9 +86,7 @@ export function LevelStep({
   messages,
   commonMessages,
 }: LevelStepProps) {
-  const [value, setValue] = useState<string | undefined>(
-    initialValue ?? undefined,
-  );
+  const [value, setValue] = useState(initialValue ?? "");
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
 
@@ -116,7 +114,11 @@ export function LevelStep({
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      <RadioGroup value={value} onValueChange={setValue} className="grid grid-cols-2 gap-3">
+      <RadioGroup
+        value={value}
+        onValueChange={setValue}
+        className="grid grid-cols-2 gap-3"
+      >
         {OPTIONS.map((option) => (
           <RadioTile
             key={option.value}
@@ -125,7 +127,11 @@ export function LevelStep({
             icon={<option.icon className="size-5" aria-hidden="true" />}
             layout="row"
             className="min-h-[112px]"
-            meta={option.filled !== undefined ? <LevelBars filled={option.filled} /> : undefined}
+            meta={
+              option.filled !== undefined ? (
+                <LevelBars filled={option.filled} />
+              ) : undefined
+            }
           />
         ))}
       </RadioGroup>

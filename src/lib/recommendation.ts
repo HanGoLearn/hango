@@ -73,12 +73,12 @@ const SELF_REPORTED_LEVEL: Record<string, number> = {
 
 const GOAL_LABELS: Record<AppLocale, Record<string, string>> = {
   en: {
-  SPEAK_CONFIDENTLY: "Speak confidently",
-  HSK_PREPARATION: "Prepare for HSK",
-  TRAVEL: "Travel",
-  WORK: "Work",
-  STUDY: "Study",
-  PERSONAL_INTEREST: "Personal interest",
+    SPEAK_CONFIDENTLY: "Speak confidently",
+    HSK_PREPARATION: "Prepare for HSK",
+    TRAVEL: "Travel",
+    WORK: "Work",
+    STUDY: "Study",
+    PERSONAL_INTEREST: "Personal interest",
   },
   es: {
     SPEAK_CONFIDENTLY: "Hablar con confianza",
@@ -121,9 +121,24 @@ const GOAL_KEYWORDS: Record<string, string[]> = {
   SPEAK_CONFIDENTLY: ["daily", "conversation", "greeting", "social", "friend"],
   HSK_PREPARATION: [],
   TRAVEL: ["travel", "airport", "hotel", "transport", "direction", "trip"],
-  WORK: ["work", "office", "business", "meeting", "job", "interview", "colleague"],
+  WORK: [
+    "work",
+    "office",
+    "business",
+    "meeting",
+    "job",
+    "interview",
+    "colleague",
+  ],
   STUDY: ["school", "study", "class", "academic", "university", "campus"],
-  PERSONAL_INTEREST: ["culture", "hobby", "food", "entertainment", "shopping", "restaurant"],
+  PERSONAL_INTEREST: [
+    "culture",
+    "hobby",
+    "food",
+    "entertainment",
+    "shopping",
+    "restaurant",
+  ],
 };
 
 function chapterForLevel(level: number): JourneyChapter {
@@ -254,7 +269,7 @@ export async function computeRecommendation(
 ): Promise<Recommendation> {
   const [{ level, fromPlacement }, scenarios] = await Promise.all([
     getEffectiveLevel(input.userId, input.currentLevel),
-    getScenariosWithProgress(input.userId),
+    getScenariosWithProgress(input.userId, input.locale ?? "en"),
   ]);
 
   const notCompleted = scenarios.filter((s) => s.status !== "COMPLETED");
@@ -288,7 +303,9 @@ export async function computeRecommendation(
     ),
   );
   const primaryScenario = goalMatched ?? pool[0] ?? scenarios[0] ?? null;
-  const primary = primaryScenario ? toRecommendedScenario(primaryScenario) : null;
+  const primary = primaryScenario
+    ? toRecommendedScenario(primaryScenario)
+    : null;
 
   return {
     primary,

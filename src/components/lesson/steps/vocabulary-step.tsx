@@ -266,12 +266,17 @@ export function VocabularyStep({
 
         <div className="relative overflow-hidden rounded-panel bg-elevated px-5 py-5">
           <Body className="max-w-[70%] font-display text-[1.15rem] italic">
-            &ldquo;Here are the words you&rsquo;ll need for this lesson.&rdquo;
+            &ldquo;{messages.vocabulary.introduction}&rdquo;
           </Body>
           <div className="mt-2">
             <HanSpeechButton
-              text="Here are the words you'll need for this lesson."
+              text={messages.vocabulary.introduction}
               voice={DEFAULT_HAN_VOICE}
+              labels={{
+                listen: messages.vocabulary.listenToHan,
+                pause: messages.vocabulary.pauseHan,
+                unavailable: messages.vocabulary.voiceUnavailable,
+              }}
               responseLanguage="English"
             />
           </div>

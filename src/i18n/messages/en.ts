@@ -12,6 +12,45 @@ export const messages = {
   common: {
     languageSwitcher: "Choose interface language",
   },
+  learningJourney: {
+    title: "Learning Journey",
+    description: "Pick a real-world scenario and work through its lessons.",
+    emptyDescription:
+      "Scenarios like Restaurant, Hotel, and Shopping will appear here once the curriculum content is available.",
+    scenarioCount: "{count} scenarios",
+    currentChapter: "You are here",
+    chapters: {
+      BEGINNER: { title: "Foundations", subtitle: "Beginner level" },
+      INTERMEDIATE: {
+        title: "Everyday Life",
+        subtitle: "Intermediate level",
+      },
+      ADVANCED: {
+        title: "Advanced Situations",
+        subtitle: "Advanced level",
+      },
+    },
+    detail: {
+      outcomes: "What you'll be able to do",
+      finalMission: "Final Mission",
+      difficulty: {
+        BEGINNER: "Foundations",
+        INTERMEDIATE: "Everyday Life",
+        UPPER_INTERMEDIATE: "Upper Intermediate",
+        ADVANCED: "Advanced Situations",
+      },
+    },
+    lessonPath: {
+      status: {
+        COMPLETED: "Completed",
+        AVAILABLE: "Available",
+        LOCKED: "Locked",
+      },
+      placedByExam: "Placed by exam",
+      placedByExamTitle:
+        "Complete it yourself to confirm or improve your score.",
+    },
+  },
   lesson: {
     loading: "Loading your lesson.",
     loadErrorTitle: "Couldn't load this lesson",
@@ -118,6 +157,10 @@ export const messages = {
     },
     vocabulary: {
       title: "Vocabulary",
+      introduction: "Here are the words you'll need for this lesson.",
+      listenToHan: "Listen to Han",
+      pauseHan: "Pause Han",
+      voiceUnavailable: "Voice unavailable",
       empty: "No vocabulary in this lesson.",
       alreadyKnow: "Already know these {count} words?",
       quickTestDescription:

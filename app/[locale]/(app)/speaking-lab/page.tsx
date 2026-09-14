@@ -19,7 +19,7 @@ export default async function SpeakingLabPage({
   const { lessonId } = await searchParams;
   const [prompts, lessonOptions] = await Promise.all([
     getSpeakingPrompts(lessonId),
-    getSpeakingLessonOptions(),
+    getSpeakingLessonOptions(locale),
   ]);
   const activeLessonId = lessonId ?? lessonOptions[0]?.id ?? null;
 
@@ -31,6 +31,7 @@ export default async function SpeakingLabPage({
       activeLessonId={activeLessonId}
       showSpeakingTestMode={process.env.NODE_ENV === "development"}
       messages={dictionary.speakingLab}
+      journeyMessages={dictionary.learningJourney}
       levelMessages={dictionary.dashboard.levels}
     />
   );

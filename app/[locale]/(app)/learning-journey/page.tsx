@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/states";
 import { JourneyChapters } from "@/components/learning-journey/journey-chapters";
 import { getScenariosWithProgress } from "@/lib/content/learning-journey-data";
 import { isAppLocale } from "@/i18n/config";
+import { getDictionary } from "@/i18n/get-dictionary";
 
 export default async function LearningJourneyPage({
   params,
@@ -13,17 +14,18 @@ export default async function LearningJourneyPage({
   const { locale: localeParam } = await params;
   if (!isAppLocale(localeParam)) return null;
   const session = await auth();
-  const scenarios = await getScenariosWithProgress(
-    session!.user!.id!,
-    localeParam,
-  );
+  const [scenarios, dictionary] = await Promise.all([
+    getScenariosWithProgress(session!.user!.id!, localeParam),
+    getDictionary(localeParam),
+  ]);
+  const messages = dictionary.learningJourney;
 
   if (scenarios.length === 0) {
     return (
       <EmptyState
         headingLevel="h1"
-        title="Learning Journey"
-        description="Scenarios like Restaurant, Hotel, and Shopping will appear here once the curriculum content is available."
+        title={messages.title}
+        description={messages.emptyDescription}
       />
     );
   }
@@ -43,13 +45,15 @@ export default async function LearningJourneyPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <PageTitle>Learning Journey</PageTitle>
-        <Body className="text-text-secondary">
-          Pick a real-world scenario and work through its lessons.
-        </Body>
+        <PageTitle>{messages.title}</PageTitle>
+        <Body className="text-text-secondary">{messages.description}</Body>
       </div>
 
-      <JourneyChapters scenarios={cardScenarios} locale={localeParam} />
+      <JourneyChapters
+        scenarios={cardScenarios}
+        locale={localeParam}
+        messages={messages}
+      />
     </div>
   );
 }

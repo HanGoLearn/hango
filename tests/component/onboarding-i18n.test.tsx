@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { saveGoalStepAction } = vi.hoisted(() => ({
+const { saveGoalStepAction, getRecommendationAction } = vi.hoisted(() => ({
   saveGoalStepAction: vi.fn().mockResolvedValue({ status: "idle" }),
+  getRecommendationAction: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/onboarding", () => ({
@@ -16,7 +17,7 @@ vi.mock("@/lib/actions/onboarding", () => ({
   saveSkillsStepAction: vi.fn(),
   saveDailyTargetStepAction: vi.fn(),
   acknowledgePlacementOfferAction: vi.fn(),
-  getRecommendationAction: vi.fn(),
+  getRecommendationAction,
   completeOnboardingAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/avatar", () => ({ saveAvatarAnimalAction: vi.fn() }));
@@ -63,8 +64,12 @@ describe("localized onboarding", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Conoce a Han" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Comenzar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Conoce a Han" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Comenzar" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Conversa contigo")).toBeInTheDocument();
   });
 
@@ -85,5 +90,49 @@ describe("localized onboarding", () => {
     const formData = saveGoalStepAction.mock.calls[0]?.[1] as FormData;
     expect(formData.get("locale")).toBe("es");
     expect(formData.getAll("learningGoals")).toEqual(["TRAVEL"]);
+  });
+
+  it("does not repeat a domain when it has the same localized name as the scenario", async () => {
+    getRecommendationAction.mockResolvedValueOnce({
+      primary: {
+        scenarioSlug: "getting-started",
+        scenarioName: "Primeros pasos",
+        domainName: "Fundamentos",
+      },
+      reason: "Un buen punto de partida.",
+      goalMatches: [
+        {
+          goal: "SPEAK_CONFIDENTLY",
+          label: "Hablar con confianza",
+          scenarios: [
+            {
+              scenarioSlug: "making-friends",
+              scenarioName: "Hacer amigos",
+              domainName: "Hacer amigos",
+            },
+          ],
+        },
+      ],
+      placementLevel: null,
+    });
+
+    render(
+      <OnboardingWizard
+        locale="es"
+        messages={spanishMessages.onboarding}
+        initialStep="recommendation"
+        initialValues={{
+          ...emptyValues,
+          currentLevel: "HSK_1_2",
+          learningGoals: ["SPEAK_CONFIDENTLY"],
+          skillPriorities: ["SPEAKING"],
+        }}
+      />,
+    );
+
+    expect(await screen.findByText("Hacer amigos")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Hacer amigos \(Hacer amigos\)/),
+    ).not.toBeInTheDocument();
   });
 });

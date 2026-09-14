@@ -8,6 +8,7 @@ import {
 import type { JourneyChapter } from "@/lib/content/learning-journey";
 import { getPublishedJourneyLessonSequence } from "@/lib/content/learning-journey-data";
 import { createTtlCache } from "@/lib/ttl-cache";
+import type { AppLocale } from "@/i18n/config";
 
 export interface ShadowingLine {
   id: string;
@@ -58,8 +59,8 @@ const SPEAKING_LESSON_OPTIONS_TTL_MS = 5 * 60 * 1000;
  * repeat page load within the TTL window down to zero extra operations.
  */
 export const getSpeakingLessonOptions = createTtlCache(
-  async (): Promise<SpeakingLessonOption[]> => {
-    const lessons = await getPublishedJourneyLessonSequence();
+  async (locale: AppLocale = "en"): Promise<SpeakingLessonOption[]> => {
+    const lessons = await getPublishedJourneyLessonSequence(locale);
     return lessons.map((lesson) => ({
       id: lesson.id,
       slug: lesson.slug,

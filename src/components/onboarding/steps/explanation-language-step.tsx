@@ -34,9 +34,7 @@ export function ExplanationLanguageStep({
   messages,
   commonMessages,
 }: ExplanationLanguageStepProps) {
-  const [value, setValue] = useState<string | undefined>(
-    initialValue ?? undefined,
-  );
+  const [value, setValue] = useState(initialValue ?? "");
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
 
@@ -63,14 +61,16 @@ export function ExplanationLanguageStep({
       <div className="flex flex-col items-center gap-2 text-center">
         <HanMascot pose="wave" size={110} />
         <SectionTitle>{messages.title}</SectionTitle>
-        <Body className="text-text-secondary">
-          {messages.description}
-        </Body>
+        <Body className="text-text-secondary">{messages.description}</Body>
       </div>
 
       {error && <InformationBanner variant="error">{error}</InformationBanner>}
 
-      <RadioGroup value={value} onValueChange={setValue} className="grid grid-cols-2 gap-3">
+      <RadioGroup
+        value={value}
+        onValueChange={setValue}
+        className="grid grid-cols-2 gap-3"
+      >
         {OPTIONS.map((option) => (
           <RadioTile
             key={option.value}
@@ -84,7 +84,12 @@ export function ExplanationLanguageStep({
         <Button variant="tertiary" onClick={onBack} type="button">
           {commonMessages.back}
         </Button>
-        <Button size="lg" onClick={handleContinue} loading={isPending} disabled={!value}>
+        <Button
+          size="lg"
+          onClick={handleContinue}
+          loading={isPending}
+          disabled={!value}
+        >
           {commonMessages.continue}
         </Button>
       </div>

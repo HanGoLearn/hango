@@ -14,6 +14,46 @@ export const messages = {
   common: {
     languageSwitcher: "Elegir idioma de la interfaz",
   },
+  learningJourney: {
+    title: "Ruta de aprendizaje",
+    description:
+      "Elige una situación real y avanza paso a paso por sus lecciones.",
+    emptyDescription:
+      "Situaciones como Restaurante, Hotel y Compras aparecerán aquí cuando el contenido del curso esté disponible.",
+    scenarioCount: "{count} situaciones",
+    currentChapter: "Estás aquí",
+    chapters: {
+      BEGINNER: { title: "Fundamentos", subtitle: "Nivel principiante" },
+      INTERMEDIATE: {
+        title: "Vida cotidiana",
+        subtitle: "Nivel intermedio",
+      },
+      ADVANCED: {
+        title: "Situaciones avanzadas",
+        subtitle: "Nivel avanzado",
+      },
+    },
+    detail: {
+      outcomes: "Lo que podrás hacer",
+      finalMission: "Misión final",
+      difficulty: {
+        BEGINNER: "Fundamentos",
+        INTERMEDIATE: "Vida cotidiana",
+        UPPER_INTERMEDIATE: "Intermedio alto",
+        ADVANCED: "Situaciones avanzadas",
+      },
+    },
+    lessonPath: {
+      status: {
+        COMPLETED: "Completada",
+        AVAILABLE: "Disponible",
+        LOCKED: "Bloqueada",
+      },
+      placedByExam: "Asignada por la prueba de nivel",
+      placedByExamTitle:
+        "Completa la lección para confirmar o mejorar tu puntuación.",
+    },
+  },
   lesson: {
     loading: "Cargando tu lección.",
     loadErrorTitle: "No pudimos cargar esta lección",
@@ -120,6 +160,10 @@ export const messages = {
     },
     vocabulary: {
       title: "Vocabulario",
+      introduction: "Estas son las palabras que necesitarás en esta lección.",
+      listenToHan: "Escuchar a Han",
+      pauseHan: "Pausar a Han",
+      voiceUnavailable: "Voz no disponible",
       empty: "Esta lección no tiene vocabulario.",
       alreadyKnow: "¿Ya conoces estas {count} palabras?",
       quickTestDescription:

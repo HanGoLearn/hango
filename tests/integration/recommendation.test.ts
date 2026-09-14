@@ -42,6 +42,27 @@ describe("computeRecommendation (integration, real database)", () => {
     expect(result.placementLevel).toBeNull();
   });
 
+  it("returns localized scenario and domain names in a Spanish recommendation", async () => {
+    const user = await createTestUser(
+      `recommendation-spanish-${Date.now()}@hango.dev`,
+    );
+    const result = await computeRecommendation({
+      userId: user.id,
+      currentLevel: "HSK_1_2",
+      learningGoals: [],
+      skillPriorities: ["SPEAKING"],
+      locale: "es",
+    });
+
+    expect(result.primary).toMatchObject({
+      scenarioSlug: "getting-started",
+      scenarioName: "Primeros pasos",
+      domainName: "Fundamentos",
+    });
+    expect(result.reason).toContain("Primeros pasos");
+    expect(result.reason).not.toContain("Getting Started");
+  });
+
   it("uses the completed placement exam's lowest written skill, not the self-reported level, once one exists", async () => {
     const user = await createTestUser(
       `recommendation-placed-${Date.now()}@hango.dev`,
@@ -105,6 +126,8 @@ describe("computeRecommendation (integration, real database)", () => {
       skillPriorities: [],
     });
 
-    expect(result.goalMatches.find((m) => m.goal === "HSK_PREPARATION")).toBeUndefined();
+    expect(
+      result.goalMatches.find((m) => m.goal === "HSK_PREPARATION"),
+    ).toBeUndefined();
   });
 });

@@ -12,6 +12,8 @@ import {
 } from "@/lib/content/learning-journey";
 import { cn } from "@/lib/cn";
 import { localePath, type AppLocale } from "@/i18n/config";
+import { formatMessage } from "@/i18n/format";
+import type { AppMessages } from "@/i18n/messages/types";
 
 /**
  * Was `ScenarioCardProps` (2026-08-29: `scenario-card.tsx`'s `ScenarioCard`
@@ -35,6 +37,7 @@ export interface JourneyChapterScenario {
 export interface JourneyChaptersProps {
   scenarios: JourneyChapterScenario[];
   locale: AppLocale;
+  messages: AppMessages["learningJourney"];
 }
 
 /**
@@ -83,7 +86,11 @@ const ACCENT_CLASSES: Record<
  * no dimming on later chapters: every scenario stays clickable, this is
  * organization, not gating.
  */
-export function JourneyChapters({ scenarios, locale }: JourneyChaptersProps) {
+export function JourneyChapters({
+  scenarios,
+  locale,
+  messages,
+}: JourneyChaptersProps) {
   const chapters = new Map<JourneyChapter, JourneyChapterScenario[]>();
   for (const scenario of scenarios) {
     const chapter = resolveJourneyChapter(scenario.difficultyLevels);
@@ -103,6 +110,7 @@ export function JourneyChapters({ scenarios, locale }: JourneyChaptersProps) {
         if (!chapterScenarios || chapterScenarios.length === 0) return null;
 
         const config = CHAPTER_CONFIG[chapter];
+        const copy = messages.chapters[chapter];
         const accent = ACCENT_CLASSES[config.accent]!;
         const isCurrentChapter = chapter === currentChapter;
         const currentSlug = isCurrentChapter
@@ -130,17 +138,20 @@ export function JourneyChapters({ scenarios, locale }: JourneyChaptersProps) {
               </span>
               <div className="flex flex-col">
                 <SectionTitle className={cn("text-card-title", accent.title)}>
-                  {config.title}
+                  {copy.title}
                 </SectionTitle>
                 <Caption className="text-text-secondary">
-                  {config.subtitle} · {chapterScenarios.length} scenarios
+                  {copy.subtitle} ·{" "}
+                  {formatMessage(messages.scenarioCount, {
+                    count: chapterScenarios.length,
+                  })}
                 </Caption>
               </div>
 
               {isCurrentChapter && (
                 <Chip size="sm" className="ml-auto">
                   <HanAvatar pose="wave" size={20} />
-                  You are here
+                  {messages.currentChapter}
                 </Chip>
               )}
             </div>

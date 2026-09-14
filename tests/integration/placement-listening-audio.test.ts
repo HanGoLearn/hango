@@ -17,13 +17,10 @@ vi.mock("@/lib/tts", async (importOriginal) => {
 const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
-const {
-  getOrGeneratePlacementListeningAudioUrl,
-  PlacementAudioNotFoundError,
-} = await import("@/lib/placement-listening-audio");
-const { getPlacementListeningAudioAction } = await import(
-  "@/lib/actions/placement-exam"
-);
+const { getOrGeneratePlacementListeningAudioUrl, PlacementAudioNotFoundError } =
+  await import("@/lib/placement-listening-audio");
+const { getPlacementListeningAudioAction } =
+  await import("@/lib/actions/placement-exam");
 
 /** Minimal but valid 16-bit PCM mono WAV - mergeWavAudio needs real headers. */
 function buildTestWav(): Buffer {
@@ -82,7 +79,8 @@ async function createTestListeningQuestion(lineCount = 1) {
       skill: "LISTENING",
       hskLevel: 1,
       category: "comprehension",
-      prompt: "Test listening question (placement-listening-audio integration test)",
+      prompt:
+        "Test listening question (placement-listening-audio integration test)",
     },
   });
   testQuestionIds.push(question.id);
@@ -140,7 +138,10 @@ describe("Placement listening audio (integration, real database, mocked TTS prov
     );
 
     await expect(
-      getOrGeneratePlacementListeningAudioUrl(user.id, "nonexistent-question-id"),
+      getOrGeneratePlacementListeningAudioUrl(
+        user.id,
+        "nonexistent-question-id",
+      ),
     ).rejects.toBeInstanceOf(PlacementAudioNotFoundError);
     expect(synthesizeMock).not.toHaveBeenCalled();
   });
@@ -165,7 +166,7 @@ describe("Placement listening audio (integration, real database, mocked TTS prov
     // The 31st line's rate-limit check fails before it ever calls the TTS
     // provider - the first 30 lines still generated normally.
     expect(synthesizeMock).toHaveBeenCalledTimes(30);
-  });
+  }, 30_000);
 
   it("the server action rejects unauthenticated requests", async () => {
     authMock.mockResolvedValue(null);

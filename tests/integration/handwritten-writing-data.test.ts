@@ -11,12 +11,12 @@ const { evaluateHandwrittenWritingMock } = vi.hoisted(() => ({
   evaluateHandwrittenWritingMock: vi.fn(),
 }));
 vi.mock("@/lib/handwritten-writing-evaluator", () => ({
+  HANDWRITTEN_EVALUATION_MODEL: "test-handwritten-model",
   evaluateHandwrittenWriting: evaluateHandwrittenWritingMock,
 }));
 
-const { submitHandwrittenWriting, HandwrittenRateLimitError } = await import(
-  "@/lib/handwritten-writing-data"
-);
+const { submitHandwrittenWriting, HandwrittenRateLimitError } =
+  await import("@/lib/handwritten-writing-data");
 
 const testEmails: string[] = [];
 
@@ -40,9 +40,10 @@ function image(byte: number): { mimeType: string; bytes: ArrayBuffer } {
   return { mimeType: "image/jpeg", bytes: new Uint8Array([byte]).buffer };
 }
 
-function readableEvaluation(
-  transcription = "我家有四口人。",
-): { result: HandwrittenSubmissionResult; transcription: string } {
+function readableEvaluation(transcription = "我家有四口人。"): {
+  result: HandwrittenSubmissionResult;
+  transcription: string;
+} {
   return {
     transcription,
     result: {
@@ -64,9 +65,10 @@ function readableEvaluation(
   };
 }
 
-function unreadableEvaluation(
-  reason = "The photo is too blurry to read.",
-): { result: HandwrittenSubmissionResult; transcription: null } {
+function unreadableEvaluation(reason = "The photo is too blurry to read."): {
+  result: HandwrittenSubmissionResult;
+  transcription: null;
+} {
   return { transcription: null, result: { readable: false, reason } };
 }
 
@@ -75,9 +77,7 @@ describe("Handwritten writing submission (2026-09-05, integration, real database
     const user = await createTestUser(
       `handwritten-readable-${Date.now()}@hango.dev`,
     );
-    evaluateHandwrittenWritingMock.mockResolvedValueOnce(
-      readableEvaluation(),
-    );
+    evaluateHandwrittenWritingMock.mockResolvedValueOnce(readableEvaluation());
 
     const result = await submitHandwrittenWriting(user.id, "BASIC", "FAMILY", [
       image(1),
@@ -109,18 +109,16 @@ describe("Handwritten writing submission (2026-09-05, integration, real database
       readable: false,
       reason: "The photo is too blurry to read.",
     });
-    expect(
-      await db.writingAttempt.count({ where: { userId: user.id } }),
-    ).toBe(0);
+    expect(await db.writingAttempt.count({ where: { userId: user.id } })).toBe(
+      0,
+    );
   });
 
   it("shares one in-flight evaluation across identical accidental duplicate submissions", async () => {
     const user = await createTestUser(
       `handwritten-inflight-${Date.now()}@hango.dev`,
     );
-    evaluateHandwrittenWritingMock.mockResolvedValueOnce(
-      readableEvaluation(),
-    );
+    evaluateHandwrittenWritingMock.mockResolvedValueOnce(readableEvaluation());
     const images = [image(2)];
 
     const [first, second] = await Promise.all([
@@ -130,18 +128,16 @@ describe("Handwritten writing submission (2026-09-05, integration, real database
 
     expect(first).toBe(second);
     expect(evaluateHandwrittenWritingMock).toHaveBeenCalledTimes(1);
-    expect(
-      await db.writingAttempt.count({ where: { userId: user.id } }),
-    ).toBe(1);
+    expect(await db.writingAttempt.count({ where: { userId: user.id } })).toBe(
+      1,
+    );
   });
 
   it("reuses a just-finished result for an identical submission instead of calling the evaluator again", async () => {
     const user = await createTestUser(
       `handwritten-dedupe-${Date.now()}@hango.dev`,
     );
-    evaluateHandwrittenWritingMock.mockResolvedValueOnce(
-      readableEvaluation(),
-    );
+    evaluateHandwrittenWritingMock.mockResolvedValueOnce(readableEvaluation());
     const images = [image(3)];
 
     const first = await submitHandwrittenWriting(

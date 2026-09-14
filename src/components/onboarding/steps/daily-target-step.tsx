@@ -29,9 +29,7 @@ export function DailyTargetStep({
   messages,
   commonMessages,
 }: DailyTargetStepProps) {
-  const [value, setValue] = useState<string | undefined>(
-    initialValue ? String(initialValue) : undefined,
-  );
+  const [value, setValue] = useState(initialValue ? String(initialValue) : "");
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
 
@@ -80,7 +78,12 @@ export function DailyTargetStep({
         <Button variant="tertiary" onClick={onBack} type="button">
           {commonMessages.back}
         </Button>
-        <Button size="lg" onClick={handleContinue} loading={isPending} disabled={!value}>
+        <Button
+          size="lg"
+          onClick={handleContinue}
+          loading={isPending}
+          disabled={!value}
+        >
           {commonMessages.continue}
         </Button>
       </div>

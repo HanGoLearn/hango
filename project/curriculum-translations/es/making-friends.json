@@ -24,7 +24,7 @@
       "field": "name",
       "context": "Domain containing Making Friends",
       "source": "Making Friends",
-      "translation": "Haciendo Amigos"
+      "translation": "Hacer amigos"
     },
     {
       "key": "scenario:cmstlz3n004oe3weoqgvcic02:name",
@@ -33,7 +33,7 @@
       "field": "name",
       "context": "Scenario: Making Friends",
       "source": "Making Friends",
-      "translation": "Haciendo Amigos"
+      "translation": "Hacer amigos"
     },
     {
       "key": "scenario:cmstlz3n004oe3weoqgvcic02:description",

@@ -6,6 +6,7 @@ import type { LessonAvailabilityStatus } from "@/lib/content/learning-journey";
 import { starsForScore } from "@/lib/points-system";
 import { cn } from "@/lib/cn";
 import { localePath, type AppLocale } from "@/i18n/config";
+import type { AppMessages } from "@/i18n/messages/types";
 
 // Every 4th lesson in a level gets the "checkpoint" treatment (2026-08-29,
 // Milestone 3 - "milestone markers every few lessons"), reusing the final-
@@ -54,12 +55,6 @@ const STATUS_ICON: Record<LessonAvailabilityStatus, typeof Lock> = {
   LOCKED: Lock,
 };
 
-const STATUS_LABEL: Record<LessonAvailabilityStatus, string> = {
-  COMPLETED: "Completed",
-  AVAILABLE: "Available",
-  LOCKED: "Locked",
-};
-
 /**
  * "Refined path" direction (2026-08-21, approved over two other directions
  * compared in an artifact - project/learning-journey-optimization.md):
@@ -87,10 +82,12 @@ export function LessonPath({
   lessons,
   finalMissionTitle,
   locale,
+  messages,
 }: {
   lessons: LessonPathItem[];
   finalMissionTitle?: string;
   locale: AppLocale;
+  messages: AppMessages["learningJourney"]["lessonPath"];
 }) {
   const currentIndex = lessons.findIndex(
     (lesson) => lesson.availability === "AVAILABLE",
@@ -197,10 +194,10 @@ export function LessonPath({
                   <Chip
                     tone="accent"
                     size="sm"
-                    title="Complete it yourself to confirm or improve your score."
+                    title={messages.placedByExamTitle}
                   >
                     <GraduationCap className="size-3" aria-hidden="true" />
-                    Placed by exam
+                    {messages.placedByExam}
                   </Chip>
                 )}
               {lesson.availability === "COMPLETED" &&
@@ -214,7 +211,9 @@ export function LessonPath({
                 scaled to fit this more contained layout instead of
                 overhanging above a now much narrower row. */}
             {isCurrent && <HanAvatar pose="wave" size={32} />}
-            <span className="sr-only">{STATUS_LABEL[lesson.availability]}</span>
+            <span className="sr-only">
+              {messages.status[lesson.availability]}
+            </span>
           </div>
         );
 

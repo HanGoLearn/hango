@@ -26,7 +26,7 @@ export default async function SpeakingTestPage({
   if (process.env.NODE_ENV !== "development") notFound();
   const dictionary = await getDictionary(locale);
 
-  const lessonOptions = await getSpeakingLessonOptions();
+  const lessonOptions = await getSpeakingLessonOptions(locale);
   if (lessonOptions.length === 0) notFound();
 
   const { lessonId } = await searchParams;

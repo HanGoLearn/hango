@@ -64,7 +64,10 @@ export function RecommendationStep({
   if (!recommendation) {
     return (
       <div className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">
-        <Loader2 className="size-8 animate-spin text-primary-500" aria-hidden="true" />
+        <Loader2
+          className="size-8 animate-spin text-primary-500"
+          aria-hidden="true"
+        />
         <Body className="text-text-secondary">{messages.loading}</Body>
       </div>
     );
@@ -82,7 +85,9 @@ export function RecommendationStep({
           <Body className="text-text-secondary">{recommendation.reason}</Body>
         </InformationBanner>
       ) : (
-        <InformationBanner variant="info">{recommendation.reason}</InformationBanner>
+        <InformationBanner variant="info">
+          {recommendation.reason}
+        </InformationBanner>
       )}
 
       {recommendation.goalMatches.length > 0 && (
@@ -97,10 +102,19 @@ export function RecommendationStep({
                 {entry.scenarios.map((scenario) => (
                   <li key={scenario.scenarioSlug}>
                     <Body>
-                      {scenario.scenarioName}{" "}
-                      <span className="text-text-muted">
-                        ({scenario.domainName})
-                      </span>
+                      {scenario.scenarioName}
+                      {scenario.domainName.localeCompare(
+                        scenario.scenarioName,
+                        undefined,
+                        { sensitivity: "base" },
+                      ) !== 0 && (
+                        <>
+                          {" "}
+                          <span className="text-text-muted">
+                            ({scenario.domainName})
+                          </span>
+                        </>
+                      )}
                     </Body>
                   </li>
                 ))}
@@ -114,7 +128,12 @@ export function RecommendationStep({
         <Button variant="tertiary" onClick={onBack} type="button">
           {commonMessages.back}
         </Button>
-        <Button size="lg" onClick={handleStart} loading={isPending} className="flex-1">
+        <Button
+          size="lg"
+          onClick={handleStart}
+          loading={isPending}
+          className="flex-1"
+        >
           {messages.start}
         </Button>
       </div>

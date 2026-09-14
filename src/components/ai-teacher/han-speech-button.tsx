@@ -9,11 +9,17 @@ export function HanSpeechButton({
   voice,
   autoPlay = false,
   responseLanguage,
+  labels,
 }: {
   text: string;
   voice: string;
   autoPlay?: boolean;
   responseLanguage?: "English" | "Spanish" | "Chinese";
+  labels?: {
+    listen: string;
+    pause: string;
+    unavailable: string;
+  };
 }) {
   const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
   const [error, setError] = useState(false);
@@ -91,7 +97,11 @@ export function HanSpeechButton({
             <Volume2 className="size-3.5" aria-hidden="true" />
           )
         }
-        aria-label={state === "playing" ? "Pause Han" : "Listen to Han"}
+        aria-label={
+          state === "playing"
+            ? (labels?.pause ?? "Pause Han")
+            : (labels?.listen ?? "Listen to Han")
+        }
         disabled={state === "loading"}
         onClick={toggle}
         className="size-7"
@@ -101,7 +111,7 @@ export function HanSpeechButton({
           className="font-interface text-caption text-error-500"
           role="alert"
         >
-          Voice unavailable
+          {labels?.unavailable ?? "Voice unavailable"}
         </span>
       )}
     </div>

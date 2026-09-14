@@ -39,6 +39,7 @@ import type {
   SpeakingLessonOption,
 } from "@/lib/content/speaking-prompts";
 import type {
+  AppMessages,
   DashboardMessages,
   SpeakingLabMessages,
 } from "@/i18n/messages/types";
@@ -109,6 +110,7 @@ export function SpeakingLabHome({
   activeLessonId,
   showSpeakingTestMode = false,
   messages,
+  journeyMessages,
   levelMessages,
 }: {
   locale: AppLocale;
@@ -117,6 +119,7 @@ export function SpeakingLabHome({
   activeLessonId: string | null;
   showSpeakingTestMode?: boolean;
   messages: SpeakingLabMessages;
+  journeyMessages: AppMessages["learningJourney"];
   levelMessages: DashboardMessages["levels"];
 }) {
   const router = useRouter();
@@ -446,7 +449,7 @@ export function SpeakingLabHome({
                     )}
                     aria-hidden="true"
                   />
-                  {config.title}
+                  {journeyMessages.chapters[chapter].title}
                 </button>
               );
             })}
@@ -460,7 +463,7 @@ export function SpeakingLabHome({
                   onClick={() => setExpandedScenario(null)}
                   className="w-fit font-interface text-caption text-primary-300 hover:underline"
                 >
-                  ← {CHAPTER_CONFIG[activeChapter].title}
+                  ← {journeyMessages.chapters[activeChapter].title}
                 </button>
                 <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
                   {(optionsByChapter.get(activeChapter) ?? [])

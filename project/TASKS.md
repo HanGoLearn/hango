@@ -5631,3 +5631,27 @@ test verification, not just a read-through.
   Turbopack development cache that still referenced the removed unprefixed
   `/tienda` route. Fresh ES/EN requests and a complete production build now
   pass; the build includes `/[locale]/tienda` and all 56 generated pages.
+
+## Authenticated bilingual QA closure (2026-09-13) — ✅ Complete
+
+- [x] Completed an authenticated ES/EN learner walkthrough with an isolated
+  temporary account: onboarding, Dashboard, Learning Journey, scenario detail,
+  lesson vocabulary, Speaking Lab, Writing Lab, Progress and Store.
+- [x] Localized the remaining authored-content chrome in Learning Journey and
+  lessons: chapter names, lesson counts, current position, availability states,
+  difficulty labels, outcome/final-mission headings, vocabulary introduction
+  and Han audio accessibility labels.
+- [x] Fixed locale propagation in onboarding recommendations and Speaking Lab
+  lesson options. Spanish recommendations now use the translated curriculum;
+  duplicate domain/scenario labels are collapsed, including `Hacer amigos`.
+- [x] Removed uncontrolled-to-controlled select warnings in onboarding without
+  changing saved learner values or the onboarding contract.
+- [x] Preserved the Han boundary: no Han Tutor/Companion personality, prompt,
+  memory, voice, transcription, pedagogy, assessment or runtime behavior was
+  changed. The reusable speech button only gained optional localized UI labels.
+- [x] Final verification passes: Spanish curriculum coverage remains 100% in
+  all 22 measured areas (31,996 units); TypeScript and production build pass;
+  678/678 unit, 69/69 component, 268/268 integration and 1/1 smoke tests pass.
+- [x] Deleted the isolated QA account and verified that no account row remains;
+  the local development server is running and the browser is signed out on the
+  Spanish login screen.

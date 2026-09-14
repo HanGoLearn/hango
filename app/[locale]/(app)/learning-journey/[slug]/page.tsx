@@ -10,8 +10,8 @@ import { LessonPath } from "@/components/learning-journey/lesson-path";
 import { ScenarioFinalMission } from "@/components/mission/scenario-final-mission";
 import { ScenarioCompletionSummary } from "@/components/learning-journey/scenario-completion-summary";
 import { getScenarioDetailWithProgress } from "@/lib/content/learning-journey-data";
-import { DIFFICULTY_LABELS } from "@/lib/content/learning-journey";
 import { isAppLocale } from "@/i18n/config";
+import { getDictionary } from "@/i18n/get-dictionary";
 
 export default async function ScenarioDetailPage({
   params,
@@ -21,11 +21,10 @@ export default async function ScenarioDetailPage({
   const { locale, slug } = await params;
   if (!isAppLocale(locale)) return null;
   const session = await auth();
-  const scenario = await getScenarioDetailWithProgress(
-    slug,
-    session!.user!.id!,
-    locale,
-  );
+  const [scenario, dictionary] = await Promise.all([
+    getScenarioDetailWithProgress(slug, session!.user!.id!, locale),
+    getDictionary(locale),
+  ]);
 
   if (!scenario) notFound();
 
@@ -57,7 +56,9 @@ export default async function ScenarioDetailPage({
 
       {scenario.communicationOutcomes.length > 0 && (
         <div className="flex flex-col gap-2">
-          <SectionTitle>What you&apos;ll be able to do</SectionTitle>
+          <SectionTitle>
+            {dictionary.learningJourney.detail.outcomes}
+          </SectionTitle>
           <ul className="flex flex-col gap-1">
             {scenario.communicationOutcomes.map((outcome) => (
               <li key={outcome}>
@@ -71,11 +72,14 @@ export default async function ScenarioDetailPage({
       {scenario.levels.map((level, index) => (
         <div key={level.id} className="flex flex-col gap-3">
           <SectionTitle>
-            {DIFFICULTY_LABELS[level.difficulty] ?? level.difficulty}
+            {dictionary.learningJourney.detail.difficulty[
+              level.difficulty as keyof typeof dictionary.learningJourney.detail.difficulty
+            ] ?? level.difficulty}
           </SectionTitle>
           <LessonPath
             locale={locale}
             lessons={level.lessons}
+            messages={dictionary.learningJourney.lessonPath}
             finalMissionTitle={
               index === scenario.levels.length - 1
                 ? finalMission?.title
@@ -87,7 +91,9 @@ export default async function ScenarioDetailPage({
 
       {finalMission && (
         <div className="flex flex-col gap-2">
-          <SectionTitle>Final Mission</SectionTitle>
+          <SectionTitle>
+            {dictionary.learningJourney.detail.finalMission}
+          </SectionTitle>
           <ScenarioFinalMission
             mission={{
               id: finalMission.id,
