@@ -20,6 +20,7 @@ import { lookupVocabularyWordAction } from "@/lib/actions/vocabulary-lookup";
 import { VocabularyLookupCard } from "@/components/han/vocabulary-lookup-card";
 import type { VocabularyLookupResult } from "@/lib/vocabulary-lookup-prompt";
 import type { HanVocabularyMessages } from "@/i18n/messages/types";
+import type { AppLocale } from "@/i18n/config";
 import { localizeVocabularyError } from "@/i18n/vocabulary";
 
 type View = "hub" | "tutor" | "companion" | "vocabulary";
@@ -150,7 +151,13 @@ function HanCompanionView() {
  * per press). Never touches points/achievements/coins - same "pure
  * reference, no scoring" spirit as Han Companion.
  */
-function HanVocabularyView({ messages }: { messages: HanVocabularyMessages }) {
+function HanVocabularyView({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: HanVocabularyMessages;
+}) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +168,7 @@ function HanVocabularyView({ messages }: { messages: HanVocabularyMessages }) {
     if (!trimmed || loading) return;
     setLoading(true);
     setError(null);
-    const response = await lookupVocabularyWordAction(trimmed);
+    const response = await lookupVocabularyWordAction(trimmed, locale);
     setLoading(false);
     if (!response.ok) {
       setError(localizeVocabularyError(response.error, messages.errors));
@@ -238,7 +245,13 @@ const VIEW_TITLE: Record<Exclude<View, "hub">, string> = {
  * teaser - explicitly out of scope for this build (user's own call,
  * 2026-08-31).
  */
-export function HanHub({ messages }: { messages: HanVocabularyMessages }) {
+export function HanHub({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: HanVocabularyMessages;
+}) {
   const { setMode, openTeacher } = useAiTeacher();
   const [view, setView] = useState<View>("hub");
 
@@ -293,7 +306,7 @@ export function HanHub({ messages }: { messages: HanVocabularyMessages }) {
         {view === "companion" ? (
           <HanCompanionView />
         ) : view === "vocabulary" ? (
-          <HanVocabularyView messages={messages} />
+          <HanVocabularyView locale={locale} messages={messages} />
         ) : (
           <div className="min-h-[32rem] flex-1 rounded-panel border border-border bg-surface p-4">
             <AiTeacherChat rolePlayEnabled={false} spacious />

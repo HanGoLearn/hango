@@ -5497,14 +5497,16 @@ test verification, not just a read-through.
   unit 664/664 and component 64/64 pass. The protected ES route redirects to
   login with `callbackUrl=/es/writing-lab`; visual content QA awaits an
   authenticated learner session and no credentials were automated.
-- [x] Phase 3D Han Vocabulary (2026-09-10): localized its benefits, search
-  controls, automatic-level guidance, known operational errors, frequency
-  labels and result-card headings in the Han hub and Dashboard word-of-the-day
-  modal. Chinese, pinyin and generated definitions/examples remain verbatim.
-- [x] Kept Han Vocabulary behavior unchanged: automatic earned-level lookup,
-  independent explanation-language preference, cache keys, input/rate/daily
-  limits, provider prompts, parsing, paid-call accounting and activity
-  attribution are unchanged. Han Tutor and Han Companion were not reconfigured.
+- [x] Phase 3D Han Vocabulary (2026-09-10, output-language correction
+  2026-09-13): localized its benefits, search controls, automatic-level
+  guidance, known operational errors, frequency labels and result-card
+  headings in the Han hub and Dashboard word-of-the-day modal. Chinese and
+  pinyin remain verbatim; generated learner-facing content now follows the
+  active ES/EN interface locale.
+- [x] Kept Han Vocabulary's automatic earned-level lookup, input/rate/daily
+  limits, parsing, paid-call accounting and activity attribution unchanged.
+  Cache keys separate results by word, level and interface locale. Han Tutor
+  and Han Companion were not reconfigured.
 - [x] Phase 3D validation: production build, typecheck and scoped ESLint pass;
   unit 665/665 and component 65/65 pass. The protected ES route redirects with
   `callbackUrl=/es/han`; authenticated visual content QA remains pending and no
@@ -5655,3 +5657,10 @@ test verification, not just a read-through.
 - [x] Deleted the isolated QA account and verified that no account row remains;
   the local development server is running and the browser is signed out on the
   Spanish login screen.
+- [x] Han Vocabulary language correction (2026-09-13): searches launched from
+  the Spanish interface now generate the complete learner-facing card in
+  Spanish (gloss, explanation, example translations, related meanings,
+  registers, mistakes and curiosities); `/en` remains English. This applies to
+  both the Han hub and Dashboard word-of-the-day modal, while Mandarin and
+  pinyin remain unchanged. Han Tutor/Companion behavior and language
+  preferences remain separate and untouched.

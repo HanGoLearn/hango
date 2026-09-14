@@ -108,7 +108,10 @@ describe("Words of the Day (2026-09-01, integration, real database)", () => {
       ),
     );
 
-    const response = await lookupVocabularyWordAction(target.chineseForm);
+    const response = await lookupVocabularyWordAction(
+      target.chineseForm,
+      "en",
+    );
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.result.hero.title).toBe(target.chineseForm);

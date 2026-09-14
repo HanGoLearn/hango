@@ -11,13 +11,18 @@ describe("buildVocabularyLookupPrompt", () => {
     expect(prompt).toContain("HSK 4");
   });
 
-  it("always asks for the explanation in the learner's language, at every level", () => {
+  it("keeps every learner-facing result field in the interface language at every level", () => {
     for (const level of [0, 1, 3, 6, 9]) {
       const prompt = buildVocabularyLookupPrompt("要", level, "Spanish");
       expect(prompt).toContain(
-        'THE EXPLANATION ITSELF (the "explanation" field) is ALWAYS written in Spanish',
+        "ALL learner-facing prose is ALWAYS written in Spanish",
       );
-      expect(prompt).toContain("it never switches to Chinese");
+      expect(prompt).toContain("every examples[].translation");
+      expect(prompt).toContain("every related[].meaning");
+      expect(prompt).toContain("mistakes, and curiosity");
+      expect(prompt).toContain(
+        "Never use English learner-facing prose when the requested language is Spanish",
+      );
     }
   });
 

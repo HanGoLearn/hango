@@ -4,6 +4,7 @@ import { estimateCostUsd } from "@/lib/ai/cost";
 import { recordAiUsage, trackAiOperation } from "@/lib/ai-usage";
 import { hskNumberForPoints } from "@/lib/points-system";
 import { createTtlCache } from "@/lib/ttl-cache";
+import type { AppLocale } from "@/i18n/config";
 import {
   buildVocabularyLookupPrompt,
   parseVocabularyLookupResult,
@@ -37,7 +38,7 @@ function checkRateLimit(userId: string): void {
 }
 
 /**
- * The same word, same level, same explanation language never needs to be
+ * The same word, same level, same interface language never needs to be
  * regenerated within the window - a real cost saver (Tier 3 pattern,
  * project/db-operations-optimization.md) since the content itself isn't
  * per-user, only the (word, level, language) key is. Deliberately
@@ -59,7 +60,7 @@ const generateVocabularyLookup = createTtlCache(
     userId: string,
     normalizedInput: string,
     hskLevel: number,
-    explanationLanguage: string,
+    interfaceLanguage: string,
   ): Promise<VocabularyLookupResult | null> => {
     const provider = getAiProvider();
     const result = await trackAiOperation(
@@ -69,7 +70,7 @@ const generateVocabularyLookup = createTtlCache(
           systemPrompt: buildVocabularyLookupPrompt(
             normalizedInput,
             hskLevel,
-            explanationLanguage,
+            interfaceLanguage,
           ),
           messages: [{ role: "user", content: normalizedInput }],
           maxOutputTokens: 900,
@@ -91,14 +92,13 @@ const generateVocabularyLookup = createTtlCache(
     return parseVocabularyLookupResult(result.content);
   },
   LOOKUP_CACHE_TTL_MS,
-  (_userId, normalizedInput, hskLevel, explanationLanguage) =>
-    `${normalizedInput}:${hskLevel}:${explanationLanguage}`,
+  (_userId, normalizedInput, hskLevel, interfaceLanguage) =>
+    `${normalizedInput}:${hskLevel}:${interfaceLanguage}`,
 );
 
-const EXPLANATION_LANGUAGE_LABEL: Record<string, string> = {
-  EN: "English",
-  ES: "Spanish",
-  ZH: "Chinese",
+const INTERFACE_LANGUAGE_LABEL: Record<AppLocale, string> = {
+  en: "English",
+  es: "Spanish",
 };
 
 /**
@@ -113,6 +113,7 @@ const EXPLANATION_LANGUAGE_LABEL: Record<string, string> = {
 export async function lookupVocabularyWord(
   userId: string,
   input: string,
+  locale: AppLocale = "en",
 ): Promise<VocabularyLookupResult | null> {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
@@ -127,19 +128,17 @@ export async function lookupVocabularyWord(
 
   const profile = await db.learnerProfile.findUnique({
     where: { userId },
-    select: { generalLevelPoints: true, explanationLanguage: true },
+    select: { generalLevelPoints: true },
   });
   const hskLevel = hskNumberForPoints(profile?.generalLevelPoints ?? 0);
-  const explanationLanguage =
-    EXPLANATION_LANGUAGE_LABEL[profile?.explanationLanguage ?? "EN"] ??
-    "English";
+  const interfaceLanguage = INTERFACE_LANGUAGE_LABEL[locale];
 
   try {
     return await generateVocabularyLookup(
       userId,
       trimmed,
       hskLevel,
-      explanationLanguage,
+      interfaceLanguage,
     );
   } catch (error) {
     if (error instanceof AiProviderError) return null;

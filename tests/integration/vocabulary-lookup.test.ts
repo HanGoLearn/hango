@@ -111,6 +111,30 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     expect(systemPrompt).toContain("HSK 8");
   });
 
+  it("uses the visible Spanish interface for every generated field, independently of Han's explanation preference", async () => {
+    const user = await createTestUser(
+      `vocab-lookup-spanish-${Date.now()}@hango.dev`,
+      0,
+    );
+    await db.learnerProfile.update({
+      where: { userId: user.id },
+      data: { explanationLanguage: "EN", interfaceLanguage: "ES" },
+    });
+    completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
+
+    await lookupVocabularyWord(user.id, "要-spanish-interface", "es");
+
+    const [{ systemPrompt }] = completeMock.mock.calls[0]!;
+    expect(systemPrompt).toContain(
+      "ALL learner-facing prose is ALWAYS written in Spanish",
+    );
+    expect(systemPrompt).toContain("every examples[].translation");
+    expect(systemPrompt).toContain("every related[].meaning");
+    expect(systemPrompt).toContain(
+      "Never use English learner-facing prose when the requested language is Spanish",
+    );
+  });
+
   it("caches a lookup - the same word, level, and language never calls the AI provider twice", async () => {
     const user = await createTestUser(
       `vocab-lookup-cache-${Date.now()}@hango.dev`,
@@ -192,7 +216,7 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     void user;
     completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
 
-    const response = await lookupVocabularyWordAction("要");
+    const response = await lookupVocabularyWordAction("要", "en");
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.result.hero.title).toBe("要");
@@ -203,7 +227,10 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     await createTestUser(`vocab-lookup-garbled-${Date.now()}@hango.dev`, 0);
     completeMock.mockResolvedValueOnce(mockCompletion("not json at all"));
 
-    const response = await lookupVocabularyWordAction("要-garbled-test");
+    const response = await lookupVocabularyWordAction(
+      "要-garbled-test",
+      "en",
+    );
     expect(response.ok).toBe(false);
     if (!response.ok) {
       expect(response.error).toContain("couldn't find that word");
@@ -212,8 +239,17 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
 
   it("the server action requires authentication", async () => {
     authMock.mockResolvedValue(null);
-    await expect(lookupVocabularyWordAction("要")).rejects.toThrow(
+    await expect(lookupVocabularyWordAction("要", "en")).rejects.toThrow(
       "Not authenticated",
     );
+  });
+
+  it("rejects an unsupported interface locale", async () => {
+    await createTestUser(`vocab-lookup-locale-${Date.now()}@hango.dev`, 0);
+
+    await expect(lookupVocabularyWordAction("要", "fr")).rejects.toThrow(
+      "Invalid locale",
+    );
+    expect(completeMock).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import {
 } from "@/lib/vocabulary-lookup-data";
 import { DailyUsageCapExceededError } from "@/lib/ai-usage";
 import type { VocabularyLookupResult } from "@/lib/vocabulary-lookup-prompt";
+import { isAppLocale } from "@/i18n/config";
 
 export type LookupVocabularyWordResult =
   | { ok: true; result: VocabularyLookupResult }
@@ -19,12 +20,14 @@ export type LookupVocabularyWordResult =
  */
 export async function lookupVocabularyWordAction(
   input: string,
+  locale: string,
 ): Promise<LookupVocabularyWordResult> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
+  if (!isAppLocale(locale)) throw new Error("Invalid locale");
 
   try {
-    const result = await lookupVocabularyWord(session.user.id, input);
+    const result = await lookupVocabularyWord(session.user.id, input, locale);
     if (!result) {
       return {
         ok: false,

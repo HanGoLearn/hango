@@ -44,6 +44,7 @@ const RESULT: VocabularyLookupResult = {
 };
 
 const ENGLISH_PROPS = {
+  locale: "en" as const,
   messages: englishMessages.dashboard.words,
   vocabularyMessages: englishMessages.hanVocabulary,
 };
@@ -70,6 +71,7 @@ describe("WordsOfTheDayCard", () => {
     );
     render(
       <WordsOfTheDayCard
+        locale="es"
         words={WORDS}
         messages={spanishMessages.dashboard.words}
         vocabularyMessages={spanishMessages.hanVocabulary}
@@ -88,6 +90,7 @@ describe("WordsOfTheDayCard", () => {
     });
     render(
       <WordsOfTheDayCard
+        locale="es"
         words={WORDS}
         messages={spanishMessages.dashboard.words}
         vocabularyMessages={spanishMessages.hanVocabulary}
@@ -113,7 +116,7 @@ describe("WordsOfTheDayCard", () => {
     render(<WordsOfTheDayCard words={WORDS} {...ENGLISH_PROPS} />);
     await userEvent.click(screen.getByText("要"));
 
-    expect(lookupVocabularyWordAction).toHaveBeenCalledWith("要");
+    expect(lookupVocabularyWordAction).toHaveBeenCalledWith("要", "en");
     expect(
       await screen.findByText("Used to say you want something."),
     ).toBeInTheDocument();

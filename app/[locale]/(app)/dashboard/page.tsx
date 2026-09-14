@@ -422,6 +422,7 @@ export default async function DashboardPage({
               Leaderboard/Achievements/Avatar teasers below - those reward
               progress a brand-new learner doesn't have yet. */}
           <WordsOfTheDayCard
+            locale={locale}
             words={data.wordsOfTheDay}
             messages={messages.words}
             vocabularyMessages={dictionary.hanVocabulary}

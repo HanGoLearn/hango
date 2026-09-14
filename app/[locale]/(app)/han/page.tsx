@@ -11,5 +11,5 @@ export default async function HanPage({
   if (!isAppLocale(locale)) return null;
   const dictionary = await getDictionary(locale);
 
-  return <HanHub messages={dictionary.hanVocabulary} />;
+  return <HanHub locale={locale} messages={dictionary.hanVocabulary} />;
 }

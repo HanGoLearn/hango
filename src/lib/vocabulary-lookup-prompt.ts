@@ -52,13 +52,13 @@ function relatedCeiling(hskLevel: number): number {
 export function buildVocabularyLookupPrompt(
   input: string,
   hskLevel: number,
-  explanationLanguage: string,
+  interfaceLanguage: string,
 ): string {
   const allowMistakes = hskLevel >= 2;
   const chengyuAllowed = hskLevel >= 7;
   const glossRule =
     hskLevel >= 8
-      ? `Always include "chineseGloss": a short definition written 100% in Chinese (a bonus alongside the clear ${explanationLanguage} explanation, never a replacement for it).`
+      ? `Always include "chineseGloss": a short definition written 100% in Chinese (a bonus alongside the clear ${interfaceLanguage} explanation, never a replacement for it).`
       : hskLevel >= 7
         ? `Include "chineseGloss" as an optional bonus - a short 100% Chinese definition - if it feels natural; otherwise use null.`
         : `Set "chineseGloss" to null - this learner isn't ready for a Chinese-only definition yet.`;
@@ -69,7 +69,7 @@ export function buildVocabularyLookupPrompt(
     "",
     "INPUT HANDLING: the learner may have typed the Chinese characters directly, or typed pinyin (romanized) because they don't have a Chinese keyboard. If the input looks like pinyin, resolve it to the single most likely Mandarin word and explain THAT word - state your interpretation plainly in the hero's subtitle so it's never ambiguous which word you chose. Only ask a brief clarifying question (skip everything else and return a minimal response asking it) if two genuinely different, similarly plausible words could be meant - do not guess wildly or invent a word that doesn't exist.",
     "",
-    `THE EXPLANATION ITSELF (the "explanation" field) is ALWAYS written in ${explanationLanguage}, at every level from 0 to 9 - it never switches to Chinese, no matter how advanced the learner is. What changes with level is how much nuance you cover and how many examples/related words you include, never the language the explanation is written in.`,
+    `ALL learner-facing prose is ALWAYS written in ${interfaceLanguage}, at every level from 0 to 9. This includes hero.subtitle's short gloss, explanation, every examples[].translation, every related[].meaning and related[].register, mistakes, and curiosity. Chinese characters stay in Chinese and pinyin stays as tone-mark pinyin. Never use English learner-facing prose when the requested language is Spanish, and never switch the explanation to Chinese, no matter how advanced the learner is. What changes with level is how much nuance you cover and how many examples/related words you include, never the display language.`,
     "",
     "LEVEL-SPECIFIC RULES:",
     hskLevel === 0

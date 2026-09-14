@@ -14,6 +14,7 @@ import type {
   DashboardMessages,
   HanVocabularyMessages,
 } from "@/i18n/messages/types";
+import type { AppLocale } from "@/i18n/config";
 import { formatMessage } from "@/i18n/format";
 import { localizeVocabularyError } from "@/i18n/vocabulary";
 
@@ -33,10 +34,12 @@ import { localizeVocabularyError } from "@/i18n/vocabulary";
  * free from Radix instead of only a hand-rolled close button.
  */
 export function WordsOfTheDayCard({
+  locale,
   words,
   messages,
   vocabularyMessages,
 }: {
+  locale: AppLocale;
   words: WordOfTheDay[];
   messages: DashboardMessages["words"];
   vocabularyMessages: HanVocabularyMessages;
@@ -53,7 +56,7 @@ export function WordsOfTheDayCard({
     setLoading(true);
     setError(null);
     setResult(null);
-    const response = await lookupVocabularyWordAction(chineseForm);
+    const response = await lookupVocabularyWordAction(chineseForm, locale);
     setLoading(false);
     if (!response.ok) {
       setError(
