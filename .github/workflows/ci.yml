@@ -52,6 +52,29 @@ jobs:
 
       - run: npx prisma migrate deploy
 
+      # Every integration test assumes the real authored curriculum exists
+      # (project/TASKS.md's own note on tests/integration/content.test.ts) -
+      # migrate deploy only creates empty tables. The CI Postgres container
+      # starts with zero rows, so without this every scenario/lesson/
+      # placement-question lookup returns null and the suite fails for a
+      # reason that has nothing to do with the code under test.
+      - run: npm run db:seed
+
+      # The English seed above has no Spanish content of its own - it's
+      # loaded separately from the reviewed translation packages already
+      # committed under project/curriculum-translations/es/, the same way a
+      # real deployment would apply them. tests/integration/content.test.ts's
+      # "localizes the Speaking Lab lesson picker" case asserts real Spanish
+      # strings (e.g. "Primeros pasos"), so this has to run before the test
+      # steps, not just the seed.
+      - name: Import Spanish curriculum translations
+        run: |
+          set -e
+          for file in project/curriculum-translations/es/*.json; do
+            echo "Importing $file"
+            npm run content:i18n:exchange -- import "$file" --apply
+          done
+
       - run: npm run typecheck
       - run: npm run lint
 
