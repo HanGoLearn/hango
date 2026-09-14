@@ -20,10 +20,17 @@ const { lookupVocabularyWordAction } = await import(
 );
 
 const testEmails: string[] = [];
+const testCacheInputs: string[] = [];
 
 afterEach(async () => {
   vi.clearAllMocks();
   completeMock.mockReset();
+  if (testCacheInputs.length > 0) {
+    await db.vocabularyLookupCache.deleteMany({
+      where: { normalizedInput: { in: testCacheInputs } },
+    });
+    testCacheInputs.length = 0;
+  }
   if (testEmails.length > 0) {
     await db.user.deleteMany({ where: { email: { in: testEmails } } });
     testEmails.length = 0;
@@ -108,10 +115,9 @@ describe("Words of the Day (2026-09-01, integration, real database)", () => {
       ),
     );
 
-    const response = await lookupVocabularyWordAction(
-      target.chineseForm,
-      "en",
-    );
+    const lookupInput = `wotd-test-${Date.now()}`;
+    testCacheInputs.push(lookupInput);
+    const response = await lookupVocabularyWordAction(lookupInput, "en");
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.result.hero.title).toBe(target.chineseForm);

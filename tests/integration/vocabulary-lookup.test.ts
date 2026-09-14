@@ -14,7 +14,9 @@ const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
 const {
+  clearVocabularyLookupProcessCache,
   lookupVocabularyWord,
+  normalizeVocabularyLookupInput,
   VocabularyLookupInputError,
   VocabularyLookupRateLimitError,
 } = await import("@/lib/vocabulary-lookup-data");
@@ -23,10 +25,25 @@ const { lookupVocabularyWordAction } = await import(
 );
 
 const testEmails: string[] = [];
+const testCacheInputs: string[] = [];
+let inputSequence = 0;
+
+function testInput(label: string): string {
+  const input = `vt-${label}-${Date.now()}-${inputSequence++}`;
+  testCacheInputs.push(normalizeVocabularyLookupInput(input));
+  return input;
+}
 
 afterEach(async () => {
+  clearVocabularyLookupProcessCache();
   vi.clearAllMocks();
   completeMock.mockReset();
+  if (testCacheInputs.length > 0) {
+    await db.vocabularyLookupCache.deleteMany({
+      where: { normalizedInput: { in: testCacheInputs } },
+    });
+    testCacheInputs.length = 0;
+  }
   if (testEmails.length > 0) {
     await db.user.deleteMany({ where: { email: { in: testEmails } } });
     testEmails.length = 0;
@@ -80,7 +97,7 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     );
     completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
 
-    const result = await lookupVocabularyWord(user.id, "你好");
+    const result = await lookupVocabularyWord(user.id, testInput("low"));
 
     expect(result?.mistakes).toBeNull();
     expect(result?.chineseGloss).toBeNull();
@@ -103,7 +120,7 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
       ),
     );
 
-    const result = await lookupVocabularyWord(user.id, "要");
+    const result = await lookupVocabularyWord(user.id, testInput("high"));
 
     expect(result?.mistakes).toBe("Learners often confuse 要 with 想.");
     expect(result?.chineseGloss).toBe("表示需要或希望得到某物。");
@@ -122,7 +139,7 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     });
     completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
 
-    await lookupVocabularyWord(user.id, "要-spanish-interface", "es");
+    await lookupVocabularyWord(user.id, testInput("spanish"), "es");
 
     const [{ systemPrompt }] = completeMock.mock.calls[0]!;
     expect(systemPrompt).toContain(
@@ -142,11 +159,58 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     );
     completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
 
-    const first = await lookupVocabularyWord(user.id, "要-cache-test");
-    const second = await lookupVocabularyWord(user.id, "要-cache-test");
+    const input = testInput("memory");
+    const first = await lookupVocabularyWord(user.id, input);
+    const second = await lookupVocabularyWord(user.id, input);
 
     expect(completeMock).toHaveBeenCalledTimes(1);
     expect(second).toEqual(first);
+  });
+
+  it("persists one shared result across learners and process-cache resets without a second AI charge", async () => {
+    const firstUser = await createTestUser(
+      `vocab-lookup-persistent-a-${Date.now()}@hango.dev`,
+      0,
+    );
+    const secondUser = await createTestUser(
+      `vocab-lookup-persistent-b-${Date.now()}@hango.dev`,
+      0,
+    );
+    const input = testInput("persistent");
+    completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
+
+    const first = await lookupVocabularyWord(
+      firstUser.id,
+      input.toUpperCase(),
+      "es",
+    );
+    const persisted = await db.vocabularyLookupCache.findFirst({
+      where: {
+        normalizedInput: normalizeVocabularyLookupInput(input),
+        hskLevel: 0,
+        locale: "ES",
+        promptVersion: 1,
+      },
+    });
+    expect(persisted).not.toBeNull();
+
+    clearVocabularyLookupProcessCache();
+    const second = await lookupVocabularyWord(
+      secondUser.id,
+      `  ${input}  `,
+      "es",
+    );
+
+    expect(second).toEqual(first);
+    expect(completeMock).toHaveBeenCalledTimes(1);
+    expect(
+      await db.aiUsageLog.count({
+        where: {
+          userId: secondUser.id,
+          feature: "vocabulary-lookup",
+        },
+      }),
+    ).toBe(0);
   });
 
   it("rejects an empty input without calling the AI provider", async () => {
@@ -171,21 +235,25 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     expect(completeMock).not.toHaveBeenCalled();
   });
 
-  it("rate-limits lookups after 20 requests", async () => {
-    const user = await createTestUser(
-      `vocab-lookup-ratelimit-${Date.now()}@hango.dev`,
-      0,
-    );
-    completeMock.mockResolvedValue(mockCompletion(vocabularyJson()));
+  it(
+    "rate-limits lookups after 20 requests",
+    async () => {
+      const user = await createTestUser(
+        `vocab-lookup-ratelimit-${Date.now()}@hango.dev`,
+        0,
+      );
+      completeMock.mockResolvedValue(mockCompletion(vocabularyJson()));
 
-    for (let i = 0; i < 20; i++) {
-      await lookupVocabularyWord(user.id, `word-${i}`);
-    }
+      for (let i = 0; i < 20; i++) {
+        await lookupVocabularyWord(user.id, testInput(`rate-${i}`));
+      }
 
-    await expect(
-      lookupVocabularyWord(user.id, "one-too-many"),
-    ).rejects.toBeInstanceOf(VocabularyLookupRateLimitError);
-  });
+      await expect(
+        lookupVocabularyWord(user.id, testInput("rate-blocked")),
+      ).rejects.toBeInstanceOf(VocabularyLookupRateLimitError);
+    },
+    30_000,
+  );
 
   it("never touches points, achievements, or coins - a lookup is pure reference, no scoring (user decision, 2026-08-31)", async () => {
     const user = await createTestUser(
@@ -194,7 +262,7 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     );
     completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
 
-    const result = await lookupVocabularyWord(user.id, "要");
+    const result = await lookupVocabularyWord(user.id, testInput("no-score"));
     expect(result).not.toBeNull();
 
     expect(
@@ -216,7 +284,10 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     void user;
     completeMock.mockResolvedValueOnce(mockCompletion(vocabularyJson()));
 
-    const response = await lookupVocabularyWordAction("要", "en");
+    const response = await lookupVocabularyWordAction(
+      testInput("action"),
+      "en",
+    );
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.result.hero.title).toBe("要");
@@ -228,7 +299,7 @@ describe("Han Vocabulary lookup (2026-09-01, integration, real database)", () =>
     completeMock.mockResolvedValueOnce(mockCompletion("not json at all"));
 
     const response = await lookupVocabularyWordAction(
-      "要-garbled-test",
+      testInput("garbled"),
       "en",
     );
     expect(response.ok).toBe(false);

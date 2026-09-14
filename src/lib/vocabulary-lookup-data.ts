@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import { recordAiUsage, trackAiOperation } from "@/lib/ai-usage";
@@ -37,42 +38,77 @@ function checkRateLimit(userId: string): void {
   recentLookupTimestamps.set(userId, timestamps);
 }
 
-/**
- * The same word, same level, same interface language never needs to be
- * regenerated within the window - a real cost saver (Tier 3 pattern,
- * project/db-operations-optimization.md) since the content itself isn't
- * per-user, only the (word, level, language) key is. Deliberately
- * in-memory, not persisted - a server restart just means the next lookup
- * regenerates it, an accepted trade-off matching every other Tier 3 cache
- * in this app.
- */
-const LOOKUP_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const LOOKUP_PROMPT_VERSION = 1;
+const LOOKUP_MEMORY_TTL_MS = 24 * 60 * 60 * 1000;
 
-const generateVocabularyLookup = createTtlCache(
-  // userId is deliberately NOT part of the cache key below - the lookup
-  // itself is shared across every learner at the same (word, level,
-  // language), same as before. It's only threaded through so a real
-  // cache-miss generation can be attributed to whoever triggered it for the
-  // daily usage cap/log (2026-09-05 cost audit) - a cache HIT never reaches
-  // this function at all, so it never costs anything or counts against
-  // anyone's cap, regardless of who requests it.
+const INTERFACE_LANGUAGE: Record<
+  AppLocale,
+  { db: "EN" | "ES"; prompt: string }
+> = {
+  en: { db: "EN", prompt: "English" },
+  es: { db: "ES", prompt: "Spanish" },
+};
+
+/**
+ * NFKC folds equivalent keyboard forms and lowercasing/whitespace folding
+ * makes pinyin lookups such as "YAO", "yao", and " yao " share one paid
+ * result. Chinese characters are unaffected.
+ */
+export function normalizeVocabularyLookupInput(input: string): string {
+  return input
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("en-US");
+}
+
+/**
+ * L1 process cache plus L2 database cache. userId and displayInput are
+ * deliberately absent from the cache key: results are shared across learners
+ * at the same normalized word, earned level, interface locale, and prompt
+ * version. Cache hits return before rate/cap checks and before provider usage,
+ * so only a genuinely new combination can incur an AI charge.
+ */
+const getOrGenerateVocabularyLookup = createTtlCache(
   async (
     userId: string,
+    displayInput: string,
     normalizedInput: string,
     hskLevel: number,
-    interfaceLanguage: string,
+    locale: AppLocale,
   ): Promise<VocabularyLookupResult | null> => {
+    const language = INTERFACE_LANGUAGE[locale];
+    const cacheKey = {
+      normalizedInput,
+      hskLevel,
+      locale: language.db,
+      promptVersion: LOOKUP_PROMPT_VERSION,
+    } as const;
+    const persisted = await db.vocabularyLookupCache.findUnique({
+      where: {
+        normalizedInput_hskLevel_locale_promptVersion: cacheKey,
+      },
+      select: { result: true },
+    });
+    if (persisted) {
+      const parsed = parseVocabularyLookupResult(
+        JSON.stringify(persisted.result),
+      );
+      if (parsed) return parsed;
+    }
+
+    checkRateLimit(userId);
     const provider = getAiProvider();
     const result = await trackAiOperation(
       { userId, feature: "vocabulary-lookup", provider: provider.name },
       () =>
         provider.complete({
           systemPrompt: buildVocabularyLookupPrompt(
-            normalizedInput,
+            displayInput,
             hskLevel,
-            interfaceLanguage,
+            language.prompt,
           ),
-          messages: [{ role: "user", content: normalizedInput }],
+          messages: [{ role: "user", content: displayInput }],
           maxOutputTokens: 900,
         }),
     );
@@ -89,17 +125,31 @@ const generateVocabularyLookup = createTtlCache(
         result.outputTokens,
       ),
     });
-    return parseVocabularyLookupResult(result.content);
+    const parsed = parseVocabularyLookupResult(result.content);
+    if (!parsed) return null;
+
+    await db.vocabularyLookupCache.upsert({
+      where: {
+        normalizedInput_hskLevel_locale_promptVersion: cacheKey,
+      },
+      create: {
+        ...cacheKey,
+        result: parsed as unknown as Prisma.InputJsonValue,
+      },
+      update: {
+        result: parsed as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return parsed;
   },
-  LOOKUP_CACHE_TTL_MS,
-  (_userId, normalizedInput, hskLevel, interfaceLanguage) =>
-    `${normalizedInput}:${hskLevel}:${interfaceLanguage}`,
+  LOOKUP_MEMORY_TTL_MS,
+  (_userId, _displayInput, normalizedInput, hskLevel, locale) =>
+    `${normalizedInput}:${hskLevel}:${locale}:${LOOKUP_PROMPT_VERSION}`,
 );
 
-const INTERFACE_LANGUAGE_LABEL: Record<AppLocale, string> = {
-  en: "English",
-  es: "Spanish",
-};
+export function clearVocabularyLookupProcessCache(): void {
+  getOrGenerateVocabularyLookup.clear();
+}
 
 /**
  * Han Vocabulary (2026-08-31) - a reference/lookup tool, not a practice
@@ -124,21 +174,20 @@ export async function lookupVocabularyWord(
       `That's too long (max ${MAX_INPUT_LENGTH} characters) - try a single word or short phrase.`,
     );
   }
-  checkRateLimit(userId);
-
   const profile = await db.learnerProfile.findUnique({
     where: { userId },
     select: { generalLevelPoints: true },
   });
   const hskLevel = hskNumberForPoints(profile?.generalLevelPoints ?? 0);
-  const interfaceLanguage = INTERFACE_LANGUAGE_LABEL[locale];
+  const normalizedInput = normalizeVocabularyLookupInput(trimmed);
 
   try {
-    return await generateVocabularyLookup(
+    return await getOrGenerateVocabularyLookup(
       userId,
       trimmed,
+      normalizedInput,
       hskLevel,
-      interfaceLanguage,
+      locale,
     );
   } catch (error) {
     if (error instanceof AiProviderError) return null;

@@ -865,6 +865,25 @@ model VocabularyItem {
   @@index([hskLevel, status])
 }
 
+/// Shared, persistent Han Vocabulary results. Unlike the process-local TTL
+/// cache, these rows survive restarts and deployments, so once one learner has
+/// paid to generate a word/level/locale combination every later learner can
+/// reuse it without another AI call. promptVersion provides an explicit,
+/// additive invalidation path if the output contract changes in the future.
+model VocabularyLookupCache {
+  id              String            @id @default(cuid())
+  normalizedInput String
+  hskLevel        Int
+  locale          InterfaceLanguage
+  promptVersion   Int
+  result          Json
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([normalizedInput, hskLevel, locale, promptVersion])
+  @@index([updatedAt])
+}
+
 /// Lesson Interactivity Upgrade Phase B (2026-08-08): example sentences
 /// replaced the old exampleSentence* fields on VocabularyItem (never
 /// actually populated by any seed lesson). Originally AI-generated on

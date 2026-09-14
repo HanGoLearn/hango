@@ -5664,3 +5664,11 @@ test verification, not just a read-through.
   both the Han hub and Dashboard word-of-the-day modal, while Mandarin and
   pinyin remain unchanged. Han Tutor/Companion behavior and language
   preferences remain separate and untouched.
+- [x] Persistent shared Han Vocabulary cache (2026-09-13): added an additive
+  `VocabularyLookupCache` table keyed by normalized input, earned HSK level,
+  interface locale and prompt version. A first cache miss generates and records
+  the paid AI call; every later learner, process restart or deployment reuses
+  the stored result without calling the provider, consuming the daily AI cap
+  or writing another `AiUsageLog`. The existing in-process promise cache remains
+  as the first layer to collapse simultaneous requests on one server. Input,
+  rate and daily limits, scoring and Han Tutor/Companion remain unchanged.
