@@ -60,20 +60,16 @@ jobs:
       # reason that has nothing to do with the code under test.
       - run: npm run db:seed
 
-      # The English seed above has no Spanish content of its own - it's
-      # loaded separately from the reviewed translation packages already
-      # committed under project/curriculum-translations/es/, the same way a
-      # real deployment would apply them. tests/integration/content.test.ts's
-      # "localizes the Speaking Lab lesson picker" case asserts real Spanish
-      # strings (e.g. "Primeros pasos"), so this has to run before the test
-      # steps, not just the seed.
-      - name: Import Spanish curriculum translations
-        run: |
-          set -e
-          for file in project/curriculum-translations/es/*.json; do
-            echo "Importing $file"
-            npm run content:i18n:exchange -- import "$file" --apply
-          done
+      # The committed project/curriculum-translations/es/ packages can't be
+      # imported here (2026-09-14 CI investigation): the importer requires
+      # each scenario's database id to match the id recorded at export time
+      # (deliberately, so a translation package can never land on the wrong
+      # scenario) - db:seed on a fresh database assigns new random ids every
+      # run, so no exported package will ever match. Real Spanish coverage
+      # is exercised against the shared dev database elsewhere; the one
+      # content.test.ts case that asserts real Spanish strings is expected
+      # to fail here until this database-id coupling has a real fix
+      # (tracked in project/TASKS.md, not attempted in this pass).
 
       - run: npm run typecheck
       - run: npm run lint
