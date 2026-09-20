@@ -5,6 +5,7 @@ import {
   getNextQuestion,
   loadAttempts,
   maybeCompleteSession,
+  PlacementExamInvalidSubmissionError,
   PlacementExamNotFoundError,
   recordPlacementTimeout,
   startPlacementSession,
@@ -37,8 +38,17 @@ import {
 } from "@/lib/placement-speaking";
 import {
   applyPlacementCredit,
-  type PlacementSpeakingAttemptForCredit,
 } from "@/lib/placement-credit";
+import {
+  claimPlacementSpeakingAttempt,
+  completePlacementSpeakingAttempt,
+  getOrCreatePlacementSpeakingAttempt,
+  PlacementSpeakingInvalidStateError,
+  PlacementSpeakingNotFoundError,
+  releasePlacementSpeakingAttempt,
+  type PlacementSpeakingAttemptHandle,
+  type PlacementSpeakingCompletionRecord,
+} from "@/lib/placement-speaking-data";
 
 export type PlacementActionResult<T> =
   { ok: true; value: T } | { ok: false; error: string };
@@ -81,11 +91,18 @@ function toErrorMessage(error: unknown): string {
   ) {
     return error.message;
   }
+  if (error instanceof PlacementExamInvalidSubmissionError) {
+    return "That placement response is no longer valid. Continue with the current question.";
+  }
   if (
     error instanceof PlacementExamNotFoundError ||
-    error instanceof PlacementAudioNotFoundError
+    error instanceof PlacementAudioNotFoundError ||
+    error instanceof PlacementSpeakingNotFoundError
   ) {
     return "That couldn't be found.";
+  }
+  if (error instanceof PlacementSpeakingInvalidStateError) {
+    return "That speaking attempt is no longer current. Continue with the active attempt.";
   }
   return "Something went wrong. Please try again.";
 }
@@ -94,6 +111,7 @@ export async function startPlacementExamAction(): Promise<
   PlacementActionResult<{
     sessionId: string;
     question: PlacementQuestionView | null;
+    result: PlacementResult | null;
   }>
 > {
   const session = await auth();
@@ -105,8 +123,11 @@ export async function startPlacementExamAction(): Promise<
   }
   try {
     const sessionId = await startPlacementSession(session.user.id);
-    const question = await getNextQuestion(sessionId);
-    return { ok: true, value: { sessionId, question } };
+    const question = await getNextQuestion(session.user.id, sessionId);
+    const result = question
+      ? null
+      : await maybeCompleteSession(session.user.id, sessionId, question);
+    return { ok: true, value: { sessionId, question, result } };
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) };
   }
@@ -119,6 +140,7 @@ type AdvanceResult = PlacementActionResult<{
 }>;
 
 async function advanceAfterAttempt(
+  userId: string,
   sessionId: string,
   isCorrect: boolean,
 ): Promise<AdvanceResult> {
@@ -127,8 +149,13 @@ async function advanceAfterAttempt(
   // two things internally - this (plus the getNextQuestion de-dupe) cuts
   // real per-answer database cost by roughly half.
   const attempts = await loadAttempts(sessionId);
-  const nextQuestion = await getNextQuestion(sessionId, attempts);
-  const result = await maybeCompleteSession(sessionId, nextQuestion, attempts);
+  const nextQuestion = await getNextQuestion(userId, sessionId, attempts);
+  const result = await maybeCompleteSession(
+    userId,
+    sessionId,
+    nextQuestion,
+    attempts,
+  );
   return { ok: true, value: { isCorrect, nextQuestion, result } };
 }
 
@@ -143,11 +170,12 @@ export async function submitPlacementAnswerAction(
   }
   try {
     const { isCorrect } = await submitPlacementAnswer(
+      session.user.id,
       sessionId,
       questionId,
       answer,
     );
-    return await advanceAfterAttempt(sessionId, isCorrect);
+    return await advanceAfterAttempt(session.user.id, sessionId, isCorrect);
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) };
   }
@@ -163,8 +191,8 @@ export async function recordPlacementTimeoutAction(
     return { ok: false, error: "You need to be signed in for this." };
   }
   try {
-    await recordPlacementTimeout(sessionId, questionId);
-    return await advanceAfterAttempt(sessionId, false);
+    await recordPlacementTimeout(session.user.id, sessionId, questionId);
+    return await advanceAfterAttempt(session.user.id, sessionId, false);
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) };
   }
@@ -185,14 +213,15 @@ export async function submitPlacementQuestionBlockAction(
     return { ok: false, error: "You need to be signed in for this." };
   }
   try {
-    await submitPlacementQuestionBlock(sessionId, answers);
-    return await advanceAfterAttempt(sessionId, true);
+    await submitPlacementQuestionBlock(session.user.id, sessionId, answers);
+    return await advanceAfterAttempt(session.user.id, sessionId, true);
   } catch (error) {
     return { ok: false, error: toErrorMessage(error) };
   }
 }
 
 export async function getPlacementListeningAudioAction(
+  sessionId: string,
   questionId: string,
 ): Promise<PlacementActionResult<{ url: string }>> {
   const session = await auth();
@@ -200,6 +229,16 @@ export async function getPlacementListeningAudioAction(
     return { ok: false, error: "You need to be signed in to play audio." };
   }
   try {
+    const currentQuestion = await getNextQuestion(session.user.id, sessionId);
+    if (
+      !currentQuestion ||
+      currentQuestion.id !== questionId ||
+      !currentQuestion.listening
+    ) {
+      throw new PlacementExamInvalidSubmissionError(
+        "Audio is only available for the current listening question.",
+      );
+    }
     const url = await getOrGeneratePlacementListeningAudioUrl(
       session.user.id,
       questionId,
@@ -211,17 +250,15 @@ export async function getPlacementListeningAudioAction(
 }
 
 export async function gradePlacementSpeakingAction(
-  level: PlacementSpeakingLevel,
+  sessionId: string,
+  attemptId: string,
   transcript: SpeakingTranscriptMessage[],
   learnerTurnConfidences: number[],
-): Promise<PlacementActionResult<PlacementSpeakingEvaluation>> {
+): Promise<PlacementActionResult<PlacementSpeakingCompletionRecord>> {
   const session = await auth();
   if (!session?.user?.id) {
     return { ok: false, error: "You need to be signed in for this." };
   }
-  const scenario = PLACEMENT_SPEAKING_SCENARIOS[level];
-  if (!scenario) return { ok: false, error: "That speaking level is invalid." };
-
   const safeTranscript = transcript
     .slice(0, 20)
     .filter(
@@ -244,8 +281,16 @@ export async function gradePlacementSpeakingAction(
     )
     .slice(0, 10);
 
+  let claimed = false;
   try {
     checkGradingRateLimit(session.user.id);
+    const { level } = await claimPlacementSpeakingAttempt(
+      session.user.id,
+      sessionId,
+      attemptId,
+    );
+    claimed = true;
+    const scenario = PLACEMENT_SPEAKING_SCENARIOS[level];
     const provider = getAiProvider();
     const result = await trackAiOperation(
       {
@@ -283,22 +328,63 @@ export async function gradePlacementSpeakingAction(
         result.outputTokens,
       ),
     });
-    return {
-      ok: true,
-      value: parsePlacementSpeakingEvaluation(result.content),
-    };
+    const evaluation = parsePlacementSpeakingEvaluation(result.content);
+    const completion = await completePlacementSpeakingAttempt(
+      session.user.id,
+      sessionId,
+      attemptId,
+      safeTranscript,
+      safeConfidences,
+      evaluation,
+      { provider: result.provider, model: result.model },
+    );
+    claimed = false;
+    return { ok: true, value: completion };
   } catch (error) {
+    if (claimed) {
+      await releasePlacementSpeakingAttempt(
+        session.user.id,
+        sessionId,
+        attemptId,
+      ).catch(() => undefined);
+    }
     if (error instanceof PlacementSpeakingGradingRateLimitError) {
       return { ok: false, error: error.message };
     }
     if (error instanceof DailyUsageCapExceededError) {
       return { ok: false, error: error.message };
     }
+    if (
+      error instanceof PlacementSpeakingInvalidStateError ||
+      error instanceof PlacementSpeakingNotFoundError
+    ) {
+      return { ok: false, error: toErrorMessage(error) };
+    }
     return {
       ok: false,
       error:
         "Speaking evaluation is temporarily unavailable. Please try this level again.",
     };
+  }
+}
+
+export async function startPlacementSpeakingAttemptAction(
+  sessionId: string,
+): Promise<PlacementActionResult<PlacementSpeakingAttemptHandle>> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "You need to be signed in for this." };
+  }
+  try {
+    return {
+      ok: true,
+      value: await getOrCreatePlacementSpeakingAttempt(
+        session.user.id,
+        sessionId,
+      ),
+    };
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) };
   }
 }
 
@@ -311,8 +397,6 @@ export async function gradePlacementSpeakingAction(
  */
 export async function applyPlacementCreditAction(
   sessionId: string,
-  speakingCreditedLevel: number | null,
-  speakingAttempts: PlacementSpeakingAttemptForCredit[],
 ): Promise<PlacementActionResult<{ creditedLessonCount: number }>> {
   const session = await auth();
   if (!session?.user?.id) {
@@ -322,8 +406,6 @@ export async function applyPlacementCreditAction(
     const result = await applyPlacementCredit(
       session.user.id,
       sessionId,
-      speakingCreditedLevel,
-      speakingAttempts,
     );
     return {
       ok: true,

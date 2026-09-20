@@ -574,6 +574,7 @@ export const messages = {
           "Nivel anterior confirmado ({score}/100). Ahora probaremos el siguiente.",
         errorSuffix:
           "Tu transcripción se conservó en esta pantalla; vuelve a iniciar este nivel cuando quieras.",
+        retry: "Reintentar",
         evidenceNote:
           "Habla con naturalidad. Las palabras del personaje nunca cuentan como evidencia tuya y {level} seguirá siendo solo diagnóstico.",
         dismiss: "Cerrar mensaje",
@@ -956,6 +957,7 @@ export const messages = {
       responseTooLong:
         "Tu respuesta es demasiado larga (máximo {max} caracteres).",
       recordingTooLarge: "La grabación es demasiado grande.",
+      recordingTooLong: "La grabación es demasiado larga (máximo 5 minutos).",
       unsupportedRecording: "Ese formato de grabación no es compatible.",
       submitFailed:
         "Ocurrió un problema al enviar tu intento. Inténtalo de nuevo.",
@@ -1550,10 +1552,12 @@ export const messages = {
       recordingRetention: "Conservación de grabaciones de Speaking Lab",
       ariaLabel: "Conservación de grabaciones",
       forever: "Conservar indefinidamente",
+      never: "No conservar las grabaciones",
+      days7: "7 días",
       days30: "30 días",
       days90: "90 días",
       year: "1 año",
-      note: "Por ahora solo se guarda tu preferencia; la eliminación automática programada todavía no está implementada.",
+      note: "Esto se aplica solo al audio de Speaking Lab. Las transcripciones y el feedback siguen disponibles después de eliminar una grabación.",
     },
     deleteAccount: {
       open: "Eliminar cuenta",
@@ -1646,6 +1650,12 @@ export const messages = {
         "Ya existe una cuenta con este correo. Intenta iniciar sesión.",
       accountCreated:
         "Cuenta creada. Revisa tu correo y verifica la cuenta antes de iniciar sesión.",
+      accountCreatedDevelopment:
+        "Cuenta creada. El envío de correos está desactivado en este entorno de desarrollo, así que ya puedes iniciar sesión.",
+      emailUnavailable:
+        "No pudimos enviar el correo de verificación en este momento. Inténtalo más tarde.",
+      tooManyAttempts:
+        "Demasiados intentos. Espera unos minutos antes de volver a intentarlo.",
       invalidEmail: "Escribe una dirección de correo válida",
       resetSent:
         "Si existe una cuenta con ese correo, enviamos un enlace para restablecer la contraseña.",

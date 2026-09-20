@@ -1,4 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { resetUrls } = vi.hoisted(() => ({ resetUrls: [] as string[] }));
+vi.mock("@/lib/email", () => ({
+  sendPasswordResetEmail: vi.fn(async (_email: string, url: string) =>
+    resetUrls.push(url),
+  ),
+}));
+
 import { forgotPasswordAction } from "@/lib/actions/forgot-password";
 import { resetPasswordAction } from "@/lib/actions/reset-password";
 import { db } from "@/lib/db";
@@ -15,6 +23,8 @@ function formDataOf(fields: Record<string, string>): FormData {
 const testEmails: string[] = [];
 
 afterEach(async () => {
+  await db.authRateLimitBucket.deleteMany();
+  resetUrls.length = 0;
   if (testEmails.length > 0) {
     await db.passwordResetToken.deleteMany({
       where: { identifier: { in: testEmails } },
@@ -63,6 +73,10 @@ describe("password recovery (integration, real database)", () => {
     });
     expect(token).not.toBeNull();
     expect(token!.expires.getTime()).toBeGreaterThan(Date.now());
+    const deliveredToken = new URL(resetUrls.at(-1)!).searchParams.get("token");
+    expect(deliveredToken).toHaveLength(64);
+    expect(token!.token).not.toBe(deliveredToken);
+    expect(token!.token).toMatch(/^sha256:[a-f0-9]{64}$/);
 
     const unknownEmailTokens = await db.passwordResetToken.count({
       where: { identifier: "definitely-not-registered@hango.dev" },
@@ -81,16 +95,19 @@ describe("password recovery (integration, real database)", () => {
     const tokenRow = await db.passwordResetToken.findFirstOrThrow({
       where: { identifier: email },
     });
+    const rawToken = new URL(resetUrls.at(-1)!).searchParams.get("token")!;
+    expect(tokenRow.token).not.toBe(rawToken);
 
     const result = await resetPasswordAction(
       email,
-      tokenRow.token,
+      rawToken,
       { status: "idle" },
       formDataOf({ password: "brand-new-password-123" }),
     );
     expect(result.status).toBe("success");
 
     const user = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(user.sessionVersion).toBe(1);
     const matchesNew = await bcrypt.compare(
       "brand-new-password-123",
       user.passwordHash!,
@@ -110,7 +127,7 @@ describe("password recovery (integration, real database)", () => {
     // Reusing the same (now-deleted) token must fail.
     const reuseResult = await resetPasswordAction(
       email,
-      tokenRow.token,
+      rawToken,
       { status: "idle" },
       formDataOf({ password: "another-password-456" }),
     );

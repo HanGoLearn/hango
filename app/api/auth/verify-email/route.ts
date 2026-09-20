@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { clientEnv } from "@/lib/env/client";
 import { DEFAULT_LOCALE, isAppLocale, localePath } from "@/i18n/config";
+import { opaqueAuthTokenCandidates } from "@/lib/auth-tokens";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
@@ -21,30 +22,43 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const verificationToken = await db.verificationToken.findUnique({
-    where: { identifier_token: { identifier: email, token } },
+  const verificationToken = await db.verificationToken.findFirst({
+    where: {
+      identifier: email,
+      token: { in: opaqueAuthTokenCandidates(token) },
+    },
   });
 
   if (!verificationToken || verificationToken.expires < new Date()) {
     // Prevent reuse: delete an expired token if it happens to still exist.
     if (verificationToken) {
       await db.verificationToken.delete({
-        where: { identifier_token: { identifier: email, token } },
+        where: {
+          identifier_token: {
+            identifier: email,
+            token: verificationToken.token,
+          },
+        },
       });
     }
     loginUrl.searchParams.set("verifyError", "invalid");
     return NextResponse.redirect(loginUrl);
   }
 
-  await db.user.update({
-    where: { email },
-    data: { emailVerified: new Date() },
-  });
-
-  // Prevent token reuse.
-  await db.verificationToken.delete({
-    where: { identifier_token: { identifier: email, token } },
-  });
+  await db.$transaction([
+    db.user.update({
+      where: { email },
+      data: { emailVerified: new Date() },
+    }),
+    db.verificationToken.delete({
+      where: {
+        identifier_token: {
+          identifier: email,
+          token: verificationToken.token,
+        },
+      },
+    }),
+  ]);
 
   loginUrl.searchParams.set("verified", "true");
   return NextResponse.redirect(loginUrl);

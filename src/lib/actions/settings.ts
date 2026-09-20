@@ -14,6 +14,11 @@ import {
   settingsActionMessages,
   settingsLocaleFromFormData,
 } from "@/i18n/settings";
+import {
+  deleteAccountWithPrivateObjects,
+  processPrivateObjectDeletionJobs,
+  queueAllSpeakingObjectsForUser,
+} from "@/lib/private-object-retention";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -205,6 +210,10 @@ export async function updateRecordingRetentionAction(
     where: { userId },
     data: { recordingRetentionDays: parsed },
   });
+  if (parsed === 0) {
+    await queueAllSpeakingObjectsForUser(userId);
+    await processPrivateObjectDeletionJobs({ ownerUserId: userId });
+  }
 }
 
 /**
@@ -212,12 +221,16 @@ export async function updateRecordingRetentionAction(
  * confirmed self-service deletion (the client requires an explicit typed
  * confirmation before calling this), not a queued request an admin
  * reviews - no such review workflow exists in this project. Every related
- * table cascades from `User` via `onDelete: Cascade`.
+ * table cascades from `User` via `onDelete: Cascade`. Private recordings
+ * live outside Postgres, so they are first inventoried into a durable outbox
+ * in the same transaction; deletion is attempted immediately and retried by
+ * the daily retention job if the storage provider is temporarily unavailable.
  */
 export async function deleteAccountAction(
   locale: AppLocale = "en",
 ): Promise<void> {
   const userId = await requireUserId();
-  await db.user.delete({ where: { id: userId } });
+  await deleteAccountWithPrivateObjects(userId);
+  await processPrivateObjectDeletionJobs({ ownerUserId: userId });
   await signOut({ redirectTo: localePath(locale) });
 }

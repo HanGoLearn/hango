@@ -147,7 +147,7 @@ describe("manual measurement tool - not part of the regular CI suite", () => {
         bySkill[question.skill] += 1;
 
         if (question.listening) {
-          const audio = await getPlacementListeningAudioAction(question.id);
+          const audio = await getPlacementListeningAudioAction(sessionId, question.id);
           if (!audio.ok) throw new Error(`getPlacementListeningAudioAction failed: ${audio.error}`);
         }
 

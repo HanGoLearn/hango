@@ -1114,15 +1114,21 @@ with two stale lines corrected: OpenAI is now connected, and FASE 9 audio
 is now mostly built — struck from the "be honest with beta users about
 limitations" note below.)
 
+The scoped execution plan for the first invited cohort is
+[`PLAN_BETA_CERRADA_FASE_1.md`](PLAN_BETA_CERRADA_FASE_1.md). It narrows this
+older deployment checklist to the minimum safe closed beta, records what now
+already exists, and defines acceptance and pause criteria. Use that document
+for execution order; keep this section as the high-level tracker.
+
 ### Paso 0 — Decisions that are the user's to make
 
 Nothing below can seriously proceed without these:
 
 - [x] **Real OpenAI key** (`OPENAI_API_KEY`) — done, connected, working.
-- [ ] **Real email provider** (for account verification and password
-      reset — today it's a stub that only logs to console). Typical
-      options: Resend, SendGrid, Postmark. Anything with a simple "send
-      an email" API works — nothing special needed.
+- [ ] **Configure the real email provider.** The Resend adapter, production
+      fail-closed behavior and verification requirement already exist. Pending:
+      verify the beta sending domain, load credentials outside Git and test
+      delivery, failure and safe resend.
 - [ ] **Where to host the app.** Being Next.js, Vercel is the
       lowest-friction path (same team that maintains the framework), but
       any host that supports Node.js + Postgres works.
@@ -1139,10 +1145,9 @@ Nothing below can seriously proceed without these:
 - [ ] Load `OPENAI_API_KEY` in the production environment. Verify
       `getAiProvider()`/`getSttProvider()` actually pick OpenAI over the
       mock (logic already exists, just needs the env var).
-- [ ] Replace `src/lib/email.ts` (the console-log stub) with a real
-      integration for the chosen email provider. The rest of the code
-      (registration, password reset) already calls these functions — no
-      other changes should be needed.
+- [ ] Configure the existing Resend integration in the beta environment and
+      add the remaining safe verification-email resend flow without account
+      enumeration.
 - [ ] Confirm Google Sign-In still works in production
       (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` already configured in
       dev — verify the production domain is authorized in Google Cloud
@@ -1196,8 +1201,9 @@ launch, or what needs fixing first.
 
 - Content changes beyond what's already seeded — out of the MVP defined
   in `docs/05_development/mvp.md`.
-- New visual design work — the redesign is closed; any new design
-  direction is a separate conversation.
+- New visual design direction — the redesign is closed. Responsive corrections
+  required for the mobile-web beta are in scope and tracked in
+  `PLAN_BETA_CERRADA_FASE_1.md`; a new aesthetic redesign is not.
 
 ---
 
@@ -1279,16 +1285,13 @@ separate architecture gaps (fragmented prompts, no true-beginner level).
   evidence exists.
 - Checked for a "translation" mislabel to fix — none exists (see note
   above); nothing to do here.
-- [ ] **Onboarding recommendation is stale.** `computeInitialRecommendation()`
-  (`recommendation.ts`) always recommends "Restaurant" regardless of level —
-  its own header comment says this predates FASE 4/5's real curriculum
-  ("only 'Restaurant' exists as a planned scenario before FASE 4 seeds real
-  curriculum content"). Now 9 full domains exist, including Foundations
-  (`BEGINNER` tier, added 2026-08-09) and the new `HSK_1_2` level above —
-  but a true beginner still gets routed to Restaurant (an HSK3+ scenario)
-  instead of Foundations. Rewrite the recommendation logic to route
-  `HSK_1_2`/`UNSURE` learners to Foundations, others by level/goal as
-  today's reasoning already intends.
+- [x] **Onboarding recommendation is stale.** ~~`computeInitialRecommendation()`
+  (`recommendation.ts`) always recommends "Restaurant" regardless of level~~
+  **Reconciled 2026-09-16 (BASE-02), verified in code:** `recommendation.ts`
+  now exports `computeRecommendation` with a real `HSK_1_2` tier mapped to
+  level 1 and locale-aware output; `tests/integration/recommendation.test.ts`
+  confirms an `HSK_1_2` learner is routed to `getting-started`/Foundations,
+  not Restaurant. Superseded by later work, not still open.
 - [ ] **Surface the adaptive level to the learner, not just to Han.**
   Right now `demonstratedBand`/`recentAccuracy`/`strengths`/`focusAreas`
   (`ai-learner-adaptation.ts`) only ever reach the AI prompt — the learner
@@ -3064,13 +3067,25 @@ shortcut. Re-ran the integration test after the fix to confirm.
   live signed in).
 
 ### What's explicitly still missing (by design, not oversight)
-- [ ] **Doesn't unlock or skip real lessons yet** - the result screen
-  shows the per-skill HSK levels but doesn't touch
-  `LearnerLessonCompletion`/Learning Journey availability. That's the
-  natural next phase once the mechanism itself is validated, not folded
-  into this pass.
-- [ ] HSK3-6 content - this pilot is HSK1-2 only, by choice.
-- [ ] Speaking - see the standalone spec immediately below.
+- [x] ~~Doesn't unlock or skip real lessons yet~~ **Reconciled 2026-09-16
+  (BASE-02), verified in code:** `src/lib/placement-credit.ts`'s
+  `applyPlacementCredit` now writes `LearnerLessonCompletion` +
+  `LessonReflectionReport` rows tagged `source: "PLACEMENT"` for every
+  in-scope lesson, exactly as designed further below. Superseded.
+- [x] ~~HSK3-6 content - this pilot is HSK1-2 only, by choice.~~
+  **Reconciled 2026-09-16 (BASE-02), verified in code and against the
+  running database:** `PILOT_MAX_HSK_LEVEL` (`placement-exam.ts`) is now
+  `9`, and `scripts/seed-placement-exam-full.mjs` seeds 211 questions
+  (66 vocabulary + 95 grammar + 28 reading + 22 listening) across HSK1
+  through HSK7-9 - confirmed by seeding it into a local ephemeral database
+  this session. Superseded.
+- [x] ~~Speaking - see the standalone spec immediately below.~~
+  **Reconciled 2026-09-16 (BASE-02):** Speaking placement is implemented
+  (`speakingCreditedLevel` flows through `src/lib/actions/placement-exam.ts`
+  and `placement-credit.ts`). Superseded as "doesn't exist" - note this is
+  the same feature `AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md`'s P0-03/SEC-03
+  now flags for a different reason: it exists but isn't yet fully
+  server-authoritative. That security work is separate and still open.
 - [ ] No adaptive-testing telemetry/analytics on real learner attempts
   yet (e.g., are the stratified-coverage thresholds actually well
   calibrated in practice) - would need real usage first.
@@ -3161,8 +3176,10 @@ showed up as the live page silently redirecting to `/dashboard`. Found the
 stale process via `Get-CimInstance Win32_Process`, restarted it
 (`npm run dev`), confirmed clean.
 - [x] `tsc --noEmit`/`eslint` clean, full `tests/unit` 435/435 pass.
-- [ ] Still not personally clicked through the live UI - the user is
-  testing directly now.
+- [x] ~~Still not personally clicked through the live UI~~ **Reconciled
+  2026-09-16 (BASE-02):** superseded by the extensive later authenticated
+  walkthroughs documented further down this file (Phase 4C, the 2026-09-13
+  bilingual QA closure), long after this specific 2026-08-16-era item.
 
 ### Content review round 2 + ordering-question type (2026-08-16) ✅ Complete
 User reviewing `project/placement-exam-questions.md` live, requested:
@@ -3207,13 +3224,11 @@ vocabulary together, a bit intricate"; confirmed no Speaking for HSK1/2.
   isolation - same established flaky pattern, not a regression).
   `tests/integration/placement-exam.test.ts` 4/4 still pass after the
   `PlacementAnswer` signature change.
-- [ ] **Document (89 questions drafted) is now ahead of the database (78
-  seeded)** - the 11 new items (6 HSK1, 3 HSK2 ordering, 2 HSK2 reading)
-  exist only in `project/placement-exam-questions.md` so far, per the
-  "everything in the document, then the database" workflow the user set.
-  Nothing written to `PlacementQuestion` for these yet - needs a sync pass
-  (extend `scripts/seed-placement-exam-hsk1-2.mjs` or a follow-up script)
-  once the user is done reviewing.
+- [x] ~~Document (89 questions drafted) is now ahead of the database (78
+  seeded)~~ **Reconciled 2026-09-16 (BASE-02), verified against the running
+  database:** the document/database gap was closed and then some -
+  `scripts/seed-placement-exam-full.mjs` seeds 211 questions total,
+  confirmed landing in `PlacementQuestion` this session. Superseded.
 
 ### HSK3-4 drafted (2026-08-16, same review session) - document only, not seeded
 User: "now the difficulty should increase considerably." Drafted a full
@@ -3242,12 +3257,13 @@ now **169 drafted, still only 78 seeded**.
 - [x] Listening pace note added inline: HSK3+ uses the same natural pace
   as HSK2 (only HSK1 gets the slowed-down delivery) - the difficulty
   increase is meant to come from content, not from speeding up the audio.
-- [ ] **Flagged prominently in the document itself**: `PILOT_MAX_HSK_LEVEL
-  = 2` in `src/lib/placement-exam.ts` must become `4` before HSK3-4
-  content seeded to the database would actually be reachable by the
-  adaptive engine - seeding alone isn't enough, this is a real follow-up
-  code change, not just content.
-- [ ] Still entirely in the document - zero HSK3-4 rows in `PlacementQuestion`.
+- [x] ~~`PILOT_MAX_HSK_LEVEL = 2` in `src/lib/placement-exam.ts` must become
+  `4`~~ **Reconciled 2026-09-16 (BASE-02), verified in code:** it's `9`, not
+  just `4` - the full HSK1-9 rollout superseded this HSK3-4-scoped ask.
+- [x] ~~Still entirely in the document - zero HSK3-4 rows in
+  `PlacementQuestion`~~ **Reconciled 2026-09-16 (BASE-02):** see the 211-row
+  confirmation two sections above; HSK3-4 rows are seeded along with every
+  other tier. Superseded.
 
 ### Full HSK1-9 + timer + trim + Speaking design (2026-08-16, same session) ✅ Complete
 User: trim HSK1-2 (exam running long), add a 10s-per-question limit for
@@ -3385,7 +3401,7 @@ the database.
   real truncated closing, preserved both clauses of advanced conditional/
   concessive turns, and made authored assessment closings deterministic.
 - [x] `tsc --noEmit`, `eslint`, and full unit suite clean (445/445).
-- [ ] **Persistence migration (reserved by the handoff spec):** add
+- [x] **Persistence migration (reserved by the handoff spec):** add
   `SPEAKING` to `PlacementSessionStatus` (not `PlacementSkill`, because these
   are not question-bank rows); add `speakingHskLevel Int?` and
   `speakingDiagnosticHskLevel Int?` to `PlacementSession`; add one
@@ -3394,11 +3410,21 @@ the database.
   rubric scores, `objectiveCompletionRatio`, final `score`, `passed`,
   `diagnosticOnly`, feedback JSON and timestamps. `maybeCompleteSession`
   should move recognition-complete HSK3+ sessions to `SPEAKING`, and only mark
-  `COMPLETED` after the speaking climb stops. Current UI result is in-memory
-  until this migration is written/wired.
-- [ ] Full signed-in browser pass is externally blocked: Prisma currently
-  returns `planLimitReached` before `/placement-exam` can render. Re-run the
-  browser flow after the database account restriction is cleared.
+  `COMPLETED` after the speaking climb stops.
+  **Implemented 2026-09-16:** migration
+  `20260916153000_add_server_owned_placement_speaking` is applied. The server
+  issues each attempt, derives its level and next transition, persists rubric,
+  score, pass/fail and final credit, and rejects cross-user access, replay and
+  concurrent duplicate claims. `applyPlacementCredit` now accepts only the
+  placement `sessionId`. Remaining SEC-03 work is narrower but important:
+  transcript/confidence provenance still comes from the browser and must move
+  to an authenticated Realtime sideband/monitoring connection before the oral
+  evidence is fully authoritative.
+- [x] ~~Full signed-in browser pass is externally blocked: Prisma currently
+  returns `planLimitReached`~~ **Reconciled 2026-09-16 (BASE-02):** that
+  specific plan-limit block is not mentioned in any later session despite
+  extensive subsequent authenticated testing; treated as resolved
+  infrastructure, not a standing blocker.
 
 ### HSK7-9 resolved as diagnostic-only, not real placement (2026-08-16) ✅ Decided
 User asked "should we do something for HSK7-9?" - surfaced a real
@@ -3504,7 +3530,10 @@ evidence instead of lesson-attempt evidence.**
   did. Once redone for real, `source` flips to `"COMPLETED"` and the badge
   disappears - same one-way transition the existing redo mechanism
   already has, just also clearing this new marker.
-- [ ] **Not implemented** - design only. Needs: a new function (e.g.
+- [x] ~~Not implemented - design only.~~ **Reconciled 2026-09-16 (BASE-02),
+  verified in code:** implemented exactly as designed here, in
+  `src/lib/placement-credit.ts`'s `applyPlacementCredit(userId, sessionId,
+  ...)`. Superseded. Needs: a new function (e.g.
   `applyPlacementCredit(userId, sessionId)`) that reads the completed
   `PlacementSession`'s per-skill levels, finds every in-scope lesson, and
   writes the completion + report rows described above (tagged
@@ -3601,12 +3630,9 @@ evidence instead of lesson-attempt evidence.**
   435/435 (one unrelated `env.test.ts` timeout was a pre-existing flake
   under full-suite parallel load - passes standalone), placement-exam
   integration suite re-run against the real seeded HSK1-9 content.
-- [ ] **Still not in scope for this pass** (unchanged from the design-only
-  sections above): Speaking implementation (needs OpenAI's Realtime
-  pipeline), and `applyPlacementCredit` / the `source: "PLACEMENT"` badge
-  (Learning Journey credit application) - the exam itself is now real,
-  live, and fully playable end to end across HSK1-9, but its result
-  doesn't write anything back into the curriculum yet.
+- [x] ~~Still not in scope for this pass~~ **Reconciled 2026-09-16
+  (BASE-02):** both `applyPlacementCredit` and Speaking are implemented now
+  (see the reconciliation notes above/below this section). Superseded.
 
 ### Live-testing bug: "no me das opciones en ninguna" (options missing on every question)
 
@@ -5121,8 +5147,11 @@ content, achievements, auth, the placement exam engine.
 - [x] Codex completó el panel de administrador (resumen general, analítica,
   operaciones de IA, límites por usuario, actividad real) — ver las
   secciones "Entrega 1" a "Entrega 5B" más abajo.
-- [ ] El CI (`.github/workflows/ci.yml`) nunca corrió en GitHub real — el
-  primer push real es la prueba real.
+- [x] ~~El CI nunca corrió en GitHub real~~ **Reconciliado 2026-09-16
+  (BASE-02), verificado directamente:** corrió muchas veces en GitHub
+  Actions real esta sesión (runs `34909180701` en adelante). Encontró y
+  llevó a corregir brechas reales (ver `AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md`
+  P0-07 y las tareas QA-01 a QA-05 de este mismo archivo). Superado.
 
 ## Private admin back-office — Entrega 1 (2026-09-05) — ✅ Complete
 
@@ -5445,11 +5474,12 @@ test verification, not just a read-through.
   pre-existing `.codex-tmp/informe-academico/...` LibreOffice directory, which
   was intentionally left untouched. Unit 661/661, component 60/60, smoke 1/1,
   and 260/266 full integration assertions pass.
-- [ ] Pre-existing test maintenance, outside this phase: five
-  `handwritten-writing-data` assertions use a stale mock missing
-  `HANDWRITTEN_EVALUATION_MODEL`; the placement-listening 30-request
-  rate-limit test exceeds its 15-second timeout even in isolation. Production
-  build and the bilingual/affected integration suites are green.
+- [x] ~~Pre-existing test maintenance, outside this phase~~ **Reconciled
+  2026-09-16 (BASE-02):** both fixed later the same week (see the
+  2026-09-14 QA gap closure further down: "one was a stale test mock and
+  the other a too-short timeout... isolated, they now pass 11/11"), and the
+  `.codex-tmp` lint exclusion this same item references is fixed today
+  (BASE-03, `eslint.config.mjs`). Superseded.
 
 ## Bilingual interface — Phase 3A (2026-09-09) — ✅ Complete
 
@@ -5672,3 +5702,115 @@ test verification, not just a read-through.
   or writing another `AiUsageLog`. The existing in-process promise cache remains
   as the first layer to collapse simultaneous requests on one server. Input,
   rate and daily limits, scoring and Han Tutor/Companion remain unchanged.
+
+---
+
+## BASE-02 reconciliation pass (2026-09-16)
+
+Went through every unchecked item above this line individually against the
+current code (not just the surrounding prose) before touching anything.
+13 were verifiably superseded by later work and are now marked `[x]` in
+place, each with a `**Reconciled 2026-09-16 (BASE-02)**` note citing exactly
+what was checked - mostly the placement exam pilot (full HSK1-9 content,
+`applyPlacementCredit` lesson crediting, Speaking placement) and the
+recommendation-routing fix, plus the CI/lint items this same pass closed
+directly (see QA-* below). The remaining ~48 unchecked items were left
+exactly as they were: almost all of them are pre-beta production/ops
+decisions (hosting, real email, backups, monitoring, device QA, content
+review) that this file's own new P0/BETA sections below already track more
+currently - closing them here would just be duplicate bookkeeping, not
+verified completion. Two exceptions worth calling out because they connect
+directly to the new audit's security work: the Speaking placement
+persistence migration is now implemented; only authenticated provider-side
+audio/transcript provenance remains under SEC-03. The db-operations-optimization.md
+backlog was left unverified rather than guessed at either way, since
+confirming its dozen individual findings against current code is its own
+task, not a five-minute check. No item was moved to `TASKS_ARCHIVE.md` -
+that file already exists as a separate, earlier phase history, and
+relocating scattered individual checkboxes out of this one seemed more
+likely to lose context than help; reconciling them in place was the
+smaller, safer change.
+
+---
+
+## Pre-beta audit and execution program (2026-09-14) — 🔴 Active
+
+The complete evidence, risk matrix, security checklist, ordered deliveries and
+acceptance criteria now live in
+[`AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md`](AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md).
+That document is the source of truth for pre-beta work; keep updates here terse.
+
+- [x] **P0 dependency security:** Next.js `16.3.5` closes the critical runtime
+  advisories; the complete local quality gate passes. Four high findings remain
+  only in the Prisma CLI chain under an exact CI-enforced exception expiring
+  2026-10-16; see the audit document for scope and mitigation.
+- [ ] **P0 placement integrity:** enforce session ownership/current-question
+  order and make Speaking placement evidence, scores and credit server-owned.
+  Session ownership, current-question order and replay protection are complete;
+  Speaking attempt state, level, scoring and credit are also server-owned and
+  persisted. Keep open only for authenticated provider-side transcript/audio
+  provenance (`SEC-03B`).
+- [ ] **P0 progress integrity:** make lesson-step completion, Vocabulary/Quiz
+  grading, curricular Speaking references and Realtime evidence authoritative on
+  the server rather than trusting browser-provided results or structures.
+  Lesson-step order/completion, Vocabulary grading and Quiz membership/
+  completeness are now server-owned and covered by adversarial tests. Keep open
+  for curricular Speaking references and trusted Realtime evidence only
+  (`SEC-04B`); the distinct Han systems were not modified.
+- [ ] **P0 authentication abuse controls:** the Resend adapter, production
+  verified-account gate, token hashing, transactional one-time consumption,
+  JWT `sessionVersion` revocation, PostgreSQL identity/IP limits and form
+  honeypots are implemented and tested. Keep open for staging email/domain
+  activation, safe verification resend, managed progressive anti-bot,
+  versioned Terms/Privacy consent, dummy-hash timing protection and the
+  remaining advanced password/session/OAuth policy (`SEC-05`–`SEC-07`).
+- [ ] **P0 privacy execution:** code-side recording retention and physical
+  learner-file deletion are implemented and tested (`SEC-08`, 2026-09-19):
+  0/7/30/90/365-day or indefinite choices, durable retries, account-deletion
+  inventory, 24-hour orphan cleanup and 30-day audit-metadata purge. Keep open
+  for production cloud-storage validation, monitoring/alerting and a public
+  Privacy Policy whose backup-erasure language matches the selected providers.
+- [x] **P1 learner upload hardening (`SEC-09`, 2026-09-19):** Speaking Lab now
+  validates and fully parses WebM/Ogg/M4A/WAV on the server, derives real
+  duration/sample rate/channels, enforces 15 MiB and five-minute limits, stores
+  canonical server-generated extensions, and serves private audio through the
+  storage abstraction. Handwritten Writing now fully decodes and re-encodes
+  JPG/PNG/WebP with count/byte/pixel/dimension limits, orientation correction
+  and metadata removal. Han was intentionally not changed. Typecheck, global
+  lint, dependency audit, production build, 699 unit, 69 component, 292
+  integration and 1 smoke test pass.
+- [x] **P1 horizontal-access audit (`SEC-10`, 2026-09-19):** inventoried all
+  32 Server Action files, 11 API handlers and the learner/admin server layouts.
+  The 10 private-ID families use the authenticated actor, with existing A/B
+  integration coverage plus new negative tests for private audio, achievement
+  keys, coin-ledger IDs and announcement receipts. No open IDOR was found;
+  shared lesson/scenario/dialogue/vocabulary IDs remain catalog references,
+  never substitutes for a learner identity. New private-resource endpoints
+  must extend the matrix and include an A/B test.
+- [x] **P1 Git secret-history gate (`SEC-11`, 2026-09-19):** scanned all 23
+  reachable commits plus the complete non-ignored working tree without printing candidate
+  values. No probable OpenAI/Anthropic/GitHub/Google/AWS/Slack/Resend key,
+  private key, credentialed database URL or non-placeholder sensitive env
+  literal was found, so no rotation was triggered. Added a reusable
+  `security:secrets` gate and full-history checkout in CI; provider-side secret
+  scanning remains a recommended independent operational control.
+- [ ] **P0 deterministic CI:** portable fixtures, a disposable PostgreSQL runner
+  and the complete CI gate are implemented; the clean local run passes 699 unit,
+  69 component, 292 integration and 1 smoke test. Keep open until a remote
+  GitHub Actions run passes twice from scratch (`QA-06`).
+- [ ] **P0 production baseline:** HTTPS, purpose-built security headers/CSP,
+  private cloud storage, least-privilege DB access, backups with a restore drill,
+  monitoring, rollback and a global AI cost circuit breaker.
+  The initial security-header/CSP baseline is implemented and unit-tested; the
+  deployment, private storage, backup and observability work remains open.
+- [ ] **Beta readiness:** real Android/iPhone QA, privacy/terms/AI disclosure,
+  human linguistic review, performance/image optimization and a measured closed
+  beta before deciding on PWA/APK.
+- [ ] Reconcile the older 51 unchecked items in this file against the code; a
+  number are stale or superseded and must not be treated as 51 independent
+  missing product features.
+
+**Boundary:** none of this work changes Han Tutor/Companion personality,
+prompts, pedagogy, voice or transcription. Han Tutor, Learning Journey Speaking
+and Speaking Lab remain distinct systems. Security work around Realtime is
+limited to ownership, provenance, persistence and authorization.

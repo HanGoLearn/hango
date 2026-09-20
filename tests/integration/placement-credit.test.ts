@@ -87,7 +87,7 @@ describe("applyPlacementCredit (integration, real database, real seeded content)
       listening: 2,
     });
 
-    const result = await applyPlacementCredit(user.id, session.id, null, []);
+    const result = await applyPlacementCredit(user.id, session.id);
     expect(result).not.toBeNull();
     // Grammar (1) is the weakest skill - eligibility is gated by it, not the average.
     expect(result!.creditedLevel).toBe(1);
@@ -117,7 +117,7 @@ describe("applyPlacementCredit (integration, real database, real seeded content)
       listening: 7,
     });
 
-    const result = await applyPlacementCredit(user.id, session.id, null, []);
+    const result = await applyPlacementCredit(user.id, session.id);
     expect(result).not.toBeNull();
     expect(result!.creditedLevel).toBe(7);
 
@@ -138,7 +138,7 @@ describe("applyPlacementCredit (integration, real database, real seeded content)
       listening: 3,
     });
 
-    const result = await applyPlacementCredit(user.id, session.id, null, []);
+    const result = await applyPlacementCredit(user.id, session.id);
     expect(result).toEqual({ creditedLevel: 0, creditedLessonCount: 0 });
 
     const completions = await db.learnerLessonCompletion.findMany({
@@ -146,6 +146,49 @@ describe("applyPlacementCredit (integration, real database, real seeded content)
     });
     expect(completions).toHaveLength(0);
   });
+
+  it("uses only the persisted speaking result when it is weaker than the written exam", async () => {
+    const user = await createTestUser(`credit-speaking-${Date.now()}@hango.dev`);
+    const session = await createSessionWithAttempts(user.id, {
+      vocabulary: 3,
+      grammar: 3,
+      reading: 3,
+      listening: 3,
+    });
+    await db.placementSession.update({
+      where: { id: session.id },
+      data: { speakingHskLevel: 2 },
+    });
+    await db.placementSpeakingAttempt.create({
+      data: {
+        sessionId: session.id,
+        hskLevel: 3,
+        status: "COMPLETED",
+        score: 48,
+        passed: false,
+        pronunciation: 48,
+        fluency: 48,
+        accuracy: 48,
+        complexity: 48,
+        communicationEffectiveness: 48,
+        objectiveCompletionRatio: 1,
+        completedAt: new Date(),
+      },
+    });
+
+    const result = await applyPlacementCredit(user.id, session.id);
+    expect(result).not.toBeNull();
+    expect(result!.creditedLevel).toBe(2);
+
+    const completions = await db.learnerLessonCompletion.findMany({
+      where: { userId: user.id },
+      include: { lesson: { select: { hskReference: true } } },
+    });
+    expect(completions.length).toBeGreaterThan(0);
+    expect(completions.every((item) => (item.lesson.hskReference ?? 99) <= 2)).toBe(
+      true,
+    );
+  }, 120000);
 
   it("is idempotent - a second call never duplicates or downgrades existing credit", async () => {
     const user = await createTestUser(`credit-idempotent-${Date.now()}@hango.dev`);
@@ -156,8 +199,8 @@ describe("applyPlacementCredit (integration, real database, real seeded content)
       listening: 1,
     });
 
-    const first = await applyPlacementCredit(user.id, session.id, null, []);
-    const second = await applyPlacementCredit(user.id, session.id, null, []);
+    const first = await applyPlacementCredit(user.id, session.id);
+    const second = await applyPlacementCredit(user.id, session.id);
 
     expect(second!.creditedLessonCount).toBe(0);
     const completions = await db.learnerLessonCompletion.findMany({
@@ -183,7 +226,7 @@ describe("applyPlacementCredit (integration, real database, real seeded content)
       reading: 1,
       listening: 1,
     });
-    await applyPlacementCredit(user.id, session.id, null, []);
+    await applyPlacementCredit(user.id, session.id);
 
     const completion = await db.learnerLessonCompletion.findUniqueOrThrow({
       where: { userId_lessonId: { userId: user.id, lessonId: realLesson.id } },

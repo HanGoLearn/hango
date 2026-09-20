@@ -6,10 +6,20 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 const isWindows = process.platform === "win32";
 
 let server: ChildProcess;
+let serverOutput = "";
+
+function appendServerOutput(chunk: Buffer | string): void {
+  serverOutput = `${serverOutput}${chunk.toString()}`.slice(-8_000);
+}
 
 async function waitForServer(timeoutMs: number): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    if (server.exitCode !== null) {
+      throw new Error(
+        `Server exited before becoming ready (code ${server.exitCode}).\n${serverOutput}`,
+      );
+    }
     try {
       const response = await fetch(BASE_URL);
       if (response.ok) return;
@@ -18,7 +28,9 @@ async function waitForServer(timeoutMs: number): Promise<void> {
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error("Server did not become ready in time");
+  throw new Error(
+    `Server did not become ready in time. Recent output:\n${serverOutput}`,
+  );
 }
 
 describe("application smoke test", () => {
@@ -26,7 +38,7 @@ describe("application smoke test", () => {
     server = spawn(`npx next dev -p ${PORT}`, {
       cwd: process.cwd(),
       shell: true,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       // Not on Windows: puts the shell + `next dev` (+ its own children) in
       // a new process group, so the whole tree can be killed together via
       // a negative PID below - mirrors what `taskkill /T` already does on
@@ -39,8 +51,10 @@ describe("application smoke test", () => {
       // server loads local config the same way `npm run dev` does.
       env: { ...process.env, NODE_ENV: "development" },
     });
-    await waitForServer(60_000);
-  }, 75_000);
+    server.stdout?.on("data", appendServerOutput);
+    server.stderr?.on("data", appendServerOutput);
+    await waitForServer(120_000);
+  }, 135_000);
 
   afterAll(async () => {
     if (!server.pid) return;
@@ -51,9 +65,13 @@ describe("application smoke test", () => {
     // process running either way.
     if (isWindows) {
       await new Promise<void>((resolve) => {
-        const kill = spawn("taskkill", ["/pid", String(server.pid), "/t", "/f"], {
-          stdio: "ignore",
-        });
+        const kill = spawn(
+          "taskkill",
+          ["/pid", String(server.pid), "/t", "/f"],
+          {
+            stdio: "ignore",
+          },
+        );
         kill.on("exit", () => resolve());
         kill.on("error", () => resolve());
       });

@@ -9,6 +9,7 @@ import {
   getSpeakingSessionWithAttempts,
   deleteSpeakingAttempt,
 } from "@/lib/speaking-data";
+import { getStorageProvider } from "@/lib/storage";
 import { resolveSafePath } from "@/lib/storage/providers/local";
 
 // Only auth() is mocked — everything else runs against the real database
@@ -81,6 +82,38 @@ describe("Speaking Lab (integration, real database, mock AI/STT providers)", () 
 
     const filePath = resolveSafePath(attempt.audioFilePath!);
     await expect(access(filePath)).resolves.toBeUndefined();
+  });
+
+  it("processes but does not retain audio when the learner selected that privacy option", async () => {
+    const user = await createTestUser(
+      `speaking-no-retention-${Date.now()}@hango.dev`,
+    );
+    await db.learnerProfile.update({
+      where: { userId: user.id },
+      data: { recordingRetentionDays: 0 },
+    });
+    const session = await createSpeakingSession(
+      user.id,
+      "PRONUNCIATION",
+      "你好",
+      {},
+    );
+
+    const attempt = await submitRecording(
+      user.id,
+      session.id,
+      Buffer.from("temporary audio"),
+      "audio/webm",
+      1,
+    );
+
+    expect(attempt.audioFilePath).toBeNull();
+    const deletion = await db.privateObjectDeletion.findFirstOrThrow({
+      where: { ownerUserId: user.id },
+    });
+    expect(deletion.status).toBe("COMPLETED");
+    expect(await getStorageProvider().exists(deletion.storageKey)).toBe(false);
+    await db.privateObjectDeletion.delete({ where: { id: deletion.id } });
   });
 
   it("stores a text-fallback attempt with full confidence and no audio file", async () => {

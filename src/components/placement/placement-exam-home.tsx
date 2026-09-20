@@ -187,12 +187,14 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
 export function PlacementExamHome({
   sessionId,
   initialQuestion,
+  initialResult = null,
   locale,
   messages,
   footer,
 }: {
   sessionId: string;
   initialQuestion: PlacementQuestionView | null;
+  initialResult?: PlacementResult | null;
   locale: AppLocale;
   messages: OnboardingMessages["placementExam"];
   /** Rendered at the bottom of the result screen - lets a caller (e.g. the
@@ -214,10 +216,12 @@ export function PlacementExamHome({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
-  const [result, setResult] = useState<PlacementResult | null>(null);
+  const [result, setResult] = useState<PlacementResult | null>(initialResult);
   const [speakingOutcome, setSpeakingOutcome] =
     useState<PlacementSpeakingOutcome | null>(null);
-  const [finishedAt, setFinishedAt] = useState<number | null>(null);
+  const [finishedAt, setFinishedAt] = useState<number | null>(() =>
+    initialResult?.status === "COMPLETED" ? Date.now() : null,
+  );
   const [secondsLeft, setSecondsLeft] = useState(() =>
     initialQuestion
       ? secondsForQuestion(initialQuestion)
@@ -233,15 +237,8 @@ export function PlacementExamHome({
   useEffect(() => {
     if (!result || !finishedAt || creditAppliedRef.current) return;
     creditAppliedRef.current = true;
-    void applyPlacementCreditAction(
-      sessionId,
-      speakingOutcome?.creditedLevel ?? null,
-      speakingOutcome?.attempts.map((attempt) => ({
-        level: attempt.level,
-        score: attempt.evaluation.score,
-      })) ?? [],
-    );
-  }, [result, finishedAt, speakingOutcome, sessionId]);
+    void applyPlacementCreditAction(sessionId);
+  }, [result, finishedAt, sessionId]);
 
   function loadQuestion(next: PlacementQuestionView | null) {
     setQuestion(next);
@@ -275,7 +272,7 @@ export function PlacementExamHome({
     }
     setAnsweredCount((count) => count + 1);
     setSubmitting(false);
-    if (response.value.result.status === "COMPLETED") {
+    if (response.value.result.status !== "IN_PROGRESS") {
       const completedResult = response.value.result;
       setResult(completedResult);
       const speakingStart = placementSpeakingStartLevel([
@@ -284,7 +281,9 @@ export function PlacementExamHome({
         completedResult.readingHskLevel,
         completedResult.listeningHskLevel,
       ]);
-      if (speakingStart == null) setFinishedAt(Date.now());
+      if (completedResult.status === "COMPLETED" || speakingStart == null) {
+        setFinishedAt(Date.now());
+      }
       return;
     }
     loadQuestion(response.value.nextQuestion);
@@ -385,6 +384,7 @@ export function PlacementExamHome({
   if (result && speakingStartLevel && !speakingOutcome) {
     return (
       <PlacementSpeakingExam
+        sessionId={sessionId}
         startingLevel={speakingStartLevel}
         messages={messages.speaking}
         levelMessages={messages.levels}
@@ -454,6 +454,7 @@ export function PlacementExamHome({
               maxPlays={1}
               fetchUrl={async () => {
                 const response = await getPlacementListeningAudioAction(
+                  sessionId,
                   question.id,
                 );
                 return response.ok

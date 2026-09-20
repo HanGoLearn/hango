@@ -28,7 +28,10 @@ import {
   recordVocabularyWordSeenAction,
   recordVocabularyQuizAttemptsAction,
 } from "@/lib/actions/vocabulary-interactivity";
-import type { VocabularyQuizAttemptInput } from "@/lib/vocabulary-interactivity";
+import type {
+  VocabularyQuizAnswerInput,
+  VocabularyQuizAttemptInput,
+} from "@/lib/vocabulary-interactivity";
 import {
   buildVocabularyQuizOptions,
   buildFillBlankQuestion,
@@ -206,19 +209,20 @@ export function VocabularyStep({
 
   function handleAnswer(
     questionKey: string,
-    optionId: string,
+    answer: VocabularyQuizAnswerInput,
     isCorrect: boolean,
     vocabularyItemId: string,
   ) {
     if (answeredByQuestion[questionKey]) return;
     setAnsweredByQuestion((previous) => ({
       ...previous,
-      [questionKey]: optionId,
+      [questionKey]:
+        answer.type === "OPTION" ? answer.optionId : "submitted",
     }));
     pendingAttemptsRef.current.push({
       vocabularyItemId,
       questionKey,
-      isCorrect,
+      answer,
     });
   }
 
@@ -231,14 +235,23 @@ export function VocabularyStep({
   function finishQuickTest(
     finalAnswers: Record<string, { optionId: string; isCorrect: boolean }>,
   ) {
-    const attempts: VocabularyQuizAttemptInput[] = vocabulary.map((v) => ({
-      vocabularyItemId: v.vocabularyItem.id,
-      questionKey: `${v.vocabularyItem.id}:quicktest`,
-      isCorrect: finalAnswers[v.vocabularyItem.id]?.isCorrect ?? false,
-    }));
+    const attempts: VocabularyQuizAttemptInput[] = vocabulary.flatMap((v) => {
+      const answer = finalAnswers[v.vocabularyItem.id];
+      return answer
+        ? [
+            {
+              vocabularyItemId: v.vocabularyItem.id,
+              questionKey: `${v.vocabularyItem.id}:quicktest`,
+              answer: { type: "OPTION" as const, optionId: answer.optionId },
+            },
+          ]
+        : [];
+    });
     void recordVocabularyQuizAttemptsAction(lessonId, attempts);
 
-    const passedCount = attempts.filter((a) => a.isCorrect).length;
+    const passedCount = Object.values(finalAnswers).filter(
+      (answer) => answer.isCorrect,
+    ).length;
     const passed = passedCount / vocabulary.length >= QUICK_TEST_PASS_THRESHOLD;
 
     if (passed) {
@@ -358,12 +371,13 @@ export function VocabularyStep({
           currentItemId={qtItem.id}
           field="meaning"
           selectedOptionId={qtAnswer?.optionId}
-          onAnswer={(optionId, isCorrect) =>
+          onAnswer={(answer, isCorrect) => {
+            if (answer.type !== "OPTION") return;
             setQuickTestAnswers((previous) => ({
               ...previous,
-              [qtItem.id]: { optionId, isCorrect },
-            }))
-          }
+              [qtItem.id]: { optionId: answer.optionId, isCorrect },
+            }));
+          }}
         />
 
         <div className="mt-2 flex items-center justify-between gap-3">
@@ -494,8 +508,10 @@ export function VocabularyStep({
 
         {plan.map((entry) => {
           const selectedOptionId = answeredByQuestion[entry.key];
-          const onAnswer = (optionId: string, isCorrect: boolean) =>
-            handleAnswer(entry.key, optionId, isCorrect, currentItem.id);
+          const onAnswer = (
+            answer: VocabularyQuizAnswerInput,
+            isCorrect: boolean,
+          ) => handleAnswer(entry.key, answer, isCorrect, currentItem.id);
 
           if (entry.type === "meaning") {
             return (
@@ -668,7 +684,7 @@ function VocabularyQuizCheck({
   currentItemId: string;
   field: VocabularyQuizField;
   selectedOptionId: string | undefined;
-  onAnswer: (optionId: string, isCorrect: boolean) => void;
+  onAnswer: (answer: VocabularyQuizAnswerInput, isCorrect: boolean) => void;
 }) {
   // Memoized so re-renders triggered by answering (a state change, not a
   // new word) don't reshuffle the options out from under the learner.
@@ -693,7 +709,9 @@ function VocabularyQuizCheck({
       <QuizOptionList
         options={options}
         selectedOptionId={selectedOptionId}
-        onAnswer={onAnswer}
+        onAnswer={(optionId, isCorrect) =>
+          onAnswer({ type: "OPTION", optionId }, isCorrect)
+        }
       />
     </div>
   );
@@ -712,7 +730,7 @@ function VocabularyFillBlankCheck({
   exampleText: string;
   hint?: string;
   selectedOptionId: string | undefined;
-  onAnswer: (optionId: string, isCorrect: boolean) => void;
+  onAnswer: (answer: VocabularyQuizAnswerInput, isCorrect: boolean) => void;
 }) {
   // Memoized for the same reason as VocabularyQuizCheck's options — keeps
   // option order stable across the re-render that answering triggers.
@@ -739,7 +757,9 @@ function VocabularyFillBlankCheck({
       <QuizOptionList
         options={question.options}
         selectedOptionId={selectedOptionId}
-        onAnswer={onAnswer}
+        onAnswer={(optionId, isCorrect) =>
+          onAnswer({ type: "OPTION", optionId }, isCorrect)
+        }
       />
     </div>
   );
@@ -767,7 +787,7 @@ function VocabularySentenceOrderCheck({
   exampleText: string;
   exampleTranslation: string;
   answered: boolean;
-  onAnswer: (optionId: string, isCorrect: boolean) => void;
+  onAnswer: (answer: VocabularyQuizAnswerInput, isCorrect: boolean) => void;
 }) {
   const messages = useLessonMessages();
   // Memoized for the same reason as the other checks — keeps token order
@@ -807,7 +827,7 @@ function VocabularySentenceOrderCheck({
       (token, index) => token === correctOrder[index],
     );
     setSubmittedCorrect(isCorrect);
-    onAnswer("submitted", isCorrect);
+    onAnswer({ type: "ORDER", tokens: [...built] }, isCorrect);
   }
 
   return (

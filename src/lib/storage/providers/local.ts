@@ -1,8 +1,17 @@
-import { access, mkdir, readFile, writeFile, unlink } from "node:fs/promises";
-import { dirname, join, normalize, relative } from "node:path";
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  writeFile,
+  unlink,
+} from "node:fs/promises";
+import { dirname, join, normalize, relative, resolve } from "node:path";
 import type { StorageProvider } from "@/lib/storage/provider";
 
-const STORAGE_ROOT = join(process.cwd(), ".storage");
+const STORAGE_ROOT = process.env.HANGO_STORAGE_ROOT
+  ? resolve(process.env.HANGO_STORAGE_ROOT)
+  : join(process.cwd(), ".storage");
 
 /**
  * Dev-only stand-in for real cloud storage (no S3/Blob provider configured
@@ -36,7 +45,40 @@ export class LocalStorageProvider implements StorageProvider {
 
   async delete(key: string): Promise<void> {
     const filePath = resolveSafePath(key);
-    await unlink(filePath).catch(() => undefined);
+    try {
+      await unlink(filePath);
+    } catch (error) {
+      // Deletion is intentionally idempotent, but real provider/filesystem
+      // failures must reach the durable retry queue instead of being hidden.
+      if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    }
+  }
+
+  async list(prefix: string): Promise<string[]> {
+    const prefixPath = resolveSafePath(prefix);
+    const keys: string[] = [];
+
+    async function walk(directory: string): Promise<void> {
+      let entries;
+      try {
+        entries = await readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if (isNodeError(error) && error.code === "ENOENT") return;
+        throw error;
+      }
+
+      for (const entry of entries) {
+        const absolute = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          await walk(absolute);
+        } else if (entry.isFile()) {
+          keys.push(relative(STORAGE_ROOT, absolute).replaceAll("\\", "/"));
+        }
+      }
+    }
+
+    await walk(prefixPath);
+    return keys.sort();
   }
 
   async exists(key: string): Promise<boolean> {
@@ -47,6 +89,10 @@ export class LocalStorageProvider implements StorageProvider {
       return false;
     }
   }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 /** Rejects any key that would resolve outside STORAGE_ROOT (e.g. via `..`). */

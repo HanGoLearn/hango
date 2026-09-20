@@ -38,11 +38,18 @@ jobs:
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
+        with:
+          # SEC-11 scans every reachable commit, not only the PR tip.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
+
+      # Redacted history scan for provider tokens, private keys and committed
+      # secret-variable literals. Runs before dependencies or application code.
+      - run: npm run security:secrets
 
       - run: npm ci
 
@@ -67,26 +74,33 @@ jobs:
       - run: npx tsx scripts/seed-placement-exam-full.mjs
 
       # The committed project/curriculum-translations/es/ packages can't be
-      # imported here (2026-09-14 CI investigation): the importer requires
-      # each scenario's database id to match the id recorded at export time
-      # (deliberately, so a translation package can never land on the wrong
-      # scenario) - db:seed on a fresh database assigns new random ids every
-      # run, so no exported package will ever match. Real Spanish coverage
-      # is exercised against the shared dev database elsewhere; the two
-      # cases that assert real Spanish strings (content.test.ts's Speaking
-      # Lab picker, recommendation.test.ts's Spanish recommendation) are
-      # expected to fail here until this database-id coupling has a real
-      # fix (tracked in project/TASKS.md, not attempted in this pass).
-      #
-      # Three admin-analytics.test.ts/admin-backoffice.test.ts cases are
-      # also expected to fail here: they intentionally look up one specific
-      # real administrator account by email (not a fixture this workflow
-      # creates), so they only pass against the shared dev database too.
+      # imported here: the importer's sourceHash is computed over each
+      # unit's database-generated id (src/lib/content/curriculum-
+      # translation-exchange.ts's sourcePayload), so a fresh db:seed run -
+      # which assigns brand new ids to the same authored English text - can
+      # never reproduce a matching hash, no matter how the id-equality
+      # check itself is handled. This seeds just the handful of Spanish
+      # strings the suite actually asserts on (QA-02, 2026-09-16), looked
+      # up by stable slug/order instead of a snapshotted id, so it works on
+      # any freshly-seeded database. It is not a substitute for the full
+      # translation system, which stays scoped to the shared dev database.
+      - run: npx tsx scripts/seed-es-fixtures-for-tests.ts
 
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run build
+        env:
+          NODE_ENV: production
+      - run: npx prisma migrate status
+      # Blocks every unexpected high/critical finding. The only temporary
+      # exception is the exact Prisma CLI 7.10.0 chain documented in
+      # project/AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md; it expires and fails
+      # closed if its package, version or install path changes.
+      - run: npm run security:audit
 
       - run: npm run test:unit
       - run: npm run test:component
+      # Runs against the disposable Postgres service seeded above; no real
+      # learner account or shared development-database ids are required.
       - run: npm run test:integration
       - run: npm run test:smoke

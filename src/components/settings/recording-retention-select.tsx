@@ -25,6 +25,8 @@ export function RecordingRetentionSelect({
   const [saving, setSaving] = useState(false);
   const retentionOptions = [
     { value: "forever", label: messages.forever },
+    { value: "0", label: messages.never },
+    { value: "7", label: messages.days7 },
     { value: "30", label: messages.days30 },
     { value: "90", label: messages.days90 },
     { value: "365", label: messages.year },

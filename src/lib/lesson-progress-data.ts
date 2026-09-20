@@ -3,7 +3,6 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getLessonsForScenarioLevel } from "@/lib/content/lesson";
 import { resolveLessonAvailability } from "@/lib/content/learning-journey";
 import { resolveNextStepId, isLessonComplete } from "@/lib/lesson-progress";
-import type { StepForProgress } from "@/lib/lesson-progress";
 import { checkLessonCompletionAchievements } from "@/lib/achievements";
 
 async function loadSiblingCompletionIds(
@@ -109,40 +108,57 @@ export async function advanceLessonStep(
   userId: string,
   lessonId: string,
   stepId: string,
-  steps: StepForProgress[],
   response: unknown,
 ) {
-  const progress = await db.learnerLessonProgress.findUniqueOrThrow({
-    where: { userId_lessonId: { userId, lessonId } },
-  });
+  const { updated, complete } = await db.$transaction(async (tx) => {
+    const progress = await tx.learnerLessonProgress.findUniqueOrThrow({
+      where: { userId_lessonId: { userId, lessonId } },
+    });
+    const steps = await tx.lessonStep.findMany({
+      where: { lessonId },
+      orderBy: { order: "asc" },
+      select: { id: true, order: true },
+    });
+    const validStepIds = new Set(steps.map((step) => step.id));
+    if (!validStepIds.has(stepId) || progress.currentStepId !== stepId) {
+      throw new Error("This is not the current step for this lesson.");
+    }
 
-  const responses =
-    response === undefined
-      ? (progress.responses as Record<string, unknown>)
-      : {
-          ...(progress.responses as Record<string, unknown>),
-          [stepId]: response,
-        };
-  const completedStepIds = new Set([...progress.completedStepIds, stepId]);
-  const complete = isLessonComplete(steps, completedStepIds);
-  const nextStepId = resolveNextStepId(steps, stepId) ?? stepId;
+    const responses =
+      response === undefined
+        ? (progress.responses as Record<string, unknown>)
+        : {
+            ...(progress.responses as Record<string, unknown>),
+            [stepId]: response,
+          };
+    const completedStepIds = new Set(
+      progress.completedStepIds.filter((id) => validStepIds.has(id)),
+    );
+    completedStepIds.add(stepId);
+    const complete = isLessonComplete(steps, completedStepIds);
+    const nextStepId = resolveNextStepId(steps, stepId) ?? stepId;
 
-  const updated = await db.learnerLessonProgress.update({
-    where: { userId_lessonId: { userId, lessonId } },
-    data: {
-      responses: responses as Prisma.InputJsonValue,
-      completedStepIds: [...completedStepIds],
-      currentStepId: nextStepId,
-      completedAt: complete ? new Date() : null,
-    },
+    const updated = await tx.learnerLessonProgress.update({
+      where: { userId_lessonId: { userId, lessonId } },
+      data: {
+        responses: responses as Prisma.InputJsonValue,
+        completedStepIds: [...completedStepIds],
+        currentStepId: nextStepId,
+        completedAt: complete ? new Date() : null,
+      },
+    });
+
+    if (complete) {
+      await tx.learnerLessonCompletion.upsert({
+        where: { userId_lessonId: { userId, lessonId } },
+        update: {},
+        create: { userId, lessonId },
+      });
+    }
+    return { updated, complete };
   });
 
   if (complete) {
-    await db.learnerLessonCompletion.upsert({
-      where: { userId_lessonId: { userId, lessonId } },
-      update: {},
-      create: { userId, lessonId },
-    });
     await checkLessonCompletionAchievements(userId);
   }
 
@@ -155,6 +171,20 @@ export async function setCurrentLessonStep(
   lessonId: string,
   stepId: string,
 ) {
+  const progress = await db.learnerLessonProgress.findUniqueOrThrow({
+    where: { userId_lessonId: { userId, lessonId } },
+  });
+  const belongsToLesson = await db.lessonStep.findFirst({
+    where: { id: stepId, lessonId },
+    select: { id: true },
+  });
+  if (
+    !belongsToLesson ||
+    (stepId !== progress.currentStepId &&
+      !progress.completedStepIds.includes(stepId))
+  ) {
+    throw new Error("This lesson step is not available.");
+  }
   return db.learnerLessonProgress.update({
     where: { userId_lessonId: { userId, lessonId } },
     data: { currentStepId: stepId },

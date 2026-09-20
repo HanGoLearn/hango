@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
+import { getStorageProvider } from "@/lib/storage";
 
 const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({
@@ -240,6 +241,12 @@ describe("Settings actions (integration, real database)", () => {
     });
     expect(profile.recordingRetentionDays).toBe(90);
 
+    await updateRecordingRetentionAction(0);
+    profile = await db.learnerProfile.findUniqueOrThrow({
+      where: { userId: user.id },
+    });
+    expect(profile.recordingRetentionDays).toBe(0);
+
     await updateRecordingRetentionAction(null);
     profile = await db.learnerProfile.findUniqueOrThrow({
       where: { userId: user.id },
@@ -251,12 +258,30 @@ describe("Settings actions (integration, real database)", () => {
     const user = await createTestUser(
       `settings-delete-${Date.now()}@hango.dev`,
     );
+    const session = await db.speakingSession.create({
+      data: {
+        userId: user.id,
+        activityType: "PRONUNCIATION",
+        prompt: "你好",
+      },
+    });
+    const storage = getStorageProvider();
+    const key = `speaking/${user.id}/${session.id}-${Date.now()}.webm`;
+    await storage.upload(key, Buffer.from("private recording"), "audio/webm");
+    await db.speakingAttempt.create({
+      data: { sessionId: session.id, audioFilePath: key },
+    });
 
     await expect(deleteAccountAction()).rejects.toMatchObject({
       digest: expect.stringContaining("NEXT_REDIRECT"),
     });
 
     expect(await db.user.findUnique({ where: { id: user.id } })).toBeNull();
+    expect(await storage.exists(key)).toBe(false);
+    expect(
+      await db.privateObjectDeletion.findUnique({ where: { storageKey: key } }),
+    ).toMatchObject({ status: "COMPLETED", reason: "ACCOUNT_DELETION" });
+    await db.privateObjectDeletion.delete({ where: { storageKey: key } });
   });
 
   it("Server Actions require an authenticated session", async () => {

@@ -40,6 +40,6 @@ export const defaultAiModeSchema = z.enum(["TUTOR", "PRACTICE"]);
 export const recordingRetentionSchema = z
   .number()
   .int()
-  .min(1)
+  .min(0)
   .max(365)
   .nullable();

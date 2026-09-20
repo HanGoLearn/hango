@@ -12,6 +12,8 @@ export interface StorageProvider {
   /** Raw file bytes, for server-side processing (e.g. merging several audio clips into one). */
   download(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
+  /** Enumerate keys beneath a private, provider-relative prefix. Used only by maintenance jobs; never exposed to the browser. */
+  list(prefix: string): Promise<string[]>;
   /** Whether a file already exists at this key - lets content-addressed callers (see audio-content-key.ts) skip a paid regeneration when the content was already generated under a previous database row. */
   exists(key: string): Promise<boolean>;
 }

@@ -566,6 +566,7 @@ export const messages = {
           "Previous band confirmed ({score}/100). Now trying the next level.",
         errorSuffix:
           "Your transcript was kept on this screen; start this level again when you're ready.",
+        retry: "Try again",
         evidenceNote:
           "Speak naturally. The character's words never count as your own exam evidence, and {level} remains diagnostic only.",
         dismiss: "Dismiss message",
@@ -941,6 +942,7 @@ export const messages = {
       emptyResponse: "Your response can't be empty.",
       responseTooLong: "Your response is too long (maximum {max} characters).",
       recordingTooLarge: "The recording is too large.",
+      recordingTooLong: "The recording is too long (maximum 5 minutes).",
       unsupportedRecording: "That recording format isn't supported.",
       submitFailed:
         "Something went wrong submitting your attempt. Please try again.",
@@ -1523,10 +1525,12 @@ export const messages = {
       recordingRetention: "Speaking Lab recording retention",
       ariaLabel: "Recording retention",
       forever: "Keep indefinitely",
+      never: "Do not keep recordings",
+      days7: "7 days",
       days30: "30 days",
       days90: "90 days",
       year: "1 year",
-      note: "Stores your preference only — automatic deletion on a schedule isn't built yet.",
+      note: "This applies to Speaking Lab audio only. Transcripts and feedback remain available after a recording is deleted.",
     },
     deleteAccount: {
       open: "Delete account",
@@ -1619,6 +1623,12 @@ export const messages = {
         "An account with this email already exists. Try logging in instead.",
       accountCreated:
         "Account created. Check your email for a link to verify your account before logging in.",
+      accountCreatedDevelopment:
+        "Account created. Email delivery is disabled in this development environment, so you can log in now.",
+      emailUnavailable:
+        "We couldn't send the verification email right now. Please try again later.",
+      tooManyAttempts:
+        "Too many attempts. Wait a few minutes before trying again.",
       invalidEmail: "Enter a valid email address",
       resetSent:
         "If an account exists for that email, we sent a link to reset your password.",

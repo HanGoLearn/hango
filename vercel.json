@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/weekly-leaderboard-payout",
       "schedule": "5 0 * * 1"
+    },
+    {
+      "path": "/api/cron/private-object-retention",
+      "schedule": "25 3 * * *"
     }
   ]
 }

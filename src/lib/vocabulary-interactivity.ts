@@ -10,6 +10,14 @@ import {
   estimateTtsDurationSeconds,
   trackAiOperation,
 } from "@/lib/ai-usage";
+import {
+  buildFillBlankQuestion,
+  buildSentenceOrderQuestion,
+  buildVocabularyQuizOptions,
+  planVocabularyQuestions,
+  seededRandom,
+  type VocabularyQuizItem,
+} from "@/lib/content/vocabulary-quiz";
 
 // Shared by both audio generation (TTS) and example generation (AI text) -
 // both are paid, on-demand calls that only run on a cache miss, but still
@@ -185,10 +193,14 @@ export async function recordVocabularyWordSeen(
   await recordVocabularyInteraction(userId, vocabularyItemId);
 }
 
+export type VocabularyQuizAnswerInput =
+  | { type: "OPTION"; optionId: string }
+  | { type: "ORDER"; tokens: string[] };
+
 export interface VocabularyQuizAttemptInput {
   vocabularyItemId: string;
   questionKey: string;
-  isCorrect: boolean;
+  answer: VocabularyQuizAnswerInput;
 }
 
 /**
@@ -202,13 +214,11 @@ export interface VocabularyQuizAttemptInput {
  * first by `createdAt`, the same convention as `computeExerciseScore()` in
  * reflection.ts.
  *
- * Correctness (green/red) is computed client-side (vocabulary-quiz.ts
- * builds the questions and grades them in the browser, never AI-generated
- * or server-validated) and shown instantly regardless of when this call
- * fires - the Vocabulary Step buffers a word's answers and flushes them
- * together when the learner leaves that word (Next/Back/finishing the
- * step), instead of one `create` per question (4-6 per word, the highest-
- * frequency interaction in a lesson).
+ * Green/red feedback is still shown instantly in the browser, but persisted
+ * correctness is recomputed here from the canonical lesson, vocabulary,
+ * examples, difficulty and deterministic question plan. The browser submits
+ * only the selected option or ordered tokens; it cannot award itself a
+ * correct answer or invent a question that affects Reflection/points.
  */
 export async function recordVocabularyQuizAttempts(
   userId: string,
@@ -216,8 +226,145 @@ export async function recordVocabularyQuizAttempts(
   attempts: VocabularyQuizAttemptInput[],
 ): Promise<void> {
   if (attempts.length === 0) return;
+  if (attempts.length > 200) {
+    throw new Error("Too many vocabulary answers in one submission.");
+  }
+  const uniqueKeys = new Set(attempts.map((attempt) => attempt.questionKey));
+  if (uniqueKeys.size !== attempts.length) {
+    throw new Error("Duplicate vocabulary question in one submission.");
+  }
+
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: {
+      scenarioLevel: { select: { difficulty: true } },
+      vocabulary: {
+        where: { vocabularyItem: { status: "PUBLISHED" } },
+        orderBy: { order: "asc" },
+        select: {
+          vocabularyItem: {
+            select: {
+              id: true,
+              meaning: true,
+              pinyin: true,
+              chineseForm: true,
+              examples: {
+                orderBy: { order: "asc" },
+                select: { chineseText: true, translation: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!lesson) throw new VocabularyInteractivityNotFoundError("Lesson not found.");
+
+  const quizItems: VocabularyQuizItem[] = lesson.vocabulary.map(
+    ({ vocabularyItem }) => ({
+      id: vocabularyItem.id,
+      meaning: vocabularyItem.meaning,
+      pinyin: vocabularyItem.pinyin,
+      chineseForm: vocabularyItem.chineseForm,
+    }),
+  );
+  const words = new Map(
+    lesson.vocabulary.map(({ vocabularyItem }) => [
+      vocabularyItem.id,
+      vocabularyItem,
+    ]),
+  );
+
+  const graded = attempts.map((attempt) => {
+    if (
+      attempt.questionKey.length > 200 ||
+      (attempt.answer.type === "OPTION" &&
+        attempt.answer.optionId.length > 200) ||
+      (attempt.answer.type === "ORDER" &&
+        (attempt.answer.tokens.length > 64 ||
+          attempt.answer.tokens.some((token) => token.length > 64)))
+    ) {
+      throw new Error("Invalid vocabulary answer.");
+    }
+    const word = words.get(attempt.vocabularyItemId);
+    if (!word) {
+      throw new Error("Vocabulary item does not belong to this lesson.");
+    }
+
+    const quickTestKey = `${word.id}:quicktest`;
+    const planEntry =
+      attempt.questionKey === quickTestKey
+        ? { key: quickTestKey, type: "meaning" as const }
+        : planVocabularyQuestions(
+            word.id,
+            lessonId,
+            lesson.scenarioLevel.difficulty,
+            word.examples.length,
+          ).find((entry) => entry.key === attempt.questionKey);
+    if (!planEntry) throw new Error("Vocabulary question was not planned.");
+
+    if (planEntry.type === "order") {
+      const example = word.examples[planEntry.exampleIndex!];
+      const question =
+        example &&
+        buildSentenceOrderQuestion(
+          quizItems,
+          word.id,
+          example.chineseText,
+          example.translation,
+          seededRandom(`${word.id}:order:${example.chineseText}`),
+        );
+      if (!question || attempt.answer.type !== "ORDER") {
+        throw new Error("Invalid vocabulary order answer.");
+      }
+      const isCorrect =
+        attempt.answer.tokens.length === question.correctOrder.length &&
+        attempt.answer.tokens.every(
+          (token, index) => token === question.correctOrder[index],
+        );
+      return { ...attempt, isCorrect };
+    }
+
+    const field = planEntry.type === "chineseForm" ? "chineseForm" : "meaning";
+    const example =
+      planEntry.type === "blank"
+        ? word.examples[planEntry.exampleIndex!]
+        : null;
+    const options =
+      planEntry.type === "blank"
+        ? example
+          ? buildFillBlankQuestion(
+              quizItems,
+              word.id,
+              example.chineseText,
+              undefined,
+              seededRandom(`${word.id}:blank:${example.chineseText}`),
+            )?.options
+          : null
+        : buildVocabularyQuizOptions(
+            quizItems,
+            word.id,
+            field,
+            undefined,
+            seededRandom(`${word.id}:${field}`),
+          );
+    const optionAnswer = attempt.answer;
+    if (
+      !options ||
+      options.length < 2 ||
+      optionAnswer.type !== "OPTION" ||
+      !options.some((option) => option.id === optionAnswer.optionId)
+    ) {
+      throw new Error("Invalid vocabulary option answer.");
+    }
+    return {
+      ...attempt,
+      isCorrect: optionAnswer.optionId === word.id,
+    };
+  });
+
   await db.vocabularyQuizAttempt.createMany({
-    data: attempts.map((attempt) => ({
+    data: graded.map((attempt) => ({
       userId,
       lessonId,
       vocabularyItemId: attempt.vocabularyItemId,

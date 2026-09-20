@@ -1,6 +1,11 @@
 import "server-only";
 import { z } from "zod";
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(1).optional(),
+);
+
 const serverSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -11,6 +16,10 @@ const serverSchema = z.object({
   // see src/lib/auth.ts. Get these from https://console.cloud.google.com/apis/credentials.
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // Transactional email. Both values are required together in production;
+  // development/test can run without delivery and never print secret links.
+  RESEND_API_KEY: optionalNonEmptyString,
+  EMAIL_FROM: optionalNonEmptyString,
   // Optional: the AI Teacher (FASE 8) falls back to a mock provider when
   // both of these are unset — see src/lib/ai/index.ts. OPENAI_API_KEY is
   // preferred when both are set (OpenAI is the project's chosen provider).
@@ -33,6 +42,8 @@ const parsed = serverSchema.safeParse({
   AUTH_SECRET: process.env.AUTH_SECRET,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  EMAIL_FROM: process.env.EMAIL_FROM,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   CRON_SECRET: process.env.CRON_SECRET,

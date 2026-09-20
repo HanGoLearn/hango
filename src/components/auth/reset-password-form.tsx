@@ -52,6 +52,14 @@ export function ResetPasswordForm({
   return (
     <form action={formAction} className="flex flex-col gap-5">
       <input type="hidden" name="locale" value={locale} />
+      <input
+        name="website"
+        type="text"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="absolute left-[-10000px] h-px w-px overflow-hidden"
+      />
       <div className="flex flex-col gap-1 text-center">
         <PageTitle>{messages.resetPassword.title}</PageTitle>
       </div>

@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { resolveSafePath } from "@/lib/storage/providers/local";
+import { getNextQuestion } from "@/lib/placement-exam-data";
+import { getStorageProvider } from "@/lib/storage";
 
 /**
  * Authenticated file delivery for locally-stored audio (docs/03_engineering/
@@ -15,11 +15,11 @@ import { resolveSafePath } from "@/lib/storage/providers/local";
  *   requires owning the SpeakingAttempt that references the key.
  * - Dialogue audio (`dialogue-audio/...`), vocabulary audio
  *   (`vocabulary-audio/...`), grammar audio (`grammar-audio/...`),
- *   placement exam listening audio (`placement-audio/...`), and Welcome to
- *   Chinese audio (`welcome-audio/...`) are shared content generated once
- *   and reused by every learner, so any authenticated user may fetch it —
- *   the check is that the key is a real generated file, not that the
- *   requester generated it.
+ *   and Welcome to Chinese audio (`welcome-audio/...`) are shared content
+ *   generated once and reused by every learner, so any authenticated user
+ *   may fetch them. Placement listening files are also shared physically,
+ *   but may only be delivered while their question is the learner's current
+ *   active placement question.
  * - `welcome-audio/...` has no backing DB row to check against (that
  *   page's content is hand-authored in the page component, not
  *   database-backed) - authorization there is simply "the file exists at
@@ -27,7 +27,10 @@ import { resolveSafePath } from "@/lib/storage/providers/local";
  *   welcome-audio.ts's allowlisted synthesizeAndStore actually wrote it;
  *   an attacker can't get arbitrary content stored under this prefix.
  */
-async function isSharedContentKey(key: string): Promise<boolean> {
+async function isSharedContentKey(
+  key: string,
+  userId: string,
+): Promise<boolean> {
   if (key.startsWith("welcome-audio/")) return true;
   if (key.startsWith("dialogue-audio/")) {
     const [line, dialogue] = await Promise.all([
@@ -50,11 +53,31 @@ async function isSharedContentKey(key: string): Promise<boolean> {
     return example !== null;
   }
   if (key.startsWith("placement-audio/")) {
-    const [line, script] = await Promise.all([
-      db.placementListeningLine.findFirst({ where: { audioFilePath: key } }),
-      db.placementListeningScript.findFirst({ where: { audioFilePath: key } }),
+    const [line, script, placementSession] = await Promise.all([
+      db.placementListeningLine.findFirst({
+        where: { audioFilePath: key },
+        select: { script: { select: { questionId: true } } },
+      }),
+      db.placementListeningScript.findFirst({
+        where: { audioFilePath: key },
+        select: { questionId: true },
+      }),
+      db.placementSession.findFirst({
+        where: { userId, status: "IN_PROGRESS" },
+        orderBy: { startedAt: "desc" },
+        select: { id: true },
+      }),
     ]);
-    return line !== null || script !== null;
+    const questionId = script?.questionId ?? line?.script.questionId;
+    if (!questionId || !placementSession) return false;
+
+    const currentQuestion = await getNextQuestion(userId, placementSession.id);
+    const currentQuestionIds = currentQuestion?.questionGroup?.length
+      ? currentQuestion.questionGroup.map((question) => question.id)
+      : currentQuestion
+        ? [currentQuestion.id]
+        : [];
+    return currentQuestionIds.includes(questionId);
   }
   return false;
 }
@@ -82,7 +105,7 @@ export async function GET(
   let contentType: string;
 
   if (isSharedNamespace) {
-    authorized = await isSharedContentKey(key);
+    authorized = await isSharedContentKey(key, session.user.id);
     contentType = key.endsWith(".wav") ? "audio/wav" : "audio/mpeg";
   } else {
     const attempt = await db.speakingAttempt.findFirst({
@@ -90,7 +113,7 @@ export async function GET(
       include: { session: { select: { userId: true } } },
     });
     authorized = attempt !== null && attempt.session.userId === session.user.id;
-    contentType = "audio/webm";
+    contentType = speakingContentType(key);
   }
 
   if (!authorized) {
@@ -98,8 +121,7 @@ export async function GET(
   }
 
   try {
-    const filePath = resolveSafePath(key);
-    const data = await readFile(filePath);
+    const data = await getStorageProvider().download(key);
     const total = data.byteLength;
 
     // `<audio>` seeking relies on the browser being able to fetch just the
@@ -111,7 +133,12 @@ export async function GET(
       const match = /^bytes=(\d*)-(\d*)$/.exec(range);
       const start = match?.[1] ? Number(match[1]) : 0;
       const end = match?.[2] ? Number(match[2]) : total - 1;
-      if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || end >= total) {
+      if (
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        start > end ||
+        end >= total
+      ) {
         return new NextResponse(null, {
           status: 416,
           headers: { "content-range": `bytes */${total}` },
@@ -140,4 +167,11 @@ export async function GET(
   } catch {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
+}
+
+function speakingContentType(key: string): string {
+  if (key.endsWith(".ogg")) return "audio/ogg";
+  if (key.endsWith(".m4a")) return "audio/mp4";
+  if (key.endsWith(".wav")) return "audio/wav";
+  return "audio/webm";
 }

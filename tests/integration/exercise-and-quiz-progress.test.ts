@@ -106,8 +106,14 @@ describe("batched exercise attempts (2026-08-19, Grammar batching - integration,
     const user = await createTestUser(`exercise-batch-${Date.now()}@hango.dev`);
     const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
     const exercises = await getExercisesForLesson(lesson!.id);
-    expect(exercises.length).toBeGreaterThanOrEqual(2);
-    const [first, second] = exercises;
+    const multipleChoiceExercises = exercises.filter(
+      (exercise) =>
+        exercise.type === "MULTIPLE_CHOICE" &&
+        exercise.options.some((option) => option.isCorrect) &&
+        exercise.options.some((option) => !option.isCorrect),
+    );
+    expect(multipleChoiceExercises.length).toBeGreaterThanOrEqual(2);
+    const [first, second] = multipleChoiceExercises;
     const correctFirst = first!.options.find((o) => o.isCorrect)!;
     const wrongSecond = second!.options.find((o) => !o.isCorrect)!;
 
@@ -238,6 +244,56 @@ describe("quiz attempts (integration, real seeded database)", () => {
         optionId: quiz!.questions[0]!.options[0]!.id,
       }),
     ).rejects.toThrow("Not authorized");
+  });
+
+  it("rejects a question that does not belong to the attempt's quiz", async () => {
+    const user = await createTestUser(`quiz-question-scope-${Date.now()}@hango.dev`);
+    const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
+    const otherLesson = await getLessonBySlug(
+      "restaurant-ingredients-and-preferences",
+    );
+    const [quiz] = await getQuizzesForLesson(lesson!.id);
+    const [otherQuiz] = await getQuizzesForLesson(otherLesson!.id);
+    const attempt = await startQuizAttempt(user.id, quiz!.id);
+    const foreignQuestion = otherQuiz!.questions[0]!;
+
+    await expect(
+      submitQuizAnswer(user.id, attempt.id, foreignQuestion.id, {
+        type: "MULTIPLE_CHOICE",
+        optionId: foreignQuestion.options[0]!.id,
+      }),
+    ).rejects.toThrow();
+    expect(
+      await db.quizAnswer.count({ where: { quizAttemptId: attempt.id } }),
+    ).toBe(0);
+  });
+
+  it("cannot complete an incomplete quiz or mutate it after completion", async () => {
+    const user = await createTestUser(`quiz-state-${Date.now()}@hango.dev`);
+    const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
+    const [quiz] = await getQuizzesForLesson(lesson!.id);
+    const attempt = await startQuizAttempt(user.id, quiz!.id);
+
+    await expect(completeQuizAttempt(user.id, attempt.id)).rejects.toThrow(
+      "Answer every quiz question",
+    );
+
+    for (const question of quiz!.questions) {
+      const correctOption = question.options.find((option) => option.isCorrect)!;
+      await submitQuizAnswer(user.id, attempt.id, question.id, {
+        type: "MULTIPLE_CHOICE",
+        optionId: correctOption.id,
+      });
+    }
+    await completeQuizAttempt(user.id, attempt.id);
+
+    const firstQuestion = quiz!.questions[0]!;
+    await expect(
+      submitQuizAnswer(user.id, attempt.id, firstQuestion.id, {
+        type: "MULTIPLE_CHOICE",
+        optionId: firstQuestion.options[0]!.id,
+      }),
+    ).rejects.toThrow("complete");
   });
 
   it("server actions require an authenticated session", async () => {

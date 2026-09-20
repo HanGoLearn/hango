@@ -4,8 +4,20 @@ const { signIn, FakeAuthError } = vi.hoisted(() => {
   class FakeAuthError extends Error {}
   return { signIn: vi.fn(), FakeAuthError };
 });
+const { consumeAuthRateLimit, FakeRateLimitError } = vi.hoisted(() => {
+  class FakeRateLimitError extends Error {}
+  return {
+    consumeAuthRateLimit: vi.fn(),
+    FakeRateLimitError,
+  };
+});
 vi.mock("@/lib/auth", () => ({ signIn }));
 vi.mock("next-auth", () => ({ AuthError: FakeAuthError }));
+vi.mock("@/lib/auth-rate-limit", () => ({
+  AuthRateLimitExceededError: FakeRateLimitError,
+  consumeAuthRateLimit,
+  getAuthRequestIdentity: vi.fn(async () => ({ ip: "203.0.113.5" })),
+}));
 
 import { loginAction } from "@/lib/actions/login";
 
@@ -63,5 +75,24 @@ describe("loginAction", () => {
       password: "correct",
       redirectTo: "/learning-journey",
     });
+    expect(consumeAuthRateLimit).toHaveBeenCalledWith(
+      "login",
+      "user@hango.dev",
+      { ip: "203.0.113.5" },
+    );
+  });
+
+  it("blocks the provider call after the persistent limit is exceeded", async () => {
+    consumeAuthRateLimit.mockRejectedValueOnce(new FakeRateLimitError());
+
+    const result = await loginAction(
+      "/dashboard",
+      { status: "idle" },
+      formDataOf({ email: "USER@HANGO.DEV ", password: "correct" }),
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/too many attempts/i);
+    expect(signIn).not.toHaveBeenCalled();
   });
 });

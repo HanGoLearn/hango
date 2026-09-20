@@ -14,8 +14,10 @@ import {
   type PlacementSkillName,
 } from "@/lib/placement-exam";
 import { createTtlCache } from "@/lib/ttl-cache";
+import { placementSpeakingStartLevel } from "@/lib/placement-speaking";
 
 export class PlacementExamNotFoundError extends Error {}
+export class PlacementExamInvalidSubmissionError extends Error {}
 
 const ADAPTIVE_BLOCK_SKILLS: PlacementSkillName[] = ["VOCABULARY", "GRAMMAR", "READING"];
 
@@ -349,7 +351,7 @@ async function buildListeningBlockView(
  */
 export async function startPlacementSession(userId: string): Promise<string> {
   const existing = await db.placementSession.findFirst({
-    where: { userId, status: "IN_PROGRESS" },
+    where: { userId, status: { in: ["IN_PROGRESS", "SPEAKING"] } },
     orderBy: { startedAt: "desc" },
   });
   if (existing) return existing.id;
@@ -371,12 +373,15 @@ export async function startPlacementSession(userId: string): Promise<string> {
  * one request" reasoning as maybeCompleteSession's `nextQuestionHint`.
  */
 export async function getNextQuestion(
+  userId: string,
   sessionId: string,
   attemptsHint?: PlacementAttemptRecord[],
 ): Promise<PlacementQuestionView | null> {
-  const session = await db.placementSession.findUnique({ where: { id: sessionId } });
+  const session = await db.placementSession.findFirst({
+    where: { id: sessionId, userId },
+  });
   if (!session) throw new PlacementExamNotFoundError("Session not found.");
-  if (session.status === "COMPLETED") return null;
+  if (session.status !== "IN_PROGRESS") return null;
 
   const [questionMetas, categoriesBySkill, attempts] = await Promise.all([
     loadQuestionMetas(),
@@ -495,10 +500,36 @@ export async function getNextQuestion(
 }
 
 export async function submitPlacementAnswer(
+  userId: string,
   sessionId: string,
   questionId: string,
   answer: PlacementAnswer,
 ): Promise<{ isCorrect: boolean }> {
+  if (
+    !answer ||
+    typeof answer !== "object" ||
+    !("type" in answer) ||
+    (answer.type !== "MULTIPLE_CHOICE" && answer.type !== "SENTENCE_ORDERING")
+  ) {
+    throw new PlacementExamInvalidSubmissionError(
+      "The placement answer has an invalid shape.",
+    );
+  }
+  const currentQuestion = await getNextQuestion(userId, sessionId);
+  const expectedQuestionIds = currentQuestion?.questionGroup?.length
+    ? currentQuestion.questionGroup.map((question) => question.id)
+    : currentQuestion
+      ? [currentQuestion.id]
+      : [];
+  if (
+    expectedQuestionIds.length !== 1 ||
+    expectedQuestionIds[0] !== questionId
+  ) {
+    throw new PlacementExamInvalidSubmissionError(
+      "The submitted question is not the current placement question.",
+    );
+  }
+
   const question = await db.placementQuestion.findUnique({
     where: { id: questionId },
     include: { options: true },
@@ -507,9 +538,31 @@ export async function submitPlacementAnswer(
 
   let isCorrect: boolean;
   if (answer.type === "MULTIPLE_CHOICE") {
+    if (question.type !== "MULTIPLE_CHOICE") {
+      throw new PlacementExamInvalidSubmissionError(
+        "The answer type does not match the current question.",
+      );
+    }
     const selected = question.options.find((o) => o.id === answer.optionId);
-    isCorrect = selected?.isCorrect ?? false;
+    if (!selected) {
+      throw new PlacementExamInvalidSubmissionError(
+        "The selected option does not belong to the current question.",
+      );
+    }
+    isCorrect = selected.isCorrect;
   } else {
+    if (
+      question.type !== "SENTENCE_ORDERING" ||
+      !Array.isArray(answer.order) ||
+      answer.order.length > 100 ||
+      answer.order.some(
+        (token) => typeof token !== "string" || token.length > 200,
+      )
+    ) {
+      throw new PlacementExamInvalidSubmissionError(
+        "The answer type does not match the current question.",
+      );
+    }
     const correctOrder =
       (question.correctAnswer as { order?: string[] } | null)?.order ?? [];
     isCorrect =
@@ -517,15 +570,43 @@ export async function submitPlacementAnswer(
       correctOrder.every((token, index) => token === answer.order[index]);
   }
 
-  await db.placementAttempt.create({
-    data: {
-      sessionId,
-      questionId,
-      isCorrect,
-      selectedOptionId: answer.type === "MULTIPLE_CHOICE" ? answer.optionId : null,
-      submittedOrder: answer.type === "SENTENCE_ORDERING" ? answer.order : undefined,
-    },
-  });
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const activeSession = await tx.placementSession.findFirst({
+          where: { id: sessionId, userId, status: "IN_PROGRESS" },
+          select: { id: true },
+        });
+        if (!activeSession) {
+          throw new PlacementExamNotFoundError("Active session not found.");
+        }
+        await tx.placementAttempt.create({
+          data: {
+            sessionId,
+            questionId,
+            isCorrect,
+            selectedOptionId:
+              answer.type === "MULTIPLE_CHOICE" ? answer.optionId : null,
+            submittedOrder:
+              answer.type === "SENTENCE_ORDERING" ? answer.order : undefined,
+          },
+        });
+      },
+      { timeout: 15_000 },
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      throw new PlacementExamInvalidSubmissionError(
+        "This placement question was already submitted.",
+      );
+    }
+    throw error;
+  }
 
   return { isCorrect };
 }
@@ -540,12 +621,54 @@ export async function submitPlacementAnswer(
  * shape.
  */
 export async function recordPlacementTimeout(
+  userId: string,
   sessionId: string,
   questionId: string,
 ): Promise<void> {
-  await db.placementAttempt.create({
-    data: { sessionId, questionId, isCorrect: false },
-  });
+  const currentQuestion = await getNextQuestion(userId, sessionId);
+  const expectedQuestionIds = currentQuestion?.questionGroup?.length
+    ? currentQuestion.questionGroup.map((question) => question.id)
+    : currentQuestion
+      ? [currentQuestion.id]
+      : [];
+  if (
+    expectedQuestionIds.length !== 1 ||
+    expectedQuestionIds[0] !== questionId
+  ) {
+    throw new PlacementExamInvalidSubmissionError(
+      "The timed-out question is not the current placement question.",
+    );
+  }
+
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const activeSession = await tx.placementSession.findFirst({
+          where: { id: sessionId, userId, status: "IN_PROGRESS" },
+          select: { id: true },
+        });
+        if (!activeSession) {
+          throw new PlacementExamNotFoundError("Active session not found.");
+        }
+        await tx.placementAttempt.create({
+          data: { sessionId, questionId, isCorrect: false },
+        });
+      },
+      { timeout: 15_000 },
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      throw new PlacementExamInvalidSubmissionError(
+        "This placement question was already submitted.",
+      );
+    }
+    throw error;
+  }
 }
 
 /**
@@ -556,23 +679,101 @@ export async function recordPlacementTimeout(
  * recorded as a timeout miss, same as recordPlacementTimeout.
  */
 export async function submitPlacementQuestionBlock(
+  userId: string,
   sessionId: string,
   answers: { questionId: string; optionId: string | null }[],
 ): Promise<void> {
-  for (const answer of answers) {
-    if (answer.optionId) {
-      await submitPlacementAnswer(sessionId, answer.questionId, {
-        type: "MULTIPLE_CHOICE",
-        optionId: answer.optionId,
-      });
-    } else {
-      await recordPlacementTimeout(sessionId, answer.questionId);
+  if (!Array.isArray(answers) || answers.length > 20) {
+    throw new PlacementExamInvalidSubmissionError(
+      "The placement block has an invalid shape.",
+    );
+  }
+  const currentQuestion = await getNextQuestion(userId, sessionId);
+  const expectedQuestionIds = currentQuestion?.questionGroup?.map(
+    (question) => question.id,
+  );
+  const submittedQuestionIds = answers.map((answer) => answer.questionId);
+  if (
+    !expectedQuestionIds ||
+    expectedQuestionIds.length < 2 ||
+    answers.length !== expectedQuestionIds.length ||
+    new Set(submittedQuestionIds).size !== submittedQuestionIds.length ||
+    expectedQuestionIds.some((id) => !submittedQuestionIds.includes(id))
+  ) {
+    throw new PlacementExamInvalidSubmissionError(
+      "The submitted block does not match the current placement block.",
+    );
+  }
+
+  const questions = await db.placementQuestion.findMany({
+    where: { id: { in: expectedQuestionIds } },
+    include: { options: true },
+  });
+  const questionsById = new Map(
+    questions.map((question) => [question.id, question]),
+  );
+  const attemptData = answers.map((answer) => {
+    const question = questionsById.get(answer.questionId);
+    if (!question || question.type !== "MULTIPLE_CHOICE") {
+      throw new PlacementExamInvalidSubmissionError(
+        "The submitted block contains an invalid question.",
+      );
     }
+    if (answer.optionId === null) {
+      return {
+        sessionId,
+        questionId: answer.questionId,
+        selectedOptionId: null,
+        isCorrect: false,
+      };
+    }
+    const selected = question.options.find(
+      (option) => option.id === answer.optionId,
+    );
+    if (!selected) {
+      throw new PlacementExamInvalidSubmissionError(
+        "A selected option does not belong to its placement question.",
+      );
+    }
+    return {
+      sessionId,
+      questionId: answer.questionId,
+      selectedOptionId: answer.optionId,
+      isCorrect: selected.isCorrect,
+    };
+  });
+
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const activeSession = await tx.placementSession.findFirst({
+          where: { id: sessionId, userId, status: "IN_PROGRESS" },
+          select: { id: true },
+        });
+        if (!activeSession) {
+          throw new PlacementExamNotFoundError("Active session not found.");
+        }
+        await tx.placementAttempt.createMany({ data: attemptData });
+      },
+      { timeout: 15_000 },
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      throw new PlacementExamInvalidSubmissionError(
+        "This placement block was already submitted.",
+      );
+    }
+    throw error;
   }
 }
 
 export interface PlacementResult {
-  status: "IN_PROGRESS" | "COMPLETED";
+  status: "IN_PROGRESS" | "SPEAKING" | "COMPLETED";
   vocabularyHskLevel: number | null;
   grammarHskLevel: number | null;
   readingHskLevel: number | null;
@@ -603,19 +804,22 @@ export interface PlacementResult {
  * above, so it hands the same list here too instead of a second fetch.
  */
 export async function maybeCompleteSession(
+  userId: string,
   sessionId: string,
   nextQuestionHint?: PlacementQuestionView | null,
   attemptsHint?: PlacementAttemptRecord[],
 ): Promise<PlacementResult> {
-  const session = await db.placementSession.findUnique({ where: { id: sessionId } });
+  const session = await db.placementSession.findFirst({
+    where: { id: sessionId, userId },
+  });
   if (!session) throw new PlacementExamNotFoundError("Session not found.");
 
   const attempts = attemptsHint ?? (await loadAttempts(sessionId));
   const totalCorrect = attempts.filter((a) => a.isCorrect).length;
 
-  if (session.status === "COMPLETED") {
+  if (session.status !== "IN_PROGRESS") {
     return {
-      status: "COMPLETED",
+      status: session.status,
       vocabularyHskLevel: session.vocabularyHskLevel,
       grammarHskLevel: session.grammarHskLevel,
       readingHskLevel: session.readingHskLevel,
@@ -626,7 +830,9 @@ export async function maybeCompleteSession(
   }
 
   const nextQuestion =
-    nextQuestionHint !== undefined ? nextQuestionHint : await getNextQuestion(sessionId);
+    nextQuestionHint !== undefined
+      ? nextQuestionHint
+      : await getNextQuestion(userId, sessionId);
   if (nextQuestion) {
     return {
       status: "IN_PROGRESS",
@@ -651,11 +857,19 @@ export async function maybeCompleteSession(
     ]),
   ) as Record<PlacementSkillName, number>;
 
+  const speakingStartLevel = placementSpeakingStartLevel([
+    levels.VOCABULARY,
+    levels.GRAMMAR,
+    levels.READING,
+    levels.LISTENING,
+  ]);
+  const nextStatus = speakingStartLevel == null ? "COMPLETED" : "SPEAKING";
+
   await db.placementSession.update({
     where: { id: sessionId },
     data: {
-      status: "COMPLETED",
-      completedAt: new Date(),
+      status: nextStatus,
+      completedAt: nextStatus === "COMPLETED" ? new Date() : null,
       vocabularyHskLevel: levels.VOCABULARY,
       grammarHskLevel: levels.GRAMMAR,
       readingHskLevel: levels.READING,
@@ -664,7 +878,7 @@ export async function maybeCompleteSession(
   });
 
   return {
-    status: "COMPLETED",
+    status: nextStatus,
     vocabularyHskLevel: levels.VOCABULARY,
     grammarHskLevel: levels.GRAMMAR,
     readingHskLevel: levels.READING,

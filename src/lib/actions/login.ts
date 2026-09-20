@@ -3,6 +3,12 @@
 import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
 import { getAuthMessages, resolveAuthLocale } from "@/i18n/auth";
+import {
+  AuthRateLimitExceededError,
+  consumeAuthRateLimit,
+  getAuthRequestIdentity,
+} from "@/lib/auth-rate-limit";
+import { isAuthHoneypotFilled } from "@/lib/auth-abuse";
 
 export interface LoginFormState {
   status: "idle" | "error";
@@ -16,9 +22,25 @@ export async function loginAction(
 ): Promise<LoginFormState> {
   const locale = resolveAuthLocale(formData.get("locale"));
   const messages = getAuthMessages(locale);
+  if (isAuthHoneypotFilled(formData)) {
+    return { status: "error", message: messages.actions.invalidCredentials };
+  }
+  const emailValue = formData.get("email");
+  const email =
+    typeof emailValue === "string" ? emailValue.trim().toLowerCase() : "";
+
+  try {
+    await consumeAuthRateLimit("login", email, await getAuthRequestIdentity());
+  } catch (error) {
+    if (error instanceof AuthRateLimitExceededError) {
+      return { status: "error", message: messages.actions.tooManyAttempts };
+    }
+    throw error;
+  }
+
   try {
     await signIn("credentials", {
-      email: formData.get("email"),
+      email,
       password: formData.get("password"),
       // Only ever a same-origin relative path (validated by the caller) —
       // never trust a redirect target from the client without checking.

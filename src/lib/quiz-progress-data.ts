@@ -12,6 +12,11 @@ import {
 } from "@/lib/progress-evidence";
 
 export async function startQuizAttempt(userId: string, quizId: string) {
+  const quiz = await db.quiz.findFirst({
+    where: { id: quizId, status: "PUBLISHED" },
+    select: { id: true },
+  });
+  if (!quiz) throw new Error("Quiz not found.");
   return db.quizAttempt.create({ data: { userId, quizId } });
 }
 
@@ -30,10 +35,11 @@ export async function submitQuizAnswer(
   quizQuestionId: string,
   answer: ExerciseAnswer,
 ) {
-  await assertOwnedAttempt(userId, attemptId);
+  const attempt = await assertOwnedAttempt(userId, attemptId);
+  if (attempt.completedAt) throw new Error("This quiz attempt is complete.");
 
-  const question = await db.quizQuestion.findUniqueOrThrow({
-    where: { id: quizQuestionId },
+  const question = await db.quizQuestion.findFirstOrThrow({
+    where: { id: quizQuestionId, quizId: attempt.quizId },
     include: { options: true },
   });
 
@@ -67,17 +73,37 @@ export async function submitQuizAnswer(
 }
 
 export async function completeQuizAttempt(userId: string, attemptId: string) {
-  await assertOwnedAttempt(userId, attemptId);
+  const ownedAttempt = await assertOwnedAttempt(userId, attemptId);
+  const [answers, questionCount] = await Promise.all([
+    db.quizAnswer.findMany({ where: { quizAttemptId: attemptId } }),
+    db.quizQuestion.count({ where: { quizId: ownedAttempt.quizId } }),
+  ]);
+  if (answers.length !== questionCount || questionCount === 0) {
+    throw new Error("Answer every quiz question before completing the quiz.");
+  }
+  if (ownedAttempt.completedAt) {
+    return {
+      attempt: ownedAttempt,
+      totalQuestions: questionCount,
+      correctCount: answers.filter((answer) => answer.isCorrect).length,
+    };
+  }
 
-  const answers = await db.quizAnswer.findMany({
-    where: { quizAttemptId: attemptId },
-  });
   const score = calculateScore(answers);
-
-  const attempt = await db.quizAttempt.update({
-    where: { id: attemptId },
+  const completed = await db.quizAttempt.updateMany({
+    where: { id: attemptId, userId, completedAt: null },
     data: { score, completedAt: new Date() },
   });
+  const attempt = await db.quizAttempt.findUniqueOrThrow({
+    where: { id: attemptId },
+  });
+  if (completed.count === 0) {
+    return {
+      attempt,
+      totalQuestions: questionCount,
+      correctCount: answers.filter((answer) => answer.isCorrect).length,
+    };
+  }
 
   const quiz = await db.quiz.findUniqueOrThrow({
     where: { id: attempt.quizId },

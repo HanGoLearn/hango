@@ -8,8 +8,6 @@ import {
   getPendingAnnouncementsForUser,
 } from "@/lib/learner-notices";
 
-const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
-
 const testUserIds: string[] = [];
 const testAnnouncementIds: string[] = [];
 
@@ -292,15 +290,15 @@ describe("admin back-office (integration, real database)", () => {
     );
   });
 
-  it("excludes the real administrator's own AI usage from getAdminOverview (2026-09-08 optimization safety net)", async () => {
-    // Reads the REAL admin User row by email (it always exists - this is
-    // the live account) but never creates, deletes, or modifies it - only
-    // attaches and then removes its own marker-tagged AiUsageLog rows, so
-    // this test can never collide with or corrupt the real account.
-    const admin = await db.user.findUniqueOrThrow({
-      where: { email: ADMIN_EMAIL },
-      select: { id: true },
-    });
+  it("excludes the given user's own AI usage from getAdminOverview (2026-09-08 optimization safety net)", async () => {
+    // getAdminOverview(excludeUserId) exists so the platform owner's own
+    // testing/usage never inflates "real learner" metrics. This exercises
+    // that id-keyed exclusion with a throwaway user created here, not the
+    // real administrator account (2026-09-16, QA-01: CI has no such account
+    // and must not depend on one existing). The separate ADMIN_EMAIL-literal
+    // cohort filter inside getAdminOverview is a trivial `email != literal`
+    // clause and is not this test's concern.
+    const admin = await createUser("admin-overview-admin");
     const learner = await createUser("admin-overview-exclusion");
     const marker = `admin-overview-exclusion-${randomUUID()}`;
 

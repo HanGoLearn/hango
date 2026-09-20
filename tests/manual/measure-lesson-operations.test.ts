@@ -143,28 +143,17 @@ describe("manual measurement tool - not part of the regular CI suite", () => {
       for (const v of vocabulary) {
         const item = v.vocabularyItem;
         await recordVocabularyWordSeen(user.id, item.id);
-        // 5 quiz questions per word at INTERMEDIATE difficulty
-        // (vocabularyQuestionsPerWord() in points-system.ts).
-        const questionKeys = [
-          `${item.id}:meaning`,
-          `${item.id}:chineseForm`,
-          `${item.id}:blank:0`,
-          `${item.id}:blank:1`,
-          `${item.id}:order`,
-        ];
         await recordVocabularyQuizAttempts(
           user.id,
           lesson.id,
-          questionKeys.map((questionKey) => ({
+          [{
             vocabularyItemId: item.id,
-            questionKey,
-            isCorrect: true,
-          })),
+            questionKey: `${item.id}:quicktest`,
+            answer: { type: "OPTION", optionId: item.id },
+          }],
         );
       }
-      if (vocabStep) {
-        await advanceLessonStep(user.id, lesson.id, vocabStep.id, steps, undefined);
-      }
+      void vocabStep;
 
       // --- GRAMMAR ---
       // Examples and exercises both arrive already loaded with
@@ -189,15 +178,11 @@ describe("manual measurement tool - not part of the regular CI suite", () => {
           })),
         );
       }
-      if (grammarStep) {
-        await advanceLessonStep(user.id, lesson.id, grammarStep.id, steps, undefined);
-      }
+      void grammarStep;
 
       // --- SITUATION (read-only content, no submit action) ---
       const situationStep = steps.find((s) => s.type === "SITUATION");
-      if (situationStep) {
-        await advanceLessonStep(user.id, lesson.id, situationStep.id, steps, undefined);
-      }
+      void situationStep;
 
       // --- COMPREHENSION ---
       const comprehensionStep = steps.find((s) => s.type === "COMPREHENSION");
@@ -206,9 +191,7 @@ describe("manual measurement tool - not part of the regular CI suite", () => {
       for (const exercise of comprehensionExercises) {
         await recordExerciseAttempt(user.id, exercise.id, answerForExercise(exercise));
       }
-      if (comprehensionStep) {
-        await advanceLessonStep(user.id, lesson.id, comprehensionStep.id, steps, undefined);
-      }
+      void comprehensionStep;
 
       // --- SPEAKING (synthetic transcript - live audio can't be scripted) ---
       const speakingStep = steps.find((s) => s.type === "SPEAKING");
@@ -241,20 +224,29 @@ describe("manual measurement tool - not part of the regular CI suite", () => {
           "No published Mission for this lesson - Speaking score will be null. Fine for a cost measurement, just note it's not exercising that code path.",
         );
       }
-      if (speakingStep) {
-        await advanceLessonStep(user.id, lesson.id, speakingStep.id, steps, undefined);
-      }
+      void speakingStep;
 
       // --- REFLECTION (the 2 real AI-provider calls happen here) ---
       const reflectionStep = steps.find((s) => s.type === "REFLECTION");
       const report = await getOrGenerateLessonReflectionReport(user.id, lesson.id);
       console.log("Reflection total score:", report.totalScore);
       expect(report).toBeTruthy();
-      if (reflectionStep) {
-        const result = await advanceLessonStep(user.id, lesson.id, reflectionStep.id, steps, undefined);
-        console.log("Lesson completedAt:", result.completedAt);
-        expect(result.completedAt).not.toBeNull();
+      void reflectionStep;
+
+      // Progress itself is advanced in the real database order. Content
+      // work above is measured separately and must never be able to define
+      // or skip the authoritative LessonStep sequence.
+      let progressResult;
+      for (const step of steps) {
+        progressResult = await advanceLessonStep(
+          user.id,
+          lesson.id,
+          step.id,
+          undefined,
+        );
       }
+      console.log("Lesson completedAt:", progressResult?.completedAt);
+      expect(progressResult?.completedAt).not.toBeNull();
 
       console.log(
         "Simulated lesson run complete - check the Prisma Console Operations delta now.",

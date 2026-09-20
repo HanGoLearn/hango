@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { HanVoiceConversation } from "@/components/ai-teacher/han-voice-conversation";
 import { InformationBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Body, Caption, SectionTitle } from "@/components/ui/typography";
-import { gradePlacementSpeakingAction } from "@/lib/actions/placement-exam";
+import {
+  gradePlacementSpeakingAction,
+  startPlacementSpeakingAttemptAction,
+} from "@/lib/actions/placement-exam";
 import { tierNameForLevel } from "@/lib/points-system";
 import type { AiChatMessage } from "@/components/ai-teacher/ai-teacher-provider";
 import {
-  nextPlacementSpeakingLevel,
   PLACEMENT_SPEAKING_MAX_TURNS,
   PLACEMENT_SPEAKING_MIN_TURNS,
-  PLACEMENT_SPEAKING_PASS_SCORE,
   PLACEMENT_SPEAKING_SCENARIOS,
-  type PlacementSpeakingEvaluation,
   type PlacementSpeakingLevel,
 } from "@/lib/placement-speaking";
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
@@ -24,34 +24,33 @@ import type { RealtimeConversationDiagnostics } from "@/components/ai-teacher/ha
 import type { OnboardingMessages } from "@/i18n/messages/types";
 import { formatMessage } from "@/i18n/format";
 
-export interface PlacementSpeakingAttemptView {
-  level: PlacementSpeakingLevel;
-  transcript: SpeakingTranscriptMessage[];
-  evaluation: PlacementSpeakingEvaluation;
-}
-
 export interface PlacementSpeakingOutcome {
   creditedLevel: number;
   diagnosticLevel: PlacementSpeakingLevel | null;
-  attempts: PlacementSpeakingAttemptView[];
 }
 
 export function PlacementSpeakingExam({
+  sessionId,
   startingLevel,
   onFinished,
   messages,
   levelMessages,
 }: {
+  sessionId: string;
   startingLevel: PlacementSpeakingLevel;
   onFinished: (outcome: PlacementSpeakingOutcome) => void;
   messages: OnboardingMessages["placementExam"]["speaking"];
   levelMessages: OnboardingMessages["placementExam"]["levels"];
 }) {
-  const [level, setLevel] = useState(startingLevel);
-  const [attempts, setAttempts] = useState<PlacementSpeakingAttemptView[]>([]);
+  const [attempt, setAttempt] = useState<{
+    attemptId: string;
+    level: PlacementSpeakingLevel;
+  } | null>(null);
+  const [loadingAttempt, setLoadingAttempt] = useState(true);
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastPassedScore, setLastPassedScore] = useState<number | null>(null);
+  const level = attempt?.level ?? startingLevel;
   const scenario = PLACEMENT_SPEAKING_SCENARIOS[level];
   const context = useMemo(() => ({ rolePlay: scenario.rolePlay }), [scenario]);
   const appendMessage = useCallback(
@@ -64,15 +63,53 @@ export function PlacementSpeakingExam({
     return levelMessages[tier as keyof typeof levelMessages] ?? tier;
   }
 
+  const loadAttempt = useCallback(async () => {
+    setLoadingAttempt(true);
+    setError(null);
+    const response = await startPlacementSpeakingAttemptAction(sessionId);
+    setLoadingAttempt(false);
+    if (!response.ok) {
+      setError(response.error);
+      return;
+    }
+    setAttempt({
+      attemptId: response.value.attemptId,
+      level: response.value.level,
+    });
+    setLastPassedScore(response.value.lastPassedScore);
+  }, [sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void startPlacementSpeakingAttemptAction(sessionId).then((response) => {
+      if (cancelled) return;
+      setLoadingAttempt(false);
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setAttempt({
+        attemptId: response.value.attemptId,
+        level: response.value.level,
+      });
+      setLastPassedScore(response.value.lastPassedScore);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
   const handleComplete = useCallback(
     async (
       transcript: SpeakingTranscriptMessage[],
       diagnostics: RealtimeConversationDiagnostics,
     ) => {
+      if (!attempt) return;
       setGrading(true);
       setError(null);
       const response = await gradePlacementSpeakingAction(
-        level,
+        sessionId,
+        attempt.attemptId,
         transcript,
         diagnostics.learnerTurnConfidences,
       );
@@ -82,37 +119,21 @@ export function PlacementSpeakingExam({
         return;
       }
 
-      const attempt = { level, transcript, evaluation: response.value };
-      const nextAttempts = [...attempts, attempt];
-      setAttempts(nextAttempts);
       setGrading(false);
-
-      if (response.value.score >= PLACEMENT_SPEAKING_PASS_SCORE) {
-        const nextLevel = nextPlacementSpeakingLevel(level);
-        if (nextLevel) {
-          setLastPassedScore(response.value.score);
-          setLevel(nextLevel);
-          return;
-        }
-        onFinished({
-          creditedLevel: 6,
-          diagnosticLevel: 7,
-          attempts: nextAttempts,
+      if (response.value.nextAttempt) {
+        setLastPassedScore(response.value.evaluation.score);
+        setAttempt({
+          attemptId: response.value.nextAttempt.attemptId,
+          level: response.value.nextAttempt.level,
         });
         return;
       }
-
-      onFinished({
-        creditedLevel:
-          level === startingLevel ? Math.max(0, startingLevel - 1) : level - 1,
-        diagnosticLevel: level === 7 ? 7 : null,
-        attempts: nextAttempts,
-      });
+      if (response.value.outcome) onFinished(response.value.outcome);
     },
-    [attempts, level, onFinished, startingLevel],
+    [attempt, onFinished, sessionId],
   );
 
-  if (grading) {
+  if (grading || loadingAttempt) {
     return (
       <Card className="flex min-h-80 flex-col items-center justify-center gap-3 text-center">
         <Loader2
@@ -153,8 +174,8 @@ export function PlacementSpeakingExam({
       )}
 
       <HanVoiceConversation
-        key={level}
-        disabled={false}
+        key={attempt?.attemptId ?? level}
+        disabled={!attempt}
         voice="marin"
         explanationLanguage="EN"
         mode="PRACTICE"
@@ -176,13 +197,20 @@ export function PlacementSpeakingExam({
         {formatMessage(messages.evidenceNote, { level: localizedTier(7) })}
       </Caption>
       {error && (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setError(null)}
-        >
-          {messages.dismiss}
-        </Button>
+        <div className="flex gap-2">
+          {!attempt && (
+            <Button type="button" variant="secondary" onClick={loadAttempt}>
+              {messages.retry}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setError(null)}
+          >
+            {messages.dismiss}
+          </Button>
+        </div>
       )}
     </div>
   );

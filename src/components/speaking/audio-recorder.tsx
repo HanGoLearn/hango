@@ -60,6 +60,8 @@ type RecorderState =
   | "permission-denied"
   | "submitting";
 
+const MAX_RECORDING_SECONDS = 5 * 60;
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
@@ -98,11 +100,13 @@ export function AudioRecorder({
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordedBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     return () => {
       timerRef.current && clearInterval(timerRef.current);
+      stopTimeoutRef.current && clearTimeout(stopTimeoutRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       audioUrl && URL.revokeObjectURL(audioUrl);
     };
@@ -127,6 +131,10 @@ export function AudioRecorder({
       timerRef.current = setInterval(() => {
         setElapsedSeconds((value) => value + 1);
       }, 1000);
+      stopTimeoutRef.current = setTimeout(
+        () => stopRecording(),
+        MAX_RECORDING_SECONDS * 1000,
+      );
       setState("recording");
     } catch {
       setState("permission-denied");
@@ -139,7 +147,9 @@ export function AudioRecorder({
     if (!recorder) return;
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+      const blob = new Blob(chunksRef.current, {
+        type: recorder.mimeType || chunksRef.current[0]?.type || "audio/webm",
+      });
       recordedBlobRef.current = blob;
       setAudioUrl(URL.createObjectURL(blob));
       setState("recorded");
@@ -154,6 +164,7 @@ export function AudioRecorder({
     recorder.stop();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     if (timerRef.current) clearInterval(timerRef.current);
+    if (stopTimeoutRef.current) clearTimeout(stopTimeoutRef.current);
   }
 
   function handleRetry() {
@@ -170,7 +181,13 @@ export function AudioRecorder({
     if (!recordedBlobRef.current) return;
     setState("submitting");
     const formData = new FormData();
-    formData.append("audio", recordedBlobRef.current, "recording.webm");
+    const mimeType = recordedBlobRef.current.type;
+    const extension = mimeType.includes("mp4")
+      ? "m4a"
+      : mimeType.includes("ogg")
+        ? "ogg"
+        : "webm";
+    formData.append("audio", recordedBlobRef.current, `recording.${extension}`);
     formData.append("durationSeconds", String(elapsedSeconds));
     if (typeof toneScore === "number") {
       formData.append("toneScore", String(toneScore));

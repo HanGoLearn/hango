@@ -1193,8 +1193,33 @@ async function main() {
       database,
       translationPackage.scenario.slug,
     );
-    if (!scenario || scenario.id !== translationPackage.scenario.id) {
+    if (!scenario) {
       throw new Error("The scenario no longer matches the exported package.");
+    }
+    if (scenario.id !== translationPackage.scenario.id) {
+      // A different database (a fresh CI/local seed, a restored snapshot)
+      // assigns its own ids to the same authored content - the slug lookup
+      // above already anchors this package to the right scenario by its
+      // stable natural key, so requiring the export-time id to *also*
+      // match added no real safety beyond that, only a hard block on ever
+      // reusing a package across databases. Downgraded to informational
+      // (2026-09-16 CI investigation, QA-02).
+      //
+      // This alone does NOT make packages portable, though: sourceHash
+      // (checked right below) is computed over every unit's `key`/
+      // `entityId` (sourcePayload, above), which embed this same
+      // database-assigned id - so it still won't match a freshly-seeded
+      // database even when the English text is byte-identical. Real
+      // portability would mean re-keying units by something id-independent
+      // (e.g. a slug/order path) instead of `entityType:entityId:field`,
+      // which changes what every already-reviewed, already-imported
+      // package on the shared dev database means - out of scope for this
+      // pass. The actually-portable fix used for CI/local is
+      // scripts/seed-es-fixtures-for-tests.ts, which looks up its handful
+      // of target rows by slug at seed time instead of importing a package.
+      console.log(
+        "Note: scenario id differs from the exported package (importing into a different database instance than it was exported from). Proceeding on slug match; sourceHash below still gates on content.",
+      );
     }
     const current = translationPackageFor(scenario);
     if (current.sourceHash !== translationPackage.sourceHash) {

@@ -10,6 +10,7 @@ const exactErrorKeys = {
     "attemptRateLimit",
   "Response can't be empty.": "emptyResponse",
   "Recording is too large.": "recordingTooLarge",
+  "Recording is too long.": "recordingTooLong",
   "Unsupported recording format.": "unsupportedRecording",
   "Something went wrong submitting your attempt. Please try again.":
     "submitFailed",

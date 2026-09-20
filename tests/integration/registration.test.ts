@@ -1,4 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { verificationUrls } = vi.hoisted(() => ({
+  verificationUrls: [] as string[],
+}));
+vi.mock("@/lib/email", () => ({
+  isTransactionalEmailConfigured: () => false,
+  sendVerificationEmail: vi.fn(async (_email: string, url: string) =>
+    verificationUrls.push(url),
+  ),
+}));
+
 import { registerAction } from "@/lib/actions/register";
 import { db } from "@/lib/db";
 
@@ -13,6 +24,8 @@ function formDataOf(fields: Record<string, string>): FormData {
 const testEmails: string[] = [];
 
 afterEach(async () => {
+  await db.authRateLimitBucket.deleteMany();
+  verificationUrls.length = 0;
   if (testEmails.length > 0) {
     await db.verificationToken.deleteMany({
       where: { identifier: { in: testEmails } },
@@ -59,6 +72,12 @@ describe("registerAction (integration, real database)", () => {
     });
     expect(token).not.toBeNull();
     expect(token!.expires.getTime()).toBeGreaterThan(Date.now());
+    const deliveredToken = new URL(verificationUrls.at(-1)!).searchParams.get(
+      "token",
+    );
+    expect(deliveredToken).toHaveLength(64);
+    expect(token!.token).not.toBe(deliveredToken);
+    expect(token!.token).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 
   it("prevents duplicate accounts for the same email", async () => {

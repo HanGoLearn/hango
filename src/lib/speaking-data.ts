@@ -32,6 +32,11 @@ import {
   parseCustomScenario,
   type CustomScenario,
 } from "@/lib/custom-scenario-prompt";
+import {
+  deleteSpeakingAttemptWithPrivateObject,
+  processPrivateObjectDeletionJobs,
+  queuePrivateSpeakingObjectDeletion,
+} from "@/lib/private-object-retention";
 
 /** Only lesson-scoped sessions produce evidence - Competency has no scenario-level link (see progress-evidence.ts). */
 async function recordSpeakingEvidence(
@@ -184,7 +189,8 @@ export async function submitRecording(
   const session = await assertOwnedSession(userId, sessionId);
 
   const storage = getStorageProvider();
-  const key = `speaking/${userId}/${sessionId}-${Date.now()}.webm`;
+  const extension = speakingAudioExtension(mimeType);
+  const key = `speaking/${userId}/${sessionId}-${Date.now()}.${extension}`;
   await storage.upload(key, audio, mimeType);
 
   let transcript = "";
@@ -202,7 +208,7 @@ export async function submitRecording(
       model: result.model,
       estimatedCostUsd: estimateSttCostUsd(durationSeconds),
       durationSeconds,
-      durationSource: "CLIENT_RECORDED",
+      durationSource: "SERVER_DECODED",
     });
     const assessment = assessHanTranscript(
       result.transcript,
@@ -213,7 +219,17 @@ export async function submitRecording(
         await storage.delete(key);
       } catch {
         // A cleanup failure must not turn a repeatable learner-input problem
-        // into a generic submission error.
+        // into a generic submission error. Persist it for the daily retry.
+        try {
+          await queuePrivateSpeakingObjectDeletion({
+            storageKey: key,
+            ownerUserId: userId,
+            reason: "FAILED_UPLOAD",
+          });
+        } catch {
+          // The orphan scanner is the final fallback if even the outbox write
+          // is temporarily unavailable.
+        }
       }
       throw new SpeakingInputError(HAN_STT_REPEAT_MESSAGE);
     }
@@ -251,7 +267,33 @@ export async function submitRecording(
 
   await recordSpeakingEvidence(userId, session, feedback, attempt.id);
 
+  const profile = await db.learnerProfile.findUnique({
+    where: { userId },
+    select: { recordingRetentionDays: true },
+  });
+  if (profile?.recordingRetentionDays === 0) {
+    await queuePrivateSpeakingObjectDeletion({
+      storageKey: key,
+      ownerUserId: userId,
+      speakingAttemptId: attempt.id,
+      reason: "RETENTION",
+    });
+    await processPrivateObjectDeletionJobs({ ownerUserId: userId });
+    return db.speakingAttempt.findUniqueOrThrow({
+      where: { id: attempt.id },
+    });
+  }
+
   return attempt;
+}
+
+function speakingAudioExtension(
+  mimeType: string,
+): "webm" | "ogg" | "m4a" | "wav" {
+  if (mimeType === "audio/ogg") return "ogg";
+  if (mimeType === "audio/mp4") return "m4a";
+  if (mimeType === "audio/wav") return "wav";
+  return "webm";
 }
 
 /** 10.2 "Provide text fallback" - no microphone/recording involved, transcript is exactly what the learner typed. */
@@ -327,10 +369,12 @@ export async function deleteSpeakingAttempt(userId: string, attemptId: string) {
   });
   if (attempt.session.userId !== userId) throw new Error("Not authorized");
 
-  if (attempt.audioFilePath) {
-    await getStorageProvider().delete(attempt.audioFilePath);
-  }
-  await db.speakingAttempt.delete({ where: { id: attemptId } });
+  await deleteSpeakingAttemptWithPrivateObject({
+    attemptId,
+    ownerUserId: userId,
+    storageKey: attempt.audioFilePath,
+  });
+  await processPrivateObjectDeletionJobs({ ownerUserId: userId });
 }
 
 // Its own limiter, same copy-paste convention as this file's own

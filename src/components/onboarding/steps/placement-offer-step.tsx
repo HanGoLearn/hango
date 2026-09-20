@@ -4,7 +4,10 @@ import { useState } from "react";
 import { startPlacementExamAction } from "@/lib/actions/placement-exam";
 import { acknowledgePlacementOfferAction } from "@/lib/actions/onboarding";
 import { PlacementExamHome } from "@/components/placement/placement-exam-home";
-import type { PlacementQuestionView } from "@/lib/placement-exam-data";
+import type {
+  PlacementQuestionView,
+  PlacementResult,
+} from "@/lib/placement-exam-data";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
@@ -41,6 +44,7 @@ export function PlacementOfferStep({
   const [exam, setExam] = useState<{
     sessionId: string;
     question: PlacementQuestionView | null;
+    result: PlacementResult | null;
   } | null>(null);
   const [starting, setStarting] = useState(false);
   const [skipping, setSkipping] = useState(false);
@@ -59,6 +63,7 @@ export function PlacementOfferStep({
     setExam({
       sessionId: result.value.sessionId,
       question: result.value.question,
+      result: result.value.result,
     });
   }
 
@@ -76,6 +81,7 @@ export function PlacementOfferStep({
         messages={examMessages}
         sessionId={exam.sessionId}
         initialQuestion={exam.question}
+        initialResult={exam.result}
         footer={
           <Button type="button" onClick={onNext} className="self-start">
             {commonMessages.continue}

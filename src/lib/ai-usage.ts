@@ -160,6 +160,7 @@ interface RecordAiUsageInput {
 
 export type AiUsageDurationSource =
   | "CLIENT_RECORDED"
+  | "SERVER_DECODED"
   | "PROVIDER_REPORTED"
   | "BYTE_SIZE_ESTIMATE"
   | "TEXT_LENGTH_ESTIMATE";

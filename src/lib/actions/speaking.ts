@@ -16,11 +16,16 @@ import {
 import { getStorageProvider } from "@/lib/storage";
 import type { SpeakingFeedback } from "@/lib/speaking-feedback";
 import type { CustomScenario } from "@/lib/custom-scenario-prompt";
+import {
+  LearnerAudioValidationError,
+  validateLearnerAudio,
+} from "@/lib/media-validation";
 
 function speakingErrorMessage(error: unknown): string {
   if (error instanceof SpeakingInputError) return error.message;
   if (error instanceof SpeakingRateLimitError) return error.message;
   if (error instanceof SpeakingScenarioRateLimitError) return error.message;
+  if (error instanceof LearnerAudioValidationError) return error.message;
   if (error instanceof Error && error.message === "Recording is too large.") {
     return error.message;
   }
@@ -40,16 +45,7 @@ async function requireUserId(): Promise<string> {
 }
 
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
-
-/** 10.3 "Validate audio files" - reject anything absurdly large or not audio before it ever reaches storage. */
-function assertValidAudioFile(file: Blob): void {
-  if (!file.type.startsWith("audio/")) {
-    throw new Error("Unsupported recording format.");
-  }
-  if (file.size > MAX_AUDIO_BYTES) {
-    throw new Error("Recording is too large.");
-  }
-}
+const MAX_AUDIO_DURATION_SECONDS = 5 * 60;
 
 export async function createSpeakingSessionAction(
   activityType:
@@ -92,11 +88,9 @@ export async function submitRecordingAction(
 
   try {
     const audioFile = formData.get("audio");
-    const durationSeconds = Number(formData.get("durationSeconds") ?? 0);
     if (!(audioFile instanceof Blob)) {
       throw new Error("Missing audio recording");
     }
-    assertValidAudioFile(audioFile);
 
     const rawToneScore = formData.get("toneScore");
     const toneScore =
@@ -105,12 +99,16 @@ export async function submitRecordingAction(
         : null;
 
     const buffer = Buffer.from(await audioFile.arrayBuffer());
+    const audio = await validateLearnerAudio(buffer, audioFile.type, {
+      maxBytes: MAX_AUDIO_BYTES,
+      maxDurationSeconds: MAX_AUDIO_DURATION_SECONDS,
+    });
     const attempt = await submitRecording(
       userId,
       sessionId,
-      buffer,
-      audioFile.type || "audio/webm",
-      durationSeconds,
+      audio.buffer,
+      audio.mimeType,
+      audio.durationSeconds,
       Number.isFinite(toneScore) ? toneScore : null,
     );
 
@@ -167,8 +165,7 @@ export async function deleteSpeakingAttemptAction(
 }
 
 export type GenerateCustomScenarioResult =
-  | { ok: true; scenario: CustomScenario }
-  | { ok: false; error: string };
+  { ok: true; scenario: CustomScenario } | { ok: false; error: string };
 
 /**
  * Han Companion's "what do you want to practice today?" (2026-08-31,
@@ -202,7 +199,8 @@ export async function generateCustomScenarioAction(
     if (!scenario) {
       return {
         ok: false,
-        error: "Han couldn't come up with a scenario for that. Try rephrasing it.",
+        error:
+          "Han couldn't come up with a scenario for that. Try rephrasing it.",
       };
     }
     return { ok: true, scenario };

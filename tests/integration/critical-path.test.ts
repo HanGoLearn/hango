@@ -189,7 +189,7 @@ describe("critical end-to-end learner journey (integration, real database)", () 
 
     // Advance every lesson step so the lesson itself is marked complete.
     for (const step of steps) {
-      await advanceLessonStep(user.id, lesson!.id, step.id, steps, undefined);
+      await advanceLessonStep(user.id, lesson!.id, step.id, undefined);
     }
     const completion = await db.learnerLessonCompletion.findUnique({
       where: { userId_lessonId: { userId: user.id, lessonId: lesson!.id } },

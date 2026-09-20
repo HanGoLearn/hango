@@ -1,12 +1,15 @@
 import "server-only";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { serverEnv } from "@/lib/env/server";
+import { isTransactionalEmailConfigured } from "@/lib/email";
 
 export interface VerifiedCredentialsUser {
   id: string;
   email: string | null;
   name: string | null;
   role: string;
+  sessionVersion: number;
 }
 
 /**
@@ -21,8 +24,21 @@ export async function verifyCredentials(
     return null;
   }
 
-  const user = await db.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await db.user.findFirst({
+    where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+  });
   if (!user?.passwordHash) {
+    return null;
+  }
+
+  // Production is always fail-closed. Local/test environments may keep using
+  // password accounts without a mail provider, but as soon as delivery is
+  // configured they exercise the same verified-email gate as production.
+  if (
+    !user.emailVerified &&
+    (serverEnv.NODE_ENV === "production" || isTransactionalEmailConfigured())
+  ) {
     return null;
   }
 
@@ -36,5 +52,6 @@ export async function verifyCredentials(
     email: user.email,
     name: user.name,
     role: user.role,
+    sessionVersion: user.sessionVersion,
   };
 }

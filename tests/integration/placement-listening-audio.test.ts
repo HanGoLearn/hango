@@ -19,6 +19,12 @@ vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
 const { getOrGeneratePlacementListeningAudioUrl, PlacementAudioNotFoundError } =
   await import("@/lib/placement-listening-audio");
+const {
+  getNextQuestion,
+  recordPlacementTimeout,
+  startPlacementSession,
+  submitPlacementQuestionBlock,
+} = await import("@/lib/placement-exam-data");
 const { getPlacementListeningAudioAction } =
   await import("@/lib/actions/placement-exam");
 
@@ -98,6 +104,32 @@ async function createTestListeningQuestion(lineCount = 1) {
   return { question, script };
 }
 
+async function reachCurrentListeningQuestion(userId: string) {
+  const sessionId = await startPlacementSession(userId);
+  let question = await getNextQuestion(userId, sessionId);
+  let guard = 0;
+  while (question && question.skill !== "LISTENING" && guard < 20) {
+    guard += 1;
+    if (question.questionGroup && question.questionGroup.length > 1) {
+      await submitPlacementQuestionBlock(
+        userId,
+        sessionId,
+        question.questionGroup.map((item) => ({
+          questionId: item.id,
+          optionId: null,
+        })),
+      );
+    } else {
+      await recordPlacementTimeout(userId, sessionId, question.id);
+    }
+    question = await getNextQuestion(userId, sessionId);
+  }
+  if (!question || question.skill !== "LISTENING") {
+    throw new Error("Expected the seeded placement flow to reach Listening.");
+  }
+  return { sessionId, question };
+}
+
 describe("Placement listening audio (integration, real database, mocked TTS provider)", () => {
   it("generates the merged clip once, persists the storage key, and reuses it on replay", async () => {
     const user = await createTestUser(
@@ -172,6 +204,7 @@ describe("Placement listening audio (integration, real database, mocked TTS prov
     authMock.mockResolvedValue(null);
 
     const result = await getPlacementListeningAudioAction(
+      "nonexistent-session-id",
       "nonexistent-question-id",
     );
     expect(result.ok).toBe(false);
@@ -185,6 +218,7 @@ describe("Placement listening audio (integration, real database, mocked TTS prov
     void user;
 
     const result = await getPlacementListeningAudioAction(
+      "nonexistent-session-id",
       "nonexistent-question-id",
     );
     expect(result).toEqual({ ok: false, error: "That couldn't be found." });
@@ -194,8 +228,9 @@ describe("Placement listening audio (integration, real database, mocked TTS prov
     const user = await createTestUser(
       `placement-audio-action-${Date.now()}@hango.dev`,
     );
-    void user;
-    const { question } = await createTestListeningQuestion(1);
+    const { sessionId, question } = await reachCurrentListeningQuestion(
+      user.id,
+    );
     synthesizeMock.mockResolvedValue({
       audio: buildTestWav(),
       contentType: "audio/wav",
@@ -203,7 +238,10 @@ describe("Placement listening audio (integration, real database, mocked TTS prov
       model: "test-model",
     });
 
-    const result = await getPlacementListeningAudioAction(question.id);
+    const result = await getPlacementListeningAudioAction(
+      sessionId,
+      question.id,
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.url).toBeTruthy();

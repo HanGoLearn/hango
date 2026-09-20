@@ -8,6 +8,7 @@ import { serverEnv } from "@/lib/env/server";
 import { verifyCredentials } from "@/lib/auth-credentials";
 import { ensureGoogleAccountLinked } from "@/lib/auth-google-link";
 import { authConfig } from "@/lib/auth.config";
+import { resolveAuthSessionState } from "@/lib/auth-session-state";
 
 const googleProvider =
   serverEnv.GOOGLE_CLIENT_ID && serverEnv.GOOGLE_CLIENT_SECRET
@@ -38,7 +39,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...googleProvider,
   ],
   callbacks: {
-    ...authConfig.callbacks,
     async signIn({ account, profile }) {
       if (account?.provider !== "google") {
         return true;
@@ -59,6 +59,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session_state: account.session_state as string | undefined,
         },
       );
+    },
+    async jwt({ token, user }) {
+      const userId = user?.id ?? token.sub;
+      if (!userId) return token;
+
+      const currentUser = await resolveAuthSessionState(
+        userId,
+        token.sessionVersion,
+        Boolean(user),
+      );
+      if (!currentUser) return null;
+
+      token.role = currentUser.role;
+      token.sessionVersion = currentUser.sessionVersion;
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub as string;
+        session.user.role = token.role as string;
+      }
+      return session;
     },
   },
 });

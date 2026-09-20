@@ -17,11 +17,6 @@ import { getOrGenerateScenarioCompletion } from "@/lib/scenario-completion";
  */
 const MAX_CREDITABLE_LEVEL = 6;
 
-export interface PlacementSpeakingAttemptForCredit {
-  level: number;
-  score: number;
-}
-
 export interface PlacementCreditResult {
   /** The lowest of every placed skill (written + Speaking, when attempted) - what actually gated eligibility. */
   creditedLevel: number;
@@ -50,15 +45,11 @@ export interface PlacementCreditResult {
 export async function applyPlacementCredit(
   userId: string,
   sessionId: string,
-  speakingCreditedLevel: number | null,
-  speakingAttempts: PlacementSpeakingAttemptForCredit[],
 ): Promise<PlacementCreditResult | null> {
-  const session = await db.placementSession.findUnique({
-    where: { id: sessionId },
+  const session = await db.placementSession.findFirst({
+    where: { id: sessionId, userId, status: "COMPLETED" },
   });
-  if (!session || session.userId !== userId || session.status !== "COMPLETED") {
-    return null;
-  }
+  if (!session) return null;
   const {
     vocabularyHskLevel,
     grammarHskLevel,
@@ -80,9 +71,14 @@ export async function applyPlacementCredit(
     readingHskLevel,
     listeningHskLevel,
   ];
+  const speakingAttempts = await db.placementSpeakingAttempt.findMany({
+    where: { sessionId, status: "COMPLETED", score: { not: null } },
+    orderBy: { hskLevel: "asc" },
+    select: { hskLevel: true, score: true },
+  });
   const creditedLevel =
-    speakingCreditedLevel != null
-      ? Math.min(...writtenLevels, speakingCreditedLevel)
+    session.speakingHskLevel != null
+      ? Math.min(...writtenLevels, session.speakingHskLevel)
       : Math.min(...writtenLevels);
   const eligibleLevel = Math.min(creditedLevel, MAX_CREDITABLE_LEVEL);
   if (eligibleLevel < 1) {
@@ -156,15 +152,17 @@ export async function applyPlacementCredit(
 
   function speakingScoreAt(level: number): number | null {
     if (speakingAttempts.length === 0) return null;
-    const exact = speakingAttempts.find((a) => a.level === level);
-    if (exact) return Math.round(exact.score);
+    const exact = speakingAttempts.find((a) => a.hskLevel === level);
+    if (exact?.score != null) return Math.round(exact.score);
     // Nothing tested at exactly this level - fall back to the best evidence
     // at or below it (speaking ability demonstrated at a higher tested
     // level implies at least that much at an easier one). Leaves the score
     // null (not evaluated) when this level is below every attempted one.
-    const below = speakingAttempts.filter((a) => a.level <= level);
+    const below = speakingAttempts.filter(
+      (a) => a.hskLevel <= level && a.score != null,
+    );
     return below.length > 0
-      ? Math.round(Math.max(...below.map((a) => a.score)))
+      ? Math.round(Math.max(...below.map((a) => a.score!)))
       : null;
   }
 

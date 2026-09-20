@@ -55,7 +55,7 @@ describe("lesson progress (integration, real seeded database)", () => {
     expect(created.currentStepId).toBe(firstStepId);
     expect(created.completedStepIds).toEqual([]);
 
-    await setCurrentLessonStep(user.id, lesson!.id, lesson!.steps[1]!.id);
+    await advanceLessonStep(user.id, lesson!.id, firstStepId, undefined);
 
     const resumed = await getOrCreateLessonProgress(
       user.id,
@@ -78,7 +78,6 @@ describe("lesson progress (integration, real seeded database)", () => {
         user.id,
         lesson!.id,
         step.id,
-        steps,
         undefined,
       );
     }
@@ -104,7 +103,6 @@ describe("lesson progress (integration, real seeded database)", () => {
       user.id,
       lesson!.id,
       steps[0]!.id,
-      steps,
       { answered: true },
     );
 
@@ -113,11 +111,51 @@ describe("lesson progress (integration, real seeded database)", () => {
     ).toEqual({ answered: true });
   });
 
+  it("derives the step sequence from the database and rejects skipping ahead", async () => {
+    const user = await createTestUser(`lesson-order-${Date.now()}@hango.dev`);
+    const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
+    const first = lesson!.steps[0]!;
+    const later = lesson!.steps[2]!;
+    await getOrCreateLessonProgress(user.id, lesson!.id, first.id);
+
+    await expect(
+      advanceLessonStep(user.id, lesson!.id, later.id, undefined),
+    ).rejects.toThrow("not the current step");
+
+    const progress = await db.learnerLessonProgress.findUniqueOrThrow({
+      where: { userId_lessonId: { userId: user.id, lessonId: lesson!.id } },
+    });
+    expect(progress.completedStepIds).toEqual([]);
+    expect(progress.currentStepId).toBe(first.id);
+  });
+
+  it("cannot navigate to an unfinished or foreign lesson step", async () => {
+    const user = await createTestUser(`lesson-navigation-${Date.now()}@hango.dev`);
+    const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
+    const otherLesson = await getLessonBySlug(
+      "restaurant-ingredients-and-preferences",
+    );
+    const first = lesson!.steps[0]!;
+    await getOrCreateLessonProgress(user.id, lesson!.id, first.id);
+
+    await expect(
+      setCurrentLessonStep(user.id, lesson!.id, lesson!.steps[1]!.id),
+    ).rejects.toThrow("not available");
+    await expect(
+      setCurrentLessonStep(user.id, lesson!.id, otherLesson!.steps[0]!.id),
+    ).rejects.toThrow("not available");
+
+    await advanceLessonStep(user.id, lesson!.id, first.id, undefined);
+    await expect(
+      setCurrentLessonStep(user.id, lesson!.id, first.id),
+    ).resolves.toMatchObject({ currentStepId: first.id });
+  });
+
   it("server actions require an authenticated session", async () => {
     authMock.mockResolvedValue(null);
 
     await expect(
-      advanceLessonStepAction("lesson-id", "step-id", [], undefined),
+      advanceLessonStepAction("lesson-id", "step-id", undefined),
     ).rejects.toThrow("Not authenticated");
     await expect(goToLessonStepAction("lesson-id", "step-id")).rejects.toThrow(
       "Not authenticated",

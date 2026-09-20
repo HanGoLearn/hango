@@ -33,6 +33,7 @@ export default async function PlacementExamPage({
         messages={dictionary.onboarding.placementExam}
         sessionId={started.value.sessionId}
         initialQuestion={started.value.question}
+        initialResult={started.value.result}
       />
     </div>
   );

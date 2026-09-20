@@ -90,7 +90,6 @@ export function LessonEngine({
       const result = await advanceLessonStepAction(
         lesson.id,
         currentStep.id,
-        steps,
         response,
       );
       if (result.completedAt) {

@@ -1,12 +1,23 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { registerSchema } from "@/lib/validation/auth";
-import { sendVerificationEmail } from "@/lib/email";
+import {
+  isTransactionalEmailConfigured,
+  sendVerificationEmail,
+} from "@/lib/email";
 import { clientEnv } from "@/lib/env/client";
+import { serverEnv } from "@/lib/env/server";
 import { getAuthMessages, resolveAuthLocale } from "@/i18n/auth";
+import { createOpaqueAuthToken } from "@/lib/auth-tokens";
+import {
+  AuthRateLimitExceededError,
+  consumeAuthRateLimit,
+  getAuthRequestIdentity,
+} from "@/lib/auth-rate-limit";
+import { isAuthHoneypotFilled } from "@/lib/auth-abuse";
 
 export interface RegisterFormState {
   status: "idle" | "error" | "success";
@@ -22,6 +33,9 @@ export async function registerAction(
 ): Promise<RegisterFormState> {
   const locale = resolveAuthLocale(formData.get("locale"));
   const messages = getAuthMessages(locale);
+  if (isAuthHoneypotFilled(formData)) {
+    return { status: "error", message: messages.actions.tooManyAttempts };
+  }
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -46,10 +60,32 @@ export async function registerAction(
 
   const { name, email, password } = parsed.data;
 
+  try {
+    await consumeAuthRateLimit(
+      "register",
+      email,
+      await getAuthRequestIdentity(),
+    );
+  } catch (error) {
+    if (error instanceof AuthRateLimitExceededError) {
+      return { status: "error", message: messages.actions.tooManyAttempts };
+    }
+    throw error;
+  }
+
+  if (
+    serverEnv.NODE_ENV === "production" &&
+    !isTransactionalEmailConfigured()
+  ) {
+    return { status: "error", message: messages.actions.emailUnavailable };
+  }
+
   // Registration (unlike login/password recovery) may disclose an existing
   // account — the learner needs to know to sign in instead (authentication.md
   // only restricts this disclosure for login and password recovery).
-  const existing = await db.user.findUnique({ where: { email } });
+  const existing = await db.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+  });
   if (existing) {
     return {
       status: "error",
@@ -58,23 +94,57 @@ export async function registerAction(
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const { rawToken, tokenHash } = createOpaqueAuthToken();
 
-  const user = await db.user.create({ data: { name, email, passwordHash } });
+  let user: { id: string; email: string | null };
+  try {
+    user = await db.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: { name, email, passwordHash },
+        select: { id: true, email: true },
+      });
+      await tx.verificationToken.create({
+        data: {
+          identifier: email,
+          token: tokenHash,
+          expires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
+        },
+      });
+      return createdUser;
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return { status: "error", message: messages.actions.accountExists };
+    }
+    throw error;
+  }
 
-  const token = randomBytes(32).toString("hex");
-  await db.verificationToken.create({
-    data: {
-      identifier: user.email!,
-      token,
-      expires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
-    },
-  });
-
-  const verificationUrl = `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${token}&email=${encodeURIComponent(user.email!)}&locale=${locale}`;
-  await sendVerificationEmail(user.email!, verificationUrl);
+  const verificationUrl = `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${rawToken}&email=${encodeURIComponent(email)}&locale=${locale}`;
+  try {
+    await sendVerificationEmail(email, verificationUrl, locale);
+  } catch {
+    // Do not leave a newly-created, permanently unreachable account behind
+    // when the provider rejects the first verification message.
+    await db.$transaction([
+      db.verificationToken.deleteMany({ where: { identifier: email } }),
+      db.user.deleteMany({
+        where: {
+          id: user.id,
+          emailVerified: null,
+          accounts: { none: {} },
+        },
+      }),
+    ]);
+    return { status: "error", message: messages.actions.emailUnavailable };
+  }
 
   return {
     status: "success",
-    message: messages.actions.accountCreated,
+    message: isTransactionalEmailConfigured()
+      ? messages.actions.accountCreated
+      : messages.actions.accountCreatedDevelopment,
   };
 }

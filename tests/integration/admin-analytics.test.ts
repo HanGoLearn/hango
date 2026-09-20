@@ -1,16 +1,37 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { getAdminAnalytics } from "@/lib/admin-analytics";
 
-const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
+// getAdminAnalytics(period, excludeUserId) exists so the platform owner's
+// own testing/usage never inflates "real learner" metrics - see
+// src/lib/admin-analytics.ts's own comment on why excludeUserId (an id-
+// keyed join) and its separate ADMIN_EMAIL-literal cohort filter are two
+// different mechanisms. These tests exercise the excludeUserId path with a
+// throwaway user created here, not the real administrator account (2026-09-
+// 16, QA-01: CI has no such account and must not depend on one existing).
+// The ADMIN_EMAIL-literal cohort filter is a trivial `email != literal`
+// clause exercised implicitly wherever that account happens to exist, but
+// is not this suite's concern.
+const testUserIds: string[] = [];
+
+afterEach(async () => {
+  if (testUserIds.length) {
+    await db.user.deleteMany({ where: { id: { in: testUserIds.splice(0) } } });
+  }
+});
+
+async function createTestUser(prefix: string) {
+  const user = await db.user.create({
+    data: { email: `${prefix}-${randomUUID()}@hango.dev` },
+  });
+  testUserIds.push(user.id);
+  return user;
+}
 
 describe("admin analytics (integration, real database)", () => {
   it("returns coherent funnel, retention, system, cost, and alert metrics", async () => {
-    const admin = await db.user.findUniqueOrThrow({
-      where: { email: ADMIN_EMAIL },
-      select: { id: true },
-    });
+    const admin = await createTestUser("admin-analytics-shape");
     const analytics = await getAdminAnalytics(30, admin.id);
 
     expect(analytics.period).toBe(30);
@@ -67,15 +88,8 @@ describe("admin analytics (integration, real database)", () => {
     );
   });
 
-  it("excludes the real administrator's own AI usage and coins (2026-09-08 optimization safety net)", async () => {
-    // Reads the REAL admin User row by email (it always exists) but never
-    // creates, deletes, or modifies it - only attaches and then removes its
-    // own marker-tagged rows, so this can never collide with the real
-    // account.
-    const admin = await db.user.findUniqueOrThrow({
-      where: { email: ADMIN_EMAIL },
-      select: { id: true },
-    });
+  it("excludes the given user's own AI usage and coins (2026-09-08 optimization safety net)", async () => {
+    const admin = await createTestUser("admin-analytics-exclusion");
     const marker = `admin-analytics-exclusion-${randomUUID()}`;
 
     try {

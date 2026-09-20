@@ -27,18 +27,21 @@ enum UserRole {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
+  id             String    @id @default(cuid())
+  name           String?
+  email          String?   @unique
   /// Set once the learner verifies their email (authentication.md — "Every
   /// email account should be verified before full activation").
-  emailVerified DateTime?
-  image         String?
+  emailVerified  DateTime?
+  image          String?
   /// Null for OAuth-only accounts (e.g. Google Sign-In has no local password).
-  passwordHash  String?
-  role          UserRole  @default(LEARNER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  passwordHash   String?
+  /// Embedded in JWT sessions and incremented after security-sensitive account
+  /// changes so already-issued cookies stop authorizing backend requests.
+  sessionVersion Int       @default(0)
+  role           UserRole  @default(LEARNER)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   accounts               Account[]
   sessions               Session[]
@@ -75,6 +78,45 @@ model User {
   adminCoinGrantsCreated  AdminCoinGrant[]      @relation("AdminCoinGrantCreator")
 
   @@index([createdAt])
+}
+
+enum PrivateObjectDeletionReason {
+  RETENTION
+  ACCOUNT_DELETION
+  USER_REQUEST
+  ORPHAN_CLEANUP
+  FAILED_UPLOAD
+}
+
+enum PrivateObjectDeletionStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  COMPLETED
+}
+
+/// Durable outbox for deleting learner-owned objects from storage. This row
+/// deliberately has no relation to User or SpeakingAttempt: it must survive
+/// their deletion so a temporary storage-provider failure can be retried.
+/// Only keys under the validated `speaking/{ownerUserId}/` namespace may be
+/// inserted by application code (see private-object-retention.ts).
+model PrivateObjectDeletion {
+  id                  String                      @id @default(cuid())
+  storageKey          String                      @unique
+  ownerUserId         String
+  speakingAttemptId   String?
+  reason              PrivateObjectDeletionReason
+  status              PrivateObjectDeletionStatus @default(PENDING)
+  attempts            Int                         @default(0)
+  nextAttemptAt       DateTime                    @default(now())
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  lastError           String?                     @db.Text
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([ownerUserId, status])
 }
 
 model Account {
@@ -122,6 +164,19 @@ model PasswordResetToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+/// Fixed-window counters for unauthenticated account endpoints. `key` contains
+/// only an HMAC-derived subject fingerprint, never a raw email address or IP.
+model AuthRateLimitBucket {
+  key         String   @id
+  count       Int      @default(1)
+  windowStart DateTime
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 // FASE 3 — Learner Profile
@@ -268,10 +323,9 @@ model LearnerProfile {
   hanVoice        String          @default("cedar")
 
   /// FASE 14.4 "Edit recording-retention preference" - null means keep
-  /// Speaking Lab recordings indefinitely. Stores the *preference* only;
-  /// there is no scheduled job that actually enforces/deletes on a timer
-  /// yet (no job-scheduler infrastructure exists in this project) - a
-  /// documented gap, not a bug.
+  /// Speaking Lab recordings indefinitely; 0 means do not retain the audio
+  /// after processing. Positive values are enforced by the daily private-
+  /// object retention job. Transcripts and feedback remain available.
   recordingRetentionDays Int?
 
   createdAt DateTime @default(now())
@@ -1657,6 +1711,7 @@ enum AiUsageCalculationMethod {
 
 enum AiUsageDurationSource {
   CLIENT_RECORDED
+  SERVER_DECODED
   PROVIDER_REPORTED
   BYTE_SIZE_ESTIMATE
   TEXT_LENGTH_ESTIMATE
@@ -2118,6 +2173,13 @@ enum PlacementSkill {
 
 enum PlacementSessionStatus {
   IN_PROGRESS
+  SPEAKING
+  COMPLETED
+}
+
+enum PlacementSpeakingAttemptStatus {
+  PENDING
+  GRADING
   COMPLETED
 }
 
@@ -2215,15 +2277,54 @@ model PlacementSession {
   /// are different skills, so each gets its own detected level. Null while
   /// IN_PROGRESS, or if that skill's block never ran (e.g. the session cut
   /// early before reaching Listening).
-  vocabularyHskLevel Int?
-  grammarHskLevel    Int?
-  readingHskLevel    Int?
-  listeningHskLevel  Int?
+  vocabularyHskLevel         Int?
+  grammarHskLevel            Int?
+  readingHskLevel            Int?
+  listeningHskLevel          Int?
+  /// Server-derived result of the adaptive oral climb. HSK7-9 remains
+  /// diagnostic-only, so this field is capped at 6 (and may be 0).
+  speakingHskLevel           Int?
+  speakingDiagnosticHskLevel Int?
 
-  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attempts PlacementAttempt[]
+  user             User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts         PlacementAttempt[]
+  speakingAttempts PlacementSpeakingAttempt[]
 
   @@index([userId, status])
+}
+
+/// One server-issued oral placement scenario. The browser may supply the
+/// visible transcript for evaluation, but it cannot choose the level, score,
+/// pass/fail result, credited level, or reuse an attempt. Provider-authenticated
+/// audio provenance remains a separate hardening step documented in the audit.
+model PlacementSpeakingAttempt {
+  id                         String                         @id @default(cuid())
+  sessionId                  String
+  hskLevel                   Int
+  status                     PlacementSpeakingAttemptStatus @default(PENDING)
+  transcript                 Json                           @default("[]")
+  learnerAsrConfidences      Json                           @default("[]")
+  evaluation                 Json?
+  pronunciation              Int?
+  fluency                    Int?
+  accuracy                   Int?
+  complexity                 Int?
+  communicationEffectiveness Int?
+  objectiveCompletionRatio   Float?
+  score                      Int?
+  passed                     Boolean?
+  diagnosticOnly             Boolean                        @default(false)
+  evaluatorProvider          String?
+  evaluatorModel             String?
+  gradingStartedAt           DateTime?
+  createdAt                  DateTime                       @default(now())
+  updatedAt                  DateTime                       @updatedAt
+  completedAt                DateTime?
+
+  session PlacementSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, hskLevel])
+  @@index([sessionId, status])
 }
 
 model PlacementAttempt {
@@ -2241,6 +2342,10 @@ model PlacementAttempt {
   session  PlacementSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   question PlacementQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
+  /// A question is evidence only once per placement session. Besides
+  /// keeping the adaptive result deterministic, this is the database-level
+  /// replay guard for concurrent/repeated Server Action submissions.
+  @@unique([sessionId, questionId])
   @@index([sessionId])
 }
 

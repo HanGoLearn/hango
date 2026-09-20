@@ -5,12 +5,10 @@ import {
   advanceLessonStep,
   setCurrentLessonStep,
 } from "@/lib/lesson-progress-data";
-import type { StepForProgress } from "@/lib/lesson-progress";
 
 export async function advanceLessonStepAction(
   lessonId: string,
   stepId: string,
-  steps: StepForProgress[],
   response: unknown,
 ): Promise<{ completedAt: string | null }> {
   const session = await auth();
@@ -20,7 +18,6 @@ export async function advanceLessonStepAction(
     session.user.id,
     lessonId,
     stepId,
-    steps,
     response,
   );
   return { completedAt: updated.completedAt?.toISOString() ?? null };

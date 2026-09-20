@@ -1,6 +1,6 @@
 # HanGo
 
-HanGo is an AI-powered Chinese learning platform designed to help learners achieve real communicative competence — not just memorize vocabulary or pass standardized exams. It teaches Chinese through realistic situations (restaurant, hotel, shopping, and more), progressive competency development, and continuous interaction with an AI Teacher that accompanies the learner throughout the entire experience. The HSK framework serves as the curricular backbone (HSK 3–9), but the primary goal is authentic, real-life communication.
+HanGo is an AI-powered Chinese learning platform designed to help learners achieve real communicative competence — not just memorize vocabulary or pass standardized exams. It teaches Chinese through realistic situations (restaurant, hotel, shopping, and more), progressive competency development, and continuous interaction with an AI Teacher that accompanies the learner throughout the entire experience. The HSK framework serves as the curricular backbone (HSK 1–9, from the Foundations domain through Advanced Situations), but the primary goal is authentic, real-life communication.
 
 ## Current Development Status
 
@@ -10,7 +10,7 @@ See [`project/TASKS.md`](project/TASKS.md) for the authoritative, up-to-date sta
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 20.9 or later
+- [Node.js](https://nodejs.org/) 24 or later (matches `.github/workflows/ci.yml`)
 - npm (bundled with Node.js)
 - [PostgreSQL](https://www.postgresql.org/) 17 (local instance for development)
 
@@ -29,6 +29,12 @@ cp .env.example .env.local
 ```
 
 `.env.local` is git-ignored and never committed. Public variables (safe for the browser) must be prefixed with `NEXT_PUBLIC_`; everything else is private and validated server-side only. See `src/lib/env/client.ts` and `src/lib/env/server.ts`.
+
+Account verification and password recovery use Resend when both
+`RESEND_API_KEY` and `EMAIL_FROM` are configured. Production registration is
+fail-closed without them and password accounts must have a verified email.
+Development/test may run without email delivery, but bearer links are never
+printed to logs. See `.env.example` for the required variables.
 
 ## Database Setup
 
