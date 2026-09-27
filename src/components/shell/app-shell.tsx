@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/shell/sidebar";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { TopBar } from "@/components/shell/top-bar";
+import { HomeOnly } from "@/components/shell/home-only";
 import { AiTeacherBubble } from "@/components/shell/ai-teacher-bubble";
 import { AiTeacherProvider } from "@/components/ai-teacher/ai-teacher-provider";
 import { AnnouncementCenter } from "@/components/announcements/announcement-center";
@@ -10,6 +11,7 @@ import { ActivityTracker } from "@/components/analytics/activity-tracker";
 import { auth } from "@/lib/auth";
 import { getStudyStreak } from "@/lib/dashboard-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
+import { resolveTourStateForUser } from "@/lib/tour-progress";
 import { getAvatarPageData } from "@/lib/avatar-data";
 import { grantDailyLoginCoins } from "@/lib/coins";
 import type { AppLocale } from "@/i18n/config";
@@ -17,8 +19,12 @@ import type {
   AchievementsMessages,
   LessonMessages,
   ShellMessages,
+  TourMessages,
 } from "@/i18n/messages/types";
 import { LessonMessagesProvider } from "@/components/lesson/lesson-messages";
+import { TourProvider } from "@/components/tour/tour-provider";
+import { TourOverlay } from "@/components/tour/tour-overlay";
+import { TourHint } from "@/components/tour/tour-hint";
 
 // Dynamically loaded (2026-09-08 optimization pass) - these are rare-event
 // overlays (an achievement unlocking, coins landing), not visible on most
@@ -42,9 +48,9 @@ export interface AppShellProps {
   children: ReactNode;
   locale: AppLocale;
   messages: ShellMessages;
-  languageSwitcherLabel: string;
   achievementMessages: AchievementsMessages;
   lessonMessages: LessonMessages;
+  tourMessages: TourMessages;
 }
 
 /**
@@ -74,18 +80,32 @@ export async function AppShell({
   children,
   locale,
   messages,
-  languageSwitcherLabel,
   achievementMessages,
   lessonMessages,
+  tourMessages,
 }: AppShellProps) {
   const session = await auth();
   const userId = session?.user?.id ?? null;
 
-  const hanPreferences = userId
-    ? await getOrCreateLearnerProfile(
-        userId,
-        locale === "en" ? "EN" : "ES",
-      ).then((profile) => ({
+  // One profile read feeds both Han's preferences and the tour's decision -
+  // the shell already paid for this row, and reading it twice for two
+  // unrelated features would double that cost on every authenticated page.
+  const profile = userId
+    ? await getOrCreateLearnerProfile(userId, locale === "en" ? "EN" : "ES")
+    : null;
+
+  const tourState =
+    userId && profile
+      ? await resolveTourStateForUser(userId, {
+          onboardingCompletedAt: profile.onboardingCompletedAt,
+          tourCompletedAt: profile.tourCompletedAt,
+          tourSkippedAt: profile.tourSkippedAt,
+          seenTourHints: profile.seenTourHints,
+        })
+      : null;
+
+  const hanPreferences = profile
+    ? {
         // Always TUTOR (2026-08-31, Han Practice retired) - Practice's job
         // moved entirely to the voice-only Han Companion (/han), which
         // never goes through AiTeacherChat/the floating bubble at all. The
@@ -97,7 +117,7 @@ export async function AppShell({
         responseMode: profile.hanResponseMode,
         voice: profile.hanVoice,
         explanationLanguage: profile.explanationLanguage ?? "EN",
-      }))
+      }
     : {
         mode: "TUTOR" as const,
         responseMode: "TEXT_ONLY" as const,
@@ -113,40 +133,56 @@ export async function AppShell({
       initialExplanationLanguage={hanPreferences.explanationLanguage}
     >
       <LessonMessagesProvider messages={lessonMessages}>
-        <ActivityTracker />
-        <div className="flex h-dvh flex-col">
-          <Suspense fallback={<TopBarSkeleton />}>
-            <TopBarData
-              userId={userId}
-              role={session?.user?.role ?? null}
-              email={session?.user?.email ?? null}
-              locale={locale}
-              messages={messages}
-              languageSwitcherLabel={languageSwitcherLabel}
-            />
-          </Suspense>
-          <div className="flex flex-1 overflow-hidden">
-            <Sidebar locale={locale} messages={messages} />
-            <main className="flex-1 overflow-y-auto bg-page p-4 pb-20 md:pb-4">
-              {children}
-            </main>
+        <TourProvider
+          autoStart={tourState?.autoStart ?? false}
+          initialSeenHints={tourState?.seenHints ?? []}
+        >
+          <ActivityTracker />
+          <div className="flex h-dvh flex-col">
+            {/* Home only - the skeleton is inside the gate too, so another
+              section never flashes a 56px bar before the real one resolves
+              to nothing. */}
+            <HomeOnly>
+              <Suspense fallback={<TopBarSkeleton />}>
+                <TopBarData
+                  userId={userId}
+                  role={session?.user?.role ?? null}
+                  email={session?.user?.email ?? null}
+                  locale={locale}
+                  messages={messages}
+                />
+              </Suspense>
+            </HomeOnly>
+            <div className="flex flex-1 overflow-hidden">
+              <Sidebar locale={locale} messages={messages} />
+              <main className="flex-1 overflow-y-auto bg-page p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4">
+                {children}
+              </main>
+            </div>
+            <BottomNav locale={locale} messages={messages} />
+            <AiTeacherBubble />
+            {userId && (
+              <AchievementCelebration
+                messages={messages.achievementCelebration}
+                achievementMessages={achievementMessages}
+              />
+            )}
+            {userId && (
+              <CoinCelebration
+                locale={locale}
+                messages={messages.coinCelebration}
+              />
+            )}
+            {userId && <AnnouncementCenter locale={locale} />}
+            {/* Last inside the shell, so its scrim and card layer over
+              everything the tour points at. */}
+            <TourOverlay messages={tourMessages} />
+            {/* Just below the tour's own layer, and silent while the tour
+                is running - a note about the page Han is already standing
+                on would be absurd. */}
+            <TourHint messages={tourMessages} />
           </div>
-          <BottomNav locale={locale} messages={messages} />
-          <AiTeacherBubble />
-          {userId && (
-            <AchievementCelebration
-              messages={messages.achievementCelebration}
-              achievementMessages={achievementMessages}
-            />
-          )}
-          {userId && (
-            <CoinCelebration
-              locale={locale}
-              messages={messages.coinCelebration}
-            />
-          )}
-          {userId && <AnnouncementCenter locale={locale} />}
-        </div>
+        </TourProvider>
       </LessonMessagesProvider>
     </AiTeacherProvider>
   );
@@ -158,14 +194,12 @@ async function TopBarData({
   email,
   locale,
   messages,
-  languageSwitcherLabel,
 }: {
   userId: string | null;
   role: string | null;
   email: string | null;
   locale: AppLocale;
   messages: ShellMessages;
-  languageSwitcherLabel: string;
 }) {
   if (!userId) {
     return (
@@ -177,7 +211,6 @@ async function TopBarData({
         isAdministrator={false}
         locale={locale}
         messages={messages}
-        languageSwitcherLabel={languageSwitcherLabel}
       />
     );
   }
@@ -208,7 +241,6 @@ async function TopBarData({
       }
       locale={locale}
       messages={messages}
-      languageSwitcherLabel={languageSwitcherLabel}
     />
   );
 }

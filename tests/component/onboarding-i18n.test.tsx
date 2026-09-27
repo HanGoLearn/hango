@@ -9,6 +9,10 @@ const { saveGoalStepAction, getRecommendationAction } = vi.hoisted(() => ({
   getRecommendationAction: vi.fn(),
 }));
 
+// The explanation-language step renders LanguageSwitcher, which imports a
+// server action whose module chain (next-auth) can't load under jsdom.
+vi.mock("@/lib/actions/locale", () => ({ setInterfaceLocaleAction: vi.fn() }));
+
 vi.mock("@/lib/actions/onboarding", () => ({
   saveProfileStepAction: vi.fn(),
   saveGoalStepAction,
@@ -59,6 +63,7 @@ describe("localized onboarding", () => {
       <OnboardingWizard
         locale="es"
         messages={spanishMessages.onboarding}
+        languageSwitcherLabel={spanishMessages.common.languageSwitcher}
         initialStep="welcome"
         initialValues={emptyValues}
       />,
@@ -78,6 +83,7 @@ describe("localized onboarding", () => {
       <OnboardingWizard
         locale="es"
         messages={spanishMessages.onboarding}
+        languageSwitcherLabel={spanishMessages.common.languageSwitcher}
         initialStep="goal"
         initialValues={emptyValues}
       />,
@@ -120,6 +126,7 @@ describe("localized onboarding", () => {
       <OnboardingWizard
         locale="es"
         messages={spanishMessages.onboarding}
+        languageSwitcherLabel={spanishMessages.common.languageSwitcher}
         initialStep="recommendation"
         initialValues={{
           ...emptyValues,
@@ -134,5 +141,38 @@ describe("localized onboarding", () => {
     expect(
       screen.queryByText(/Hacer amigos \(Hacer amigos\)/),
     ).not.toBeInTheDocument();
+  });
+
+  it("skips the placement offer for the beginner-only beta cohort", async () => {
+    getRecommendationAction.mockResolvedValueOnce({
+      primary: null,
+      reason: "Empieza por Fundamentos.",
+      goalMatches: [],
+      placementLevel: null,
+    });
+
+    render(
+      <OnboardingWizard
+        locale="es"
+        messages={spanishMessages.onboarding}
+        languageSwitcherLabel={spanishMessages.common.languageSwitcher}
+        initialStep="placement-offer"
+        initialValues={{
+          ...emptyValues,
+          currentLevel: "HSK_1_2",
+          learningGoals: ["TRAVEL"],
+          skillPriorities: ["SPEAKING"],
+          dailyStudyTargetMinutes: 10,
+        }}
+        placementExamEnabled={false}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /prueba de nivel/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Empieza por Fundamentos."),
+    ).toBeInTheDocument();
   });
 });

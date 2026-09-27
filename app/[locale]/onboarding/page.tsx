@@ -5,11 +5,9 @@ import {
   resolveResumeStep,
 } from "@/lib/learner-profile";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
-import {
-  interfaceLanguageFromLocale,
-  isAppLocale,
-} from "@/i18n/config";
+import { interfaceLanguageFromLocale, isAppLocale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
+import { isPlacementExamAvailable } from "@/lib/beta-learning-scope";
 
 export default async function OnboardingPage({
   params,
@@ -22,15 +20,23 @@ export default async function OnboardingPage({
   const session = await auth();
   // Layout already redirects if there's no session — this satisfies TypeScript.
   const userId = session!.user.id;
-  const [profile, avatar] = await Promise.all([
-    getOrCreateLearnerProfile(
-      userId,
-      interfaceLanguageFromLocale(locale),
-    ),
+  const [storedProfile, avatar] = await Promise.all([
+    getOrCreateLearnerProfile(userId, interfaceLanguageFromLocale(locale)),
     // LearnerAvatar is its own table (2026-08-30), not a LearnerProfile
     // field - fetched alongside it so both feed resolveResumeStep the same way.
-    db.learnerAvatar.findUnique({ where: { userId }, select: { animal: true } }),
+    db.learnerAvatar.findUnique({
+      where: { userId },
+      select: { animal: true },
+    }),
   ]);
+  const placementExamEnabled = isPlacementExamAvailable(session!.user.role);
+  const profile =
+    !placementExamEnabled && !storedProfile.placementExamOfferAcknowledgedAt
+      ? await db.learnerProfile.update({
+          where: { userId },
+          data: { placementExamOfferAcknowledgedAt: new Date() },
+        })
+      : storedProfile;
   const resumeStep = resolveResumeStep({
     ...profile,
     avatarAnimal: avatar?.animal ?? null,
@@ -41,6 +47,8 @@ export default async function OnboardingPage({
     <OnboardingWizard
       locale={locale}
       messages={dictionary.onboarding}
+      languageSwitcherLabel={dictionary.common.languageSwitcher}
+      placementExamEnabled={placementExamEnabled}
       initialStep={resumeStep}
       initialValues={{
         displayName: profile.displayName,

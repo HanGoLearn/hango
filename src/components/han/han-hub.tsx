@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Lock, Loader2 } from "lucide-react";
 import {
   PageTitle,
@@ -20,7 +21,7 @@ import { lookupVocabularyWordAction } from "@/lib/actions/vocabulary-lookup";
 import { VocabularyLookupCard } from "@/components/han/vocabulary-lookup-card";
 import type { VocabularyLookupResult } from "@/lib/vocabulary-lookup-prompt";
 import type { HanVocabularyMessages } from "@/i18n/messages/types";
-import type { AppLocale } from "@/i18n/config";
+import { localePath, type AppLocale } from "@/i18n/config";
 import { localizeVocabularyError } from "@/i18n/vocabulary";
 
 type View = "hub" | "tutor" | "companion" | "vocabulary";
@@ -248,12 +249,34 @@ const VIEW_TITLE: Record<Exclude<View, "hub">, string> = {
 export function HanHub({
   locale,
   messages,
+  initialView,
 }: {
   locale: AppLocale;
   messages: HanVocabularyMessages;
+  /**
+   * Set when this hub is rendered by one of Han's own routes
+   * (`/han/tutor`, `/han/companion`, `/han/vocabulary`), added 2026-09-23 so
+   * the nav group can land on a surface directly instead of dropping the
+   * learner on the picker. Unset on `/han` itself, which still opens the
+   * picker exactly as before.
+   */
+  initialView?: Exclude<View, "hub">;
 }) {
+  const router = useRouter();
   const { setMode, openTeacher } = useAiTeacher();
-  const [view, setView] = useState<View>("hub");
+  const [view, setView] = useState<View>(initialView ?? "hub");
+
+  // The Tutor card does this on click; a direct visit to /han/tutor has to
+  // do the same, or the shared chat state stays on whatever mode was last
+  // used. Runs only for the tutor route - the other two views own their
+  // own state and need no priming.
+  useEffect(() => {
+    if (initialView !== "tutor") return;
+    setMode("TUTOR");
+    void openTeacher({ rolePlay: undefined });
+    // setMode/openTeacher are stable (useCallback in the provider).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialView]);
 
   function openTutor() {
     setMode("TUTOR");
@@ -285,7 +308,15 @@ export function HanHub({
           type="button"
           variant="tertiary"
           className="w-fit gap-1.5 px-0"
-          onClick={() => setView("hub")}
+          onClick={() => {
+            // On Han's own routes the picker lives at a different URL, so
+            // going "back" is a navigation, not a state change - otherwise
+            // the address bar would still read /han/tutor while showing
+            // the picker, and the browser's own back button would disagree
+            // with this one.
+            if (initialView) router.push(localePath(locale, "/han"));
+            else setView("hub");
+          }}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {view === "vocabulary" ? messages.backToHan : "Back to Han"}

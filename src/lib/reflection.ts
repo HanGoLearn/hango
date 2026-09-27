@@ -34,6 +34,7 @@ import {
 } from "@/lib/speech/speaking-pronunciation-evidence";
 import { checkReflectionAchievements } from "@/lib/achievements";
 import { grantCoins } from "@/lib/coins";
+import { recomputeGeneralLevelPoints } from "@/lib/general-level";
 
 export class ReflectionNotFoundError extends Error {}
 
@@ -542,6 +543,12 @@ export async function getOrGenerateLessonReflectionReport(
         "lesson_completed",
         `lesson:${lessonId}`,
       );
+      // General Level, per finished lesson (2026-09-21): nothing used to
+      // recompute it until the whole scenario was done, so three finished
+      // lessons showed zero points. Scenario-completion rewards are
+      // untouched - this only refreshes the running total, which now
+      // includes in-progress scenarios (general-level.ts).
+      await recomputeGeneralLevelPoints(userId);
       await db.lessonReflectionReport.update({
         where: { id: existing.id },
         data: { rewardsGrantedAt: new Date() },
@@ -700,6 +707,8 @@ export async function getOrGenerateLessonReflectionReport(
     "lesson_completed",
     `lesson:${lessonId}`,
   );
+  // See the cache-hit branch above for why this runs per lesson now.
+  await recomputeGeneralLevelPoints(userId);
   // Written last, on purpose (2026-09-08 fix, same pattern as
   // ScenarioCompletion.rewardsGrantedAt) - if anything above throws, this
   // line never runs, so the cache-hit branch above correctly retries

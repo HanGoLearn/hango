@@ -14,8 +14,6 @@ import {
   Flag,
   type LucideIcon,
 } from "lucide-react";
-import { Caption } from "@/components/ui/typography";
-import { HanAvatar } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
 import type { LessonStepStatus } from "@/lib/lesson-progress";
 import { useLessonMessages } from "@/components/lesson/lesson-messages";
@@ -43,19 +41,14 @@ export const STEP_TYPE_ICON: Record<string, LucideIcon> = {
   REFLECTION: Sparkles,
 };
 
-export function StepNavigation({
-  steps,
-  statuses,
-  currentStepId,
-  onSelect,
-}: {
-  steps: { id: string; type: string; order: number }[];
-  statuses: Map<string, LessonStepStatus>;
-  currentStepId: string;
-  onSelect: (stepId: string) => void;
-}) {
+/**
+ * Shared with LessonHeader (2026-09-23), which names the step the learner
+ * is on now that the nodes below no longer carry their own labels - one
+ * mapping, so the bar and the path can never disagree.
+ */
+export function useStepTypeLabels(): Record<string, string> {
   const messages = useLessonMessages();
-  const stepLabels: Record<string, string> = {
+  return {
     SITUATION: messages.navigation.steps.situation,
     OBJECTIVE: messages.navigation.steps.objective,
     DIALOGUE: messages.navigation.steps.dialogue,
@@ -70,18 +63,46 @@ export function StepNavigation({
     MISSION: messages.navigation.steps.mission,
     REFLECTION: messages.navigation.steps.reflection,
   };
+}
+
+/**
+ * Icons only (2026-09-23, user-picked direction "B"). The path used to be
+ * 64px-wide labelled columns on a horizontally scrolling rail, with Han
+ * floating over the current one and a dashed connector behind - ~89px tall
+ * and, with the old header above it, part of ~503px of chrome that repeated
+ * on every one of a lesson's six steps before any content appeared.
+ *
+ * A lesson has six steps (seed.ts `createFullLesson`), so six flexible
+ * nodes always fit one row at phone width without scrolling. The names
+ * didn't fit beside them at ~52px per node, so the current step's name
+ * moved up into LessonHeader; every node still carries its name and status
+ * in `aria-label` and `title`, so nothing is lost to a screen reader or a
+ * hover.
+ *
+ * The 32px circle sits inside a 44px-tall button: the visual stays compact
+ * without dropping under the minimum touch target.
+ */
+export function StepNavigation({
+  steps,
+  statuses,
+  currentStepId,
+  onSelect,
+}: {
+  steps: { id: string; type: string; order: number }[];
+  statuses: Map<string, LessonStepStatus>;
+  currentStepId: string;
+  onSelect: (stepId: string) => void;
+}) {
+  const messages = useLessonMessages();
+  const stepLabels = useStepTypeLabels();
   const statusLabels: Record<LessonStepStatus, string> = {
     COMPLETED: messages.navigation.status.completed,
     AVAILABLE: messages.navigation.status.available,
     LOCKED: messages.navigation.status.locked,
   };
   return (
-    <nav aria-label={messages.navigation.ariaLabel} className="overflow-x-auto">
-      <ol className="relative flex gap-3 px-1 pt-7 pb-1">
-        <div
-          aria-hidden="true"
-          className="absolute top-[38px] right-8 left-8 h-0.5 border-t-2 border-dashed border-border"
-        />
+    <nav aria-label={messages.navigation.ariaLabel}>
+      <ol className="flex items-center gap-1.5">
         {steps.map((step) => {
           const status = statuses.get(step.id) ?? "LOCKED";
           const Icon = STEP_TYPE_ICON[step.type] ?? MessageCircle;
@@ -90,46 +111,32 @@ export function StepNavigation({
           const label = stepLabels[step.type] ?? step.type;
 
           return (
-            <li key={step.id} className="relative z-10 shrink-0">
-              {isCurrent && (
-                <HanAvatar
-                  pose="idle"
-                  size={26}
-                  className="absolute -top-7 left-1/2 -translate-x-1/2 ring-2 ring-page"
-                />
-              )}
+            <li key={step.id} className="min-w-0 flex-1">
               <button
                 type="button"
                 disabled={isDisabled}
                 aria-current={isCurrent ? "step" : undefined}
                 aria-label={`${label} — ${statusLabels[status]}`}
+                title={label}
                 onClick={() => onSelect(step.id)}
-                className={cn(
-                  "flex w-16 flex-col items-center gap-1 disabled:pointer-events-none",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600",
-                )}
+                className="flex w-full items-center justify-center py-1.5 disabled:pointer-events-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
               >
                 <span
                   className={cn(
-                    "flex size-9 items-center justify-center rounded-full ring-2 ring-page",
+                    "flex h-8 w-full items-center justify-center rounded-full",
                     status === "COMPLETED" &&
                       "bg-secondary-500 text-on-color-light",
                     status === "AVAILABLE" &&
                       "bg-primary-500 text-on-color-light",
                     status === "LOCKED" && "bg-elevated text-text-muted",
-                    isCurrent && status === "AVAILABLE" && "scale-110",
+                    // Gold, not the node's own colour: "you are here" has to
+                    // read the same whether the current step is finished
+                    // (green), open (red) or revisited.
+                    isCurrent && "ring-2 ring-accent-300",
                   )}
                 >
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
-                <Caption
-                  className={cn(
-                    "line-clamp-1 text-center",
-                    status === "LOCKED" && "text-text-muted",
-                  )}
-                >
-                  {label}
-                </Caption>
               </button>
             </li>
           );

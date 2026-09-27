@@ -31,6 +31,7 @@ export const getOrCreateLearnerProfile = cache(async (
 
 export type OnboardingStep =
   | "welcome"
+  | "appearance"
   | "profile"
   | "avatar"
   | "goal"
@@ -43,6 +44,7 @@ export type OnboardingStep =
 
 const STEP_ORDER: OnboardingStep[] = [
   "welcome",
+  "appearance",
   "profile",
   "avatar",
   "goal",

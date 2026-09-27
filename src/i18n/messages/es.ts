@@ -16,25 +16,47 @@ export const messages = {
   },
   learningJourney: {
     title: "Ruta de aprendizaje",
+    headline: "De tus primeras palabras a conversaciones reales",
+    continueLabel: "Continúa",
+    lessonProgress: "Lección {current} de {total}",
+    scenarioProgress: "{completed} de {total} situaciones",
+    inProgress: "En curso",
     description:
       "Elige una situación real y avanza paso a paso por sus lecciones.",
     emptyDescription:
       "Situaciones como Restaurante, Hotel y Compras aparecerán aquí cuando el contenido del curso esté disponible.",
     scenarioCount: "{count} situaciones",
     currentChapter: "Estás aquí",
+    beta: {
+      nextPhase: "Próxima fase de la beta",
+      reviewMessage:
+        "Estamos terminando de revisar este nivel antes de abrirlo a más estudiantes.",
+      previewAction: "Ver lo que aprenderás",
+      previewTitle: "Un vistazo a lo que viene después",
+      backToFoundations: "Continuar con Fundamentos",
+    },
     chapters: {
-      BEGINNER: { title: "Fundamentos", subtitle: "Nivel principiante" },
+      BEGINNER: {
+        title: "Fundamentos",
+        subtitle: "Nivel principiante",
+        blurb: "Saluda, preséntate, cuenta y pide lo básico.",
+      },
       INTERMEDIATE: {
         title: "Vida cotidiana",
         subtitle: "Nivel intermedio",
+        blurb: "Come fuera, compra, viaja y haz amigos.",
       },
       ADVANCED: {
         title: "Situaciones avanzadas",
         subtitle: "Nivel avanzado",
+        blurb: "Trabaja, negocia y defiende tu punto de vista.",
       },
     },
     detail: {
-      outcomes: "Lo que podrás hacer",
+      chapterBadge: "Capítulo {number} · {name}",
+      outcomes: "Al terminar, podrás",
+      lessonsProgress: "{completed} de {total} lecciones",
+      pathLabel: "Tu camino · {count} lecciones",
       finalMission: "Misión final",
       difficulty: {
         BEGINNER: "Fundamentos",
@@ -84,6 +106,7 @@ export const messages = {
       progress: "{completed} de {total} pasos",
       saving: "Guardando...",
       saved: "Guardado",
+      saveError: "No pudimos guardar eso. Inténtalo de nuevo.",
     },
     display: {
       pinyin: "Pinyin",
@@ -157,6 +180,7 @@ export const messages = {
       practice: "Práctica",
       commonMistake: "Error frecuente: {mistake}",
       noPractice: "No hay preguntas de práctica disponibles por ahora.",
+      screenProgress: "Pregunta {current} de {total}",
     },
     vocabulary: {
       title: "Vocabulario",
@@ -173,6 +197,7 @@ export const messages = {
       quickTestProgress: "Progreso de la prueba rápida",
       finishQuickTest: "Terminar prueba rápida",
       wordProgress: "Progreso de palabras",
+      questionProgress: "Pregunta {current} de {total}",
       example: "Ejemplo",
       noExamples: "No hay ejemplos disponibles.",
       whatDoesMean: "¿Qué significa {word}?",
@@ -336,6 +361,18 @@ export const messages = {
       tryAgainDescription:
         "Esto borra tu progreso y puntuación de esta lección para que puedas comenzarla de nuevo. El resultado nuevo reemplazará al anterior; no se acumularán.",
     },
+    rewards: {
+      title: "Lo que ganaste",
+      experienceEarned: "+{amount} experiencia",
+      experienceTitle: "Experiencia",
+      coinsEarned: "+{amount} HanCoins",
+      coinsBalance: "Tienes {balance} en total",
+      coinsNone: "HanCoins",
+      rankTitle: "Tu puesto",
+      rankValue: "#{rank} de {total}",
+      achievementsTitle: "Logros",
+      achievementsValue: "{unlocked} de {total}",
+    },
   },
   shell: {
     primaryNavigation: "Navegación principal",
@@ -347,12 +384,19 @@ export const messages = {
     logOut: "Cerrar sesión",
     navigation: {
       dashboard: { label: "Inicio", mobile: "Inicio" },
+      learning: { label: "Aprendizaje", mobile: "Aprender" },
       learningJourney: { label: "Ruta de aprendizaje", mobile: "Ruta" },
       speakingLab: { label: "Speaking Lab", mobile: "Speaking" },
       writingLab: { label: "Writing Lab", mobile: "Writing" },
       han: { label: "Han", mobile: "Han" },
+      // Sin traducir, igual que Speaking Lab y Writing Lab: terminología
+      // oficial de producto (branding.md).
+      hanTutor: { label: "Han Tutor", mobile: "Tutor" },
+      hanCompanion: { label: "Han Companion", mobile: "Companion" },
+      hanVocabulary: { label: "Han Vocabulary", mobile: "Vocabulario" },
       progress: { label: "Progreso", mobile: "Progreso" },
       shop: { label: "Tienda", mobile: "Tienda" },
+      leaderboard: { label: "Ranking", mobile: "Ranking" },
       settings: { label: "Configuración", mobile: "Ajustes" },
     },
     theme: {
@@ -434,6 +478,14 @@ export const messages = {
       ],
       action: "Comenzar",
     },
+    appearance: {
+      title: "¿Cómo prefieres ver HanGo?",
+      description:
+        "Elige el aspecto que te resulte más cómodo para estudiar. Puedes cambiarlo cuando quieras desde Ajustes.",
+      light: "Claro",
+      dark: "Oscuro",
+      system: "Como mi dispositivo",
+    },
     profile: {
       title: "¿Cómo debería llamarte Han?",
       description:
@@ -491,7 +543,7 @@ export const messages = {
     level: {
       title: "¿Cuál es tu nivel actual de chino?",
       options: {
-        hsk12: "Comunicándote con lo esencial",
+        hsk12: "Empezando desde cero o con lo esencial",
         hsk3: "Hablando con soltura",
         hsk4: "Haciéndote entender fácilmente",
         hsk5: "Resolviendo situaciones reales",
@@ -631,10 +683,14 @@ export const messages = {
       caughtUpDescription:
         "No tienes una lección activa en este momento. Revisa las recomendaciones más abajo.",
       streak: "Racha de {count} días",
+      streakOne: "Racha de 1 día",
+      streakStart: "Empieza tu racha hoy",
       goalMet: "Meta de {minutes} min completada hoy",
       goal: "Meta de hoy: {minutes} min",
+      goalShort: "{minutes} min",
       suggestedNext: "Siguiente recomendación:",
       weeklyActivity: "Actividad en {active} de los últimos 7 días",
+      experience: "Experiencia",
       streakRisk:
         "Tu racha de {count} días termina hoy si no practicas. ¡Mantenla viva!",
       continueAction: "Continuar",
@@ -648,6 +704,10 @@ export const messages = {
     journey: {
       title: "Ruta de aprendizaje",
       progress: "{completed} de {total} lecciones completadas",
+      currentScenario: "Tu escenario actual",
+      scenarioProgress: "{completed} de {total}",
+      viewAll: "Ver toda la ruta",
+      youAreHere: "Estás aquí",
     },
     review: {
       title: "Recomendaciones de repaso",
@@ -666,7 +726,8 @@ export const messages = {
         start: "Comenzar",
       },
     },
-    generalLevel: "Nivel general",
+    generalLevel: "Experiencia",
+    yourProgress: "Tu progreso",
     levels: {
       "Mastering the Language": "Dominando el idioma",
       "Refined Fluency": "Fluidez refinada",
@@ -805,6 +866,42 @@ export const messages = {
         SCENARIO_ROLE_PLAY: {
           title: "Juego de rol del escenario",
           description: "Responde desde tu personaje a la misión del escenario.",
+        },
+      },
+    },
+    beta: {
+      eyebrow: "Práctica guiada de la beta",
+      title: "Practica una situación real a la vez",
+      description:
+        "Escucha, sigue los caracteres y el pinyin, y repite cada línea a tu ritmo.",
+      station: "Estación {current} de {total}",
+      available: "Lista para practicar",
+      locked: "Empieza primero la lección relacionada",
+      practiceNow: "Practicar ahora",
+      goToLesson: "Empezar la lección",
+      backToStations: "Volver a las estaciones",
+      unlockRequirement: "Empieza «{lesson}» para abrir esta estación.",
+      unavailableTitle: "Estamos preparando esta práctica",
+      unavailableDescription:
+        "El contenido de la lección para esta estación no está disponible ahora.",
+      stations: {
+        INTRODUCTIONS: {
+          title: "Saluda y preséntate",
+          description:
+            "Practica saludos, nombres y una primera presentación sencilla.",
+          outcome: "Saluda a alguien y di quién eres.",
+        },
+        NUMBERS_TIME: {
+          title: "Números, hora y fecha",
+          description:
+            "Gana confianza diciendo números, una hora y una fecha breve.",
+          outcome: "Di claramente un número, una hora y una fecha.",
+        },
+        PRICES: {
+          title: "Pregunta el precio y paga",
+          description:
+            "Repite las frases necesarias para preguntar un precio y entender la respuesta.",
+          outcome: "Pregunta cuánto cuesta algo y responde.",
         },
       },
     },
@@ -1195,6 +1292,104 @@ export const messages = {
         "Ocurrió un problema al evaluar tus fotos. Inténtalo de nuevo cuando estés listo.",
     },
   },
+  tour: {
+    common: {
+      ariaLabel: "Recorrido guiado",
+      progress: "{current} de {total}",
+      start: "Enséñame",
+      notNow: "Ahora no, gracias",
+      next: "Siguiente",
+      back: "Atrás",
+      skip: "Omitir recorrido",
+      finish: "Empezar a estudiar",
+      showTheRest: "Enséñame el resto",
+      laterFromSettings: "Puedes verlo luego desde Configuración",
+      gotIt: "Entendido",
+    },
+    welcome: {
+      eyebrow: "Tu profesor",
+      title: "Hola, soy Han",
+      body: "Aquí vas a aprender mandarín de verdad: desde tu primer 你好 hasta sostener una conversación. Déjame enseñarte la app en un minuto.",
+    },
+    nextStep: {
+      eyebrow: "Tu próximo paso",
+      body: "Esto es lo único que necesitas mirar para empezar. Yo elijo tu siguiente lección y la dejo aquí, lista.",
+    },
+    streak: {
+      eyebrow: "Tu racha",
+      body: "Estos son los días que has practicado esta semana. La racha cuenta los días seguidos: a mí me importa el hábito, no la nota.",
+    },
+    experience: {
+      eyebrow: "Experiencia",
+      body: "Sube cada vez que terminas una lección. Mide cuánto chino llevas de verdad, no cuánto rato pasaste aquí dentro.",
+    },
+    words: {
+      eyebrow: "Palabras y consejo",
+      body: "Cada día te dejo palabras nuevas de tu nivel, y justo debajo un consejo corto. Toca una palabra para ver su significado y ejemplos.",
+    },
+    bubble: {
+      eyebrow: "Estoy en todas las pantallas",
+      body: "¿Ves esa burbuja? Soy yo. Si algo no te cuadra — una palabra, una regla, por qué fallaste una respuesta — tócame y pregúntame. Escribe en tu idioma.",
+    },
+    navigation: {
+      eyebrow: "Ya sabes lo básico",
+      body: "Todo lo demás vive aquí abajo. ¿Te enseño el resto de la app? Es un minuto más, o lo dejamos para cuando tú quieras.",
+    },
+    sections: {
+      journey: {
+        eyebrow: "Tu ruta de aprendizaje",
+        body: "Tiene tres capítulos: Fundamentos empieza desde cero, Vida cotidiana es comer fuera y viajar, y Situaciones avanzadas es trabajo y negociación. Presiona acá, en Aprender, y entra a Ruta de aprendizaje.",
+      },
+      writing: {
+        eyebrow: "Writing Lab",
+        body: "En el mismo menú tienes el Writing Lab: ahí traduces frases, escribes libre, o escribes un párrafo a mano y te lo corrijo. También está Speaking Lab, con tres estaciones guiadas para escuchar y repetir con caracteres y pinyin. Presiona acá otra vez y elige Writing Lab.",
+      },
+      han: {
+        eyebrow: "Aquí vivo yo",
+        body: "Hago tres cosas: como tutor te explico por escrito, como compañero hablo contigo solo en chino, y como buscador te doy el significado de cualquier palabra. Presiona acá para verlas.",
+      },
+      progress: {
+        eyebrow: "Progreso",
+        body: "Ahí ves en qué eres fuerte y en qué no: escuchar, hablar, leer y escribir. Y abajo, lo que conviene repasar antes de que se te olvide. Presiona acá.",
+      },
+      shop: {
+        eyebrow: "HanCoins y la Tienda",
+        body: "Los HanCoins se ganan estudiando: entrar cada día, terminar lecciones, completar situaciones. Se gastan en ropa para tu personaje, y nunca se compran con dinero real. Presiona acá para ver la Tienda.",
+      },
+      settings: {
+        eyebrow: "Y eso es todo",
+        body: "En Configuración, desde tu menú de usuario en Inicio, cambias el idioma, el tema, tus preferencias y mi voz. También puedes volver a ver esta introducción desde ahí. Ahora sí: a estudiar.",
+      },
+    },
+    hints: {
+      journey:
+        "Tu ruta tiene tres capítulos. Dentro de cada uno hay situaciones, y dentro de cada situación, cuatro lecciones.",
+      scenario:
+        "Arriba tienes lo que sabrás hacer al terminar. Abajo, sus cuatro lecciones en orden, y al final la misión: una conversación de verdad donde lo usas todo junto.",
+      lesson:
+        "Cada lección son seis pasos. La barra de arriba te dice en cuál vas y te deja volver a cualquiera que ya hayas abierto.",
+      han: "El tutor te explica por escrito, el compañero habla contigo en chino, y el buscador te da el significado de cualquier palabra.",
+      writingLab:
+        "Escritura fuera de la ruta: traducción, texto libre, o un párrafo escrito a mano.",
+      speakingLab:
+        "Aquí practicas con tres estaciones guiadas. Empieza la lección relacionada y después escucha, sigue los caracteres y el pinyin, y repite cada línea a tu ritmo.",
+      progress:
+        "Aquí ves en qué eres fuerte y en qué no. Y abajo, lo que conviene repasar.",
+      shop: "Los HanCoins se ganan estudiando y se gastan aquí. Nunca se compran con dinero real.",
+      settings:
+        "Desde aquí cambias idioma, tema, preferencias y mi voz, y puedes volver a ver la introducción.",
+    },
+    settings: {
+      title: "Recorrido guiado",
+      description:
+        "El recorrido de Han por la app, y las notas cortas que explican cada sección la primera vez que entras.",
+      replay: "Ver la introducción otra vez",
+      replayHint: "Volverás a Inicio y el recorrido comenzará de inmediato.",
+      restoreHints: "Recuperar las notas de sección",
+      restoreHintsHint: "Cada una vuelve a aparecer la próxima vez que entres.",
+      done: "Hecho",
+    },
+  },
   hanVocabulary: {
     backToHan: "Volver a Han",
     benefits: [
@@ -1244,7 +1439,7 @@ export const messages = {
     emptyDescription:
       "Completa tu primera lección para empezar a construir tu perfil de competencias.",
     startingLevel: "Nivel inicial seleccionado: {level}",
-    generalLevel: "Nivel general",
+    generalLevel: "Experiencia",
     generalLevelDescription:
       "Se obtiene al completar escenarios y practicar en los Labs; no se basa en una autoevaluación. Este es el progreso al que Han realmente se adapta. El máximo es {max}, no 2000, hasta que se lance Reading Lab.",
     weightedAverage: "Promedio ponderado de la Ruta de aprendizaje",

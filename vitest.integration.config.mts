@@ -17,6 +17,12 @@ export default mergeConfig(
   defineConfig({
     test: {
       fileParallelism: false,
+      // The shared integration database is remote. The 15-second default in
+      // vitest.config.mts remains appropriate for unit/component tests, but a
+      // valid integration request can cross it during ordinary provider
+      // latency (observed at 15.146s on 2026-09-26). Keep this override scoped
+      // to integration instead of weakening the faster suites globally.
+      testTimeout: 30_000,
     },
   }),
 );

@@ -1,5 +1,6 @@
 export type OnboardingStep =
   | "welcome"
+  | "appearance"
   | "profile"
   | "avatar"
   | "goal"
@@ -23,6 +24,7 @@ export interface OnboardingValues {
 
 export const STEP_ORDER: OnboardingStep[] = [
   "welcome",
+  "appearance",
   "profile",
   "avatar",
   "goal",

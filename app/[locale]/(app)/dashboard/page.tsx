@@ -1,39 +1,27 @@
 import Link from "next/link";
-import {
-  ChevronRight,
-  CircleCheck,
-  Mic,
-  PenLine,
-  Sparkles,
-  Trophy,
-} from "lucide-react";
+import { Check, CircleCheck, Flame, Gem } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { Button } from "@/components/ui/button";
 import {
   PageTitle,
   SectionTitle,
-  CardTitle,
   Body,
   Caption,
 } from "@/components/ui/typography";
-import { ProgressBar } from "@/components/ui/progress-bar";
-import { CompetencyList } from "@/components/progress/competency-list";
 import { ReviewQueueList } from "@/components/progress/review-queue-list";
 import { LevelUpBanner } from "@/components/progress/level-up-banner";
 import { HanMascot, HanAvatar } from "@/components/ui/han-mascot";
 import { Chip } from "@/components/ui/chip";
-import { HanCoinsIcon } from "@/components/ui/hancoins-icon";
-import { AchievementIcon } from "@/components/achievements/achievement-icon";
-import { AvatarDisplay } from "@/components/avatar/avatar-display";
 import { WordsOfTheDayCard } from "@/components/dashboard/words-of-the-day-card";
-import { CURRENT_MAX_GENERAL_LEVEL_POINTS } from "@/lib/points-system";
+import { hskNumberForPoints } from "@/lib/points-system";
 import { getDailyHanTip } from "@/lib/han-tips";
 import { cn } from "@/lib/cn";
 import { isAppLocale, localePath } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { formatMessage } from "@/i18n/format";
 import { localizeReviewItem } from "@/i18n/review";
+import { getMaximumJourneyChapter } from "@/lib/beta-learning-scope";
 
 /**
  * Redesigned 2026-08-21 (Direction A "Tinta Cálida" / Direction B
@@ -68,7 +56,11 @@ export default async function DashboardPage({
   const messages = dictionary.dashboard;
   const session = await auth();
   const userId = session!.user!.id!;
-  const data = await getDashboardData(userId, locale);
+  const data = await getDashboardData(
+    userId,
+    locale,
+    getMaximumJourneyChapter(session!.user!.role),
+  );
 
   const isNewLearner = data.scenarios.every((s) => s.completedLessons === 0);
 
@@ -107,21 +99,6 @@ export default async function DashboardPage({
     );
   }
 
-  const totalLessons = data.scenarios.reduce(
-    (sum, s) => sum + s.totalLessons,
-    0,
-  );
-  const totalCompletedLessons = data.scenarios.reduce(
-    (sum, s) => sum + s.completedLessons,
-    0,
-  );
-  const journeyProgressPercent =
-    totalLessons > 0
-      ? Math.round((totalCompletedLessons / totalLessons) * 100)
-      : 0;
-  const generalLevelPercent = Math.round(
-    (data.generalLevel.points / CURRENT_MAX_GENERAL_LEVEL_POINTS) * 100,
-  );
   const tip = getDailyHanTip();
   const localizedLevelLabel =
     messages.levels[
@@ -131,17 +108,79 @@ export default async function DashboardPage({
     messages.hanTip.tips[tip.id as keyof typeof messages.hanTip.tips] ??
     tip.text;
 
-  const streakLine = formatMessage(messages.hero.streak, {
-    count: data.streak.currentStreak,
-  });
+  // Three cases, not one template: "Racha de 1 días" is wrong in Spanish,
+  // and a learner with no streak yet needs an invitation rather than a
+  // hidden row - the flame should teach the mechanic from day one, not
+  // appear only once they already understand it.
+  const streakLine =
+    data.streak.currentStreak === 0
+      ? messages.hero.streakStart
+      : data.streak.currentStreak === 1
+        ? messages.hero.streakOne
+        : formatMessage(messages.hero.streak, {
+            count: data.streak.currentStreak,
+          });
+
+  // Seven steps over the ten tiers of HSK_POINT_THRESHOLDS, rising grey ->
+  // green -> blue -> orange -> gold, so the colour itself reads as advance.
+  // Every step is a token already used as a text colour elsewhere in the
+  // app (checked, not assumed): inventing shades here would mean shipping
+  // unverified contrast on a number the learner is meant to read at a
+  // glance. Ten distinct colours would be noise; each boundary below still
+  // falls on a real tier the learner is told they reached.
+  const experienceTone = [
+    "text-text-muted", // 0 · Just Starting Out
+    "text-secondary-400", // 1 · Getting By
+    "text-secondary-300", // 2 · Finding Your Footing
+    "text-info-500", // 3 · Speaking with Ease
+    "text-info-500", // 4 · Easily Understood
+    "text-warning-500", // 5 · Handling Real Situations
+    "text-warning-500", // 6 · Speaking Like a Professional
+    "text-accent-300", // 7 · Nearing Mastery
+    "text-accent-300", // 8 · Refined Fluency
+    "text-accent-200", // 9 · Mastering the Language
+  ][hskNumberForPoints(data.generalLevel.points)]!;
+
+  // The scenario the learner is actually inside, and where they are in it.
+  // `data.scenarios` was already fetched and, until now, collapsed into a
+  // single "0 of 164" - an abstraction that means nothing on day one.
+  // Zero extra queries: the lesson list was sitting in that same object.
+  //
+  // Completion per lesson isn't returned by getScenariosWithProgress (only
+  // a count), but the journey is strictly sequential and continueTarget is
+  // by definition the first unfinished lesson, so everything before it is
+  // done and everything after is pending.
+  const currentScenario = data.continueTarget
+    ? data.scenarios.find((s) => s.slug === data.continueTarget!.scenarioSlug)
+    : undefined;
+  const scenarioLessons = currentScenario
+    ? currentScenario.levels.flatMap((level) => level.lessons)
+    : [];
+  const currentLessonIndex = scenarioLessons.findIndex(
+    (lesson) => lesson.slug === data.continueTarget?.lessonSlug,
+  );
+  // Every published scenario holds exactly 4 lessons (41 scenarios x 4 =
+  // the 164 total), so the whole scenario fits: showing a window of 3 only
+  // ever chopped one lesson off the end for no reason. Four rows is ~140px
+  // and the learner sees the complete arc they're inside.
 
   return (
-    <div className="flex flex-col gap-8">
-      <PageTitle>
+    <div className="flex flex-col gap-5">
+      {/* A greeting, not a page title (2026-09-20). At page-title size this
+          wrapped to two lines on a phone and cost ~107px - 16% of the
+          visible screen - to say something that carries no information.
+          Kept, because the warmth is worth one small line.
+
+          Still font-display (the follow-up fix): dropping to Body also
+          dropped Fraunces for Inter, which read as a different, plainer
+          typeface rather than a smaller version of the same greeting. Same
+          font, card-title size, lighter weight and colour so it doesn't
+          compete with the lesson title inside the hero. */}
+      <SectionTitle className="text-card-title font-medium text-text-secondary">
         {data.displayName
           ? formatMessage(messages.titleNamed, { name: data.displayName })
           : messages.title}
-      </PageTitle>
+      </SectionTitle>
 
       {/* Renders nothing except right after a real tier level-up (client-
           only comparison, src/components/progress/level-up-banner.tsx) -
@@ -154,13 +193,65 @@ export default async function DashboardPage({
 
       {/* Today hero — rounded-panel + soft gradient, not a bordered Card,
           so it reads as the page's one clear "primary action" rather than
-          just another block in the stack. */}
-      <div className="flex flex-col items-center gap-4 rounded-panel bg-linear-to-br from-primary-500/10 to-secondary-500/10 p-6 text-center sm:flex-row sm:items-start sm:p-8 sm:text-left">
-        <HanMascot
-          pose={data.streak.activeToday ? "heart" : "wave"}
-          size={96}
-          className="shrink-0"
-        />
+          just another block in the stack.
+
+          Horizontal on phones too (2026-09-20): stacking a centred mascot
+          above centred text cost a full extra row plus its gap, and made the
+          card tall enough to push everything else off screen. Han sits
+          beside the text instead, and the copy is left-aligned, which is
+          also easier to read on a narrow column.
+
+          Continue lives under Han in that same left column (2026-09-20
+          follow-up, user request): Han is only ~75px tall while the text
+          column runs ~125px, so the space directly below him was dead. The
+          button fills it, and the card gets shorter instead of taller for
+          it. */}
+      <div
+        data-tour-id="dashboard-hero"
+        className="flex items-start gap-[35px] rounded-panel bg-linear-to-br from-primary-500/10 to-secondary-500/10 p-4 text-left sm:gap-10 sm:p-8"
+      >
+        <div className="flex shrink-0 flex-col gap-2">
+          {/* 112, not 64: the source art carries a wide transparent margin
+              around the character (see han-mascot.tsx), so the character
+              itself renders far smaller than its declared box - at 64 it
+              read as a thumbnail. */}
+          <HanMascot
+            pose={data.streak.activeToday ? "heart" : "wave"}
+            size={112}
+          />
+          {data.continueTarget && (
+            <Link
+              href={localePath(
+                locale,
+                `/lesson/${data.continueTarget.lessonSlug}`,
+              )}
+              className="w-[112px]"
+            >
+              <Button type="button" className="w-full">
+                {messages.hero.continueAction}
+              </Button>
+            </Link>
+          )}
+
+          {/* Daily goal, phones only (2026-09-20). Correcting an earlier
+              wrong assumption in this file: TopBar does NOT carry this on a
+              phone - its streak chip is `sm:` and its goal chip is `lg:`,
+              so below 640px the top bar shows coins and nothing else. The
+              goal was invisible on mobile everywhere. It goes here, in the
+              space left under the button, because it is the one signal
+              genuinely missing rather than filler. */}
+          {data.dailyStudyTargetMinutes && (
+            <Chip
+              tone={data.streak.activeToday ? "secondary" : "neutral"}
+              className="w-full justify-center sm:hidden"
+            >
+              <CircleCheck className="size-4" aria-hidden="true" />
+              {formatMessage(messages.hero.goalShort, {
+                minutes: data.dailyStudyTargetMinutes,
+              })}
+            </Chip>
+          )}
+        </div>
         <div className="flex flex-1 flex-col gap-3">
           <div className="flex flex-col gap-1">
             {data.continueTarget ? (
@@ -178,7 +269,12 @@ export default async function DashboardPage({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+          {/* Hidden on phones (2026-09-20): at this width the weekly strip
+              below already carries the streak, and the daily goal has its
+              own compact chip under the Continue button. Desktop keeps the
+              full chips - there the hero has room to spare, and TopBar's
+              own streak/goal chips only appear at sm:/lg: anyway. */}
+          <div className="hidden flex-wrap items-center justify-center gap-2 sm:flex sm:justify-start">
             <Chip tone="accent" className="py-1 pr-3 pl-1">
               <HanAvatar
                 pose={data.streak.activeToday ? "heart" : "wave"}
@@ -206,14 +302,19 @@ export default async function DashboardPage({
             )}
           </div>
 
-          {/* Suggested next - now shows the same `reason` field
-              ReviewQueueList already shows for every other item in the full
-              queue below (review-data.ts); the hero pill previously only
-              showed the bare title, dropping the one part that actually
-              explains the suggestion. Zero extra queries - `reason` was
-              already sitting on this same reviewQueue[0] object. */}
+          {/* No whole-course progress bar here (2026-09-20, user decision).
+              It read "0 of 164 lessons completed · 0%" over an empty track -
+              the most discouraging possible framing on the one screen meant
+              to invite a beginner to start, and already said better by the
+              scenario card below, where the scale is four lessons rather
+              than 164. The big picture lives on Progress. */}
+
+          {/* Suggested next - hidden on phones, where it is the same item
+              the Review list below already leads with (it *is*
+              reviewQueue[0], see dashboard-data.ts). Desktop has the room
+              for the redundancy to read as emphasis rather than clutter. */}
           {data.recommendation && (
-            <div className="rounded-control bg-elevated px-3 py-2 text-left">
+            <div className="hidden rounded-control bg-elevated px-3 py-2 text-left sm:block">
               <Body className="text-text-primary">
                 {messages.hero.suggestedNext}{" "}
                 <span className="font-medium">
@@ -232,35 +333,99 @@ export default async function DashboardPage({
             </div>
           )}
 
-          {/* Weekly activity strip - the streak pill above already gives
-              the exact count; this adds the shape of the week at a glance
-              (which days, not just how many), zero extra queries (see
-              dashboard-data.ts's weeklyActivity - reuses the same cached
-              activity dates getStudyStreak already fetches). */}
-          <div
-            className="flex items-center gap-2.5 self-center sm:self-start"
-            role="img"
-            aria-label={formatMessage(messages.hero.weeklyActivity, {
-              active: data.weeklyActivity.filter((d) => d.active).length,
-            })}
-          >
-            {data.weeklyActivity.map((day) => (
-              <div key={day.date} className="flex flex-col items-center gap-1">
-                <span
-                  className={cn(
-                    "size-2.5 rounded-full",
-                    day.active ? "bg-accent-500" : "bg-border",
-                  )}
-                />
-                <span className="font-interface text-[0.625rem] text-text-muted">
-                  {
-                    messages.hero.weekdays[
-                      new Date(`${day.date}T00:00:00Z`).getUTCDay()
-                    ]
-                  }
-                </span>
-              </div>
-            ))}
+          {/* The streak count, phones only (2026-09-20). The dots below say
+              *which* days, never *how many* - and a 30-day streak can't fit
+              in a 7-day window at all. TopBar's streak chip starts at sm:,
+              so without this the number appeared nowhere on a phone.
+              Desktop reads it from the chips row above instead. */}
+          <div className="flex flex-col gap-1">
+            <Caption className="flex items-center gap-1.5 text-text-secondary sm:hidden">
+              {/* Lit only when today already counts: a flame that looks the
+                  same whether or not the streak is at risk says nothing.
+                  Same met/not-met language the goal chip and TopBar use. */}
+              <Flame
+                className={cn(
+                  "size-4 shrink-0",
+                  data.streak.activeToday
+                    ? "text-accent-300"
+                    : "text-text-muted",
+                )}
+                aria-hidden="true"
+              />
+              {streakLine}
+            </Caption>
+
+            {/* Weekly activity strip - the shape of the week at a glance
+                (which days, not just how many), zero extra queries. Grouped
+                with the count above so the pair costs one gap, not two, and
+                reads as one idea: how many, and which. */}
+            <div
+              data-tour-id="dashboard-streak"
+              className="flex items-center gap-2.5 self-start"
+              role="img"
+              aria-label={formatMessage(messages.hero.weeklyActivity, {
+                active: data.weeklyActivity.filter((d) => d.active).length,
+              })}
+            >
+              {data.weeklyActivity.map((day) => (
+                <div
+                  key={day.date}
+                  className="flex flex-col items-center gap-1"
+                >
+                  <span
+                    className={cn(
+                      "size-2.5 rounded-full",
+                      day.active ? "bg-accent-500" : "bg-border",
+                    )}
+                  />
+                  <span className="font-interface text-[0.625rem] text-text-muted">
+                    {
+                      messages.hero.weekdays[
+                        new Date(`${day.date}T00:00:00Z`).getUTCDay()
+                      ]
+                    }
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Experience, right under the week (2026-09-21). No
+                denominator on purpose: "340 / 1850" would reintroduce the
+                exact discouragement the whole-course bar was removed for.
+                Points only ever go up, so the bare number is always a
+                gain.
+
+                The colour follows the ten tiers the points system already
+                defines (HSK_POINT_THRESHOLDS), so it changes on a real
+                milestone that already has a name - never an invented
+                gradient. The tier name sits beside it, so the colour is
+                reinforcement, never the only carrier of the meaning. */}
+            <div
+              data-tour-id="dashboard-experience"
+              className="flex items-center gap-1.5"
+            >
+              <Gem
+                className={cn("size-4 shrink-0", experienceTone)}
+                aria-hidden="true"
+              />
+              <span
+                className={cn(
+                  "font-display text-card-title font-semibold",
+                  experienceTone,
+                )}
+              >
+                {Math.round(data.generalLevel.points)}
+              </span>
+              <Caption className="text-text-muted">
+                {messages.hero.experience}
+              </Caption>
+            </div>
+            {/* The tier name on its own line, never only the colour: the
+                ramp is reinforcement for people who read it, not the
+                carrier of the meaning. */}
+            <Caption className="truncate text-text-secondary">
+              {localizedLevelLabel}
+            </Caption>
           </div>
 
           {/* Streak-at-risk nudge - zero extra queries, both fields already
@@ -276,92 +441,121 @@ export default async function DashboardPage({
               })}
             </Caption>
           )}
-
-          {data.continueTarget && (
-            <Link
-              href={localePath(
-                locale,
-                `/lesson/${data.continueTarget.lessonSlug}`,
-              )}
-              className="self-center sm:self-start"
-            >
-              <Button type="button">{messages.hero.continueAction}</Button>
-            </Link>
-          )}
         </div>
       </div>
 
-      {/* Quick actions — de-emphasized on purpose: no card wrapper, small
-          icon badges reusing the same color mapping the nav already uses
-          for these two destinations (secondary/info), so they read as
-          secondary utilities rather than competing with the hero's CTA. */}
-      <div className="flex gap-5">
-        <Link
-          href={localePath(locale, "/speaking-lab")}
-          className="flex items-center gap-2 text-text-secondary transition-colors duration-fast ease-standard hover:text-text-primary"
-        >
-          <span className="flex size-8 items-center justify-center rounded-full bg-secondary-500/15 text-secondary-300">
-            <Mic className="size-4" aria-hidden="true" />
-          </span>
-          <span className="font-interface text-body font-medium">
-            {messages.quickActions.speaking}
-          </span>
-        </Link>
-        <Link
-          href={localePath(locale, "/writing-lab")}
-          className="flex items-center gap-2 text-text-secondary transition-colors duration-fast ease-standard hover:text-text-primary"
-        >
-          <span className="flex size-8 items-center justify-center rounded-full bg-info-500/15 text-info-500">
-            <PenLine className="size-4" aria-hidden="true" />
-          </span>
-          <span className="font-interface text-body font-medium">
-            {messages.quickActions.writing}
-          </span>
-        </Link>
-        {/* Permanent entry point (2026-08-24), same low-key treatment as
-            the two links above - deliberately never gated or hidden after
-            the first visit (unlike LevelUpBanner's dismiss-and-remember
-            pattern): the page has standing reference value - the tone demo
-            and courtesy phrases - not just onboarding value. */}
-        <Link
-          href={localePath(locale, "/welcome-to-chinese")}
-          className="flex items-center gap-2 text-text-secondary transition-colors duration-fast ease-standard hover:text-text-primary"
-        >
-          <span className="flex size-8 items-center justify-center rounded-full bg-accent-500/15 text-accent-300">
-            <Sparkles className="size-4" aria-hidden="true" />
-          </span>
-          <span className="font-interface text-body font-medium">
-            {messages.quickActions.primer}
-          </span>
-        </Link>
-      </div>
+      {/* Single column (2026-09-20). This page used to carry a quick-action
+          row plus a seven-tile sidebar: General Level (already the Progress
+          page's headline), Leaderboard, Achievements, Avatar, Competencies.
+          On a phone that stacked into an endless scroll of things a learner
+          hasn't earned yet. Each of those now lives on the one page that
+          owns it - Progress, Tienda - and the study surfaces are reachable
+          from the Learning menu in the nav, so the row duplicated that too.
+          What's left here answers one question: what do I do now. */}
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
+          {currentScenario && scenarioLessons.length > 0 && (
+            <section className="flex flex-col gap-3 rounded-panel border border-border bg-surface p-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="flex min-w-0 flex-col">
+                  <Caption className="font-semibold uppercase tracking-wide text-text-muted">
+                    {messages.journey.currentScenario}
+                  </Caption>
+                  <SectionTitle className="truncate text-card-title">
+                    {currentScenario.name}
+                  </SectionTitle>
+                </div>
+                <Caption className="shrink-0 text-text-muted">
+                  {formatMessage(messages.journey.scenarioProgress, {
+                    completed: currentScenario.completedLessons,
+                    total: currentScenario.totalLessons,
+                  })}
+                </Caption>
+              </div>
 
-      {/* Two-column split: a primary learning-path column (genuine list
-          content - a bordered Card per item is earned here) and a
-          glanceable competency "scorecard" sidebar, instead of one long
-          undifferentiated stream. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-8 lg:col-span-2">
-          {data.scenarios.length > 0 && (
-            <Link
-              href={localePath(locale, "/learning-journey")}
-              className="group flex flex-col gap-3 rounded-panel border border-border bg-surface p-5 transition-colors duration-fast ease-standard hover:border-primary-500/40"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <SectionTitle>{messages.journey.title}</SectionTitle>
-                <ChevronRight
-                  className="size-5 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
+              {/* Read as a path, not a list (user's pick, 2026-09-20): one
+                  line joins the four nodes so the scenario reads as a route
+                  with a position on it. The line is decorative and sits
+                  behind the nodes; each node's own state is carried by the
+                  icon and the label, never by the line alone. */}
+              {/* A grid, not a flex row, so the node column has one fixed
+                  width every row shares: the connector can then be placed
+                  at that column's exact centre (6px of row padding + half
+                  of the 28px node = 20px) instead of a guessed offset that
+                  drifted into the label. */}
+              <ol className="relative flex flex-col gap-1">
+                <span
+                  className="absolute top-7 bottom-7 left-[1.1875rem] w-0.5 bg-border"
                   aria-hidden="true"
                 />
-              </div>
-              <ProgressBar
-                value={journeyProgressPercent}
-                label={formatMessage(messages.journey.progress, {
-                  completed: totalCompletedLessons,
-                  total: totalLessons,
+                {scenarioLessons.map((lesson, index) => {
+                  const isCurrent = index === currentLessonIndex;
+                  const isDone =
+                    currentLessonIndex >= 0 && index < currentLessonIndex;
+                  return (
+                    <li key={lesson.slug} className="relative">
+                      <Link
+                        href={localePath(locale, `/lesson/${lesson.slug}`)}
+                        className={cn(
+                          "grid min-h-11 grid-cols-[1.75rem_1fr] items-center gap-x-4 rounded-control px-1.5 transition-colors duration-fast ease-standard",
+                          isCurrent ? "bg-primary-500/10" : "hover:bg-elevated",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-7 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
+                            isCurrent
+                              ? // ring, not a bigger dot: the node keeps the
+                                // same footprint as its neighbours so the
+                                // line still runs through their centres.
+                                "bg-primary-500 text-on-color-light ring-4 ring-primary-500/25"
+                              : isDone
+                                ? // secondary-700, not -500: navigation.ts
+                                  // documents that -500 clears AA against
+                                  // neither fixed on-colour in both themes.
+                                  "bg-secondary-700 text-on-color-light"
+                                : "bg-elevated text-text-muted",
+                          )}
+                          aria-hidden="true"
+                        >
+                          {isDone ? (
+                            <Check className="size-3.5" strokeWidth={3} />
+                          ) : (
+                            index + 1
+                          )}
+                        </span>
+                        <span className="flex min-w-0 flex-col justify-center">
+                          <span
+                            className={cn(
+                              "truncate font-interface text-body",
+                              isCurrent
+                                ? "font-semibold text-text-primary"
+                                : isDone
+                                  ? "text-text-muted"
+                                  : "text-text-secondary",
+                            )}
+                          >
+                            {lesson.title}
+                          </span>
+                          {isCurrent && (
+                            <Caption className="text-accent-300">
+                              {messages.journey.youAreHere}
+                            </Caption>
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  );
                 })}
-              />
-            </Link>
+              </ol>
+
+              <Link
+                href={localePath(locale, "/learning-journey")}
+                className="self-start font-interface text-supporting font-medium text-secondary-400 underline-offset-4 hover:underline"
+              >
+                {messages.journey.viewAll}
+              </Link>
+            </section>
           )}
 
           {data.reviewQueue.length > 0 && (
@@ -376,225 +570,31 @@ export default async function DashboardPage({
           )}
         </div>
 
-        <div className="flex flex-col gap-6 lg:col-span-1">
-          {/* General Level - the Points & Leveling System's headline
-              score (points-system.md), surfaced on the Dashboard for the
-              first time (2026-08-21). Headline number only, no explanation
-              text - that stays on Progress (the detail view this links to),
-              same "glanceable summary vs. full detail" split as the
-              Learning Journey panel above. */}
-          <Link
-            href={localePath(locale, "/progress")}
-            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                {messages.generalLevel}
-              </Caption>
-              <ChevronRight
-                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
-                aria-hidden="true"
-              />
-            </div>
-            <div className="flex items-baseline gap-2">
-              {/* text-text-primary, not text-primary-300 (2026-08-21) - no
-                  fixed primary shade clears WCAG AA against bg-elevated in
-                  both themes at once (checked the full 300-700 range;
-                  primary-300 itself measured 5.14:1 dark but only 2.22:1
-                  light). A real, previously-undetected bug - found while
-                  fixing the same pairing on the Progress page. */}
-              <CardTitle className="font-display text-text-primary">
-                {Math.round(data.generalLevel.points)}
-              </CardTitle>
-              <Body className="text-text-secondary">
-                / {CURRENT_MAX_GENERAL_LEVEL_POINTS} &middot;{" "}
-                {localizedLevelLabel}
-              </Body>
-            </div>
-            <ProgressBar value={generalLevelPercent} />
-          </Link>
-
-          {/* Words of the Day (2026-09-01) - the one sidebar entry that
-              works for a learner with zero points and zero rank yet: 3
-              words picked for their real level, shared with everyone else
-              at that level today (words-of-the-day.ts), zero AI cost to
-              show. Placed right after General Level, before the
-              Leaderboard/Achievements/Avatar teasers below - those reward
-              progress a brand-new learner doesn't have yet. */}
-          <WordsOfTheDayCard
-            locale={locale}
-            words={data.wordsOfTheDay}
-            messages={messages.words}
-            vocabularyMessages={dictionary.hanVocabulary}
-          />
-
-          {/* Leaderboard teaser (2026-08-29) - top 3 + "your rank" only;
-              the full ranked list lives on its own page (getLeaderboardTop
-              is called separately, differently-sized, there - not shared
-              data). Renders even with an empty top 3 (encourages being
-              first) since generalLevelPoints/nickname eligibility is the
-              same real data every learner already has. */}
-          <Link
-            href={localePath(locale, "/leaderboard")}
-            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                {messages.leaderboard.title}
-              </Caption>
-              <ChevronRight
-                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
-                aria-hidden="true"
-              />
-            </div>
-            {data.leaderboardTop.length > 0 ? (
-              <ul className="flex flex-col gap-1.5">
-                {data.leaderboardTop.map((entry) => (
-                  <li
-                    key={entry.userId}
-                    className="flex items-center gap-2 text-supporting"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-5 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
-                        entry.rank === 1
-                          ? "bg-accent-500 text-on-color-dark"
-                          : "bg-surface text-text-muted",
-                      )}
-                      aria-hidden="true"
-                    >
-                      {entry.rank === 1 ? (
-                        <Trophy className="size-3" />
-                      ) : (
-                        entry.rank
-                      )}
-                    </span>
-                    {entry.animal && (
-                      <AvatarDisplay
-                        animal={entry.animal}
-                        equipped={entry.equipped}
-                        size={20}
-                      />
-                    )}
-                    <span className="flex-1 truncate text-text-primary">
-                      @{entry.accountName}
-                    </span>
-                    <span className="text-text-muted">{entry.points}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Body className="text-text-secondary">
-                {messages.leaderboard.empty}
-              </Body>
-            )}
-            {data.leaderboardRank && (
-              <Caption className="text-accent-300">
-                {formatMessage(messages.leaderboard.rank, {
-                  rank: data.leaderboardRank.rank,
-                  total: data.leaderboardRank.totalRanked,
-                })}
-              </Caption>
-            )}
-          </Link>
-
-          {/* Achievements teaser (2026-08-29) - same "small taste, full
-              catalog lives on its own page" shape as the Leaderboard teaser
-              above. */}
-          <Link
-            href={localePath(locale, "/achievements")}
-            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                {messages.achievements.title}
-              </Caption>
-              <ChevronRight
-                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
-                aria-hidden="true"
-              />
-            </div>
-            <Body className="text-text-primary">
-              {formatMessage(messages.achievements.unlocked, {
-                unlocked: data.achievementSummary.unlockedCount,
-                total: data.achievementSummary.totalCount,
-              })}
-            </Body>
-            {data.achievementSummary.recent.length > 0 && (
-              <div className="flex items-center gap-2">
-                {data.achievementSummary.recent.map((achievement) => (
-                  <span
-                    key={achievement.key}
-                    className="flex size-8 items-center justify-center rounded-full bg-accent-500 text-on-color-dark"
-                    title={achievement.title}
-                  >
-                    <AchievementIcon
-                      name={achievement.iconName}
-                      className="size-4"
-                    />
-                  </span>
-                ))}
-              </div>
-            )}
-          </Link>
-
-          {/* Avatar/HanCoins teaser (2026-08-30) - same teaser shape as
-              Leaderboard/Achievements above. Works before the learner has
-              picked an animal too (the tienda page itself is the
-              retroactive entry point for that, same as Account Name). */}
-          <Link
-            href={localePath(locale, "/tienda")}
-            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-                {messages.avatar.title}
-              </Caption>
-              <ChevronRight
-                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
-                aria-hidden="true"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              {data.avatar.animal ? (
-                <AvatarDisplay
-                  animal={data.avatar.animal}
-                  equipped={data.avatar.equipped}
-                  size={40}
-                />
-              ) : (
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-text-muted">
-                  ?
-                </span>
-              )}
-              {data.avatar.animal ? (
-                <Body className="flex items-center gap-1.5 text-text-primary">
-                  <HanCoinsIcon size={16} />
-                  {data.avatar.coinBalance}
-                </Body>
-              ) : (
-                <Body className="text-text-primary">
-                  {messages.avatar.choose}
-                </Body>
-              )}
-            </div>
-          </Link>
-
-          {data.competencies.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <SectionTitle>{messages.competency.title}</SectionTitle>
-              <CompetencyList
-                competencies={data.competencies.slice(0, 4)}
-                className="rounded-panel border-none bg-elevated p-5 shadow-none"
-                messages={messages.competency}
-              />
-            </div>
-          )}
+        <div className="flex flex-col gap-6">
+          {/* Words of the Day (2026-09-01) - 3 words picked for the
+              learner's real level, shared with everyone else at that level
+              today (words-of-the-day.ts), zero AI cost to show. Works from
+              day one, unlike anything that rewards progress. */}
+          {/* The tour anchors on the words alone, not on this card plus
+              Han's tip below it (2026-09-23 fix): the pair is tall enough
+              that centring it left too little room either side, and the
+              tour card came out squeezed. Han's tip sits directly under
+              this one and stays in view anyway, which is all the step's
+              copy claims. */}
+          <div data-tour-id="dashboard-words">
+            <WordsOfTheDayCard
+              locale={locale}
+              words={data.wordsOfTheDay}
+              messages={messages.words}
+              vocabularyMessages={dictionary.hanVocabulary}
+            />
+          </div>
 
           {/* Han's tip - static, rotates daily by date only, zero database
-              cost (src/lib/han-tips.ts). Placed last in the sidebar so it
-              reads as a small closing touch of personality, not competing
-              with the two data-driven scorecards above it. */}
+              cost (src/lib/han-tips.ts). Shown alongside Words of the Day
+              rather than alternating with it: once the hero stopped taking
+              half the screen, the page needed the density back, and both
+              are small. */}
           <div className="flex items-start gap-3 rounded-panel bg-elevated p-4">
             <HanAvatar pose="curious" size={36} className="mt-0.5" />
             <div className="flex flex-col gap-1">

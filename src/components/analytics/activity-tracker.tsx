@@ -7,6 +7,7 @@ import {
   resolveActivitySurface,
   type LearnerActivitySurface,
 } from "@/lib/activity-surface";
+import { randomId } from "@/lib/client-id";
 
 const HEARTBEAT_MS = 15_000;
 const RECENT_INTERACTION_MS = 60_000;
@@ -29,7 +30,7 @@ interface TrackerSession {
 
 function createSession(): TrackerSession {
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     startedAt: new Date().toISOString(),
     lastInteractionAt: 0,
     surfaces: {},

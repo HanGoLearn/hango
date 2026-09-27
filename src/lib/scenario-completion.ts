@@ -1,6 +1,9 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { resolveJourneyChapter, type JourneyChapter } from "@/lib/content/learning-journey";
+import {
+  resolveJourneyChapter,
+  type JourneyChapter,
+} from "@/lib/content/learning-journey";
 import {
   CHAPTER_BUDGET,
   computeScenarioPointsBudget,
@@ -8,7 +11,7 @@ import {
   computeScenarioEarnedPoints,
 } from "@/lib/points-system";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
-import { createTtlCache } from "@/lib/ttl-cache";
+import { getChapterHskSums } from "@/lib/curriculum-weights";
 import {
   checkScenarioCompletionAchievements,
   checkChapterCompletionAchievements,
@@ -18,46 +21,66 @@ import { grantCoins } from "@/lib/coins";
 
 export class ScenarioCompletionNotFoundError extends Error {}
 
-/** No live publish/unpublish action exists in this app - content only changes via seed scripts/migrations, so a multi-minute staleness window costs nothing in practice. */
-const CHAPTER_HSK_SUMS_TTL_MS = 5 * 60 * 1000;
-
-/**
- * Total HSK-reference weight per Learning Journey chapter, across every
- * published lesson - the denominator in computeScenarioPointsBudget().
- * Was "cheap enough to recompute on demand" (max ~224 rows today), but it
- * ran on *every single scenario-completion check, for every user* - a
- * genuine caching candidate now that "revisit later" has arrived
- * (project/db-operations-optimization.md, Tier 3). See ttl-cache.ts for
- * why this isn't Next's own `unstable_cache`.
- */
-const getChapterHskSums = createTtlCache(async (): Promise<
-  Record<JourneyChapter, number>
-> => {
-  const lessons = await db.lesson.findMany({
-    where: { status: "PUBLISHED" },
-    select: {
-      hskReference: true,
-      scenarioLevel: { select: { difficulty: true } },
-    },
-  });
-
-  const sums: Record<JourneyChapter, number> = {
-    BEGINNER: 0,
-    INTERMEDIATE: 0,
-    ADVANCED: 0,
-  };
-  for (const lesson of lessons) {
-    const chapter = resolveJourneyChapter([lesson.scenarioLevel.difficulty]);
-    sums[chapter] += lesson.hskReference ?? 3;
-  }
-  return sums;
-}, CHAPTER_HSK_SUMS_TTL_MS);
-
 export interface ScenarioCompletionResult {
   earnedPoints: number;
   weightedReflectionAverage: number;
   scenarioPointsBudget: number;
   chapter: JourneyChapter;
+}
+
+export interface ScenarioCompletionOptions {
+  /**
+   * Placement can complete dozens of scenarios in one operation. It defers
+   * the shared General Level/achievement reward chain until every scenario
+   * row exists, then runs that chain once through
+   * finalizeScenarioCompletionBatch(). Ordinary lesson completion keeps the
+   * existing immediate behavior.
+   */
+  deferRewards?: boolean;
+}
+
+export interface DeferredScenarioCompletion {
+  scenarioId: string;
+  chapter: JourneyChapter;
+}
+
+/**
+ * Finalizes the shared reward chain after one or many ScenarioCompletion
+ * rows have been written. Every operation is idempotent, and
+ * rewardsGrantedAt is deliberately written last so a failed batch remains
+ * retryable on the next placement-credit call.
+ */
+export async function finalizeScenarioCompletionBatch(
+  userId: string,
+  completions: readonly DeferredScenarioCompletion[],
+): Promise<void> {
+  if (completions.length === 0) return;
+
+  const scenarioIds = [...new Set(completions.map((item) => item.scenarioId))];
+  const chapters = [...new Set(completions.map((item) => item.chapter))];
+
+  await recomputeGeneralLevelPoints(userId);
+  await checkScenarioCompletionAchievements(userId);
+  for (const chapter of chapters) {
+    await checkChapterCompletionAchievements(userId, chapter);
+  }
+  await checkGraduateAchievement(userId);
+
+  const COIN_BATCH_SIZE = 8;
+  for (let offset = 0; offset < scenarioIds.length; offset += COIN_BATCH_SIZE) {
+    await Promise.all(
+      scenarioIds
+        .slice(offset, offset + COIN_BATCH_SIZE)
+        .map((scenarioId) =>
+          grantCoins(userId, 5, "scenario_completed", `scenario:${scenarioId}`),
+        ),
+    );
+  }
+
+  await db.scenarioCompletion.updateMany({
+    where: { userId, scenarioId: { in: scenarioIds } },
+    data: { rewardsGrantedAt: new Date() },
+  });
 }
 
 /**
@@ -71,6 +94,7 @@ export interface ScenarioCompletionResult {
 export async function getOrGenerateScenarioCompletion(
   userId: string,
   scenarioId: string,
+  options: ScenarioCompletionOptions = {},
 ): Promise<ScenarioCompletionResult | null> {
   const scenario = await db.scenario.findUnique({
     where: { id: scenarioId },
@@ -86,7 +110,8 @@ export async function getOrGenerateScenarioCompletion(
       },
     },
   });
-  if (!scenario) throw new ScenarioCompletionNotFoundError("Scenario not found.");
+  if (!scenario)
+    throw new ScenarioCompletionNotFoundError("Scenario not found.");
 
   const lessons = scenario.levels.flatMap((level) => level.lessons);
   if (lessons.length === 0) return null;
@@ -143,27 +168,17 @@ export async function getOrGenerateScenarioCompletion(
       create: { userId, scenarioId, earnedPoints, weightedReflectionAverage },
       update: { earnedPoints, weightedReflectionAverage },
     });
-    await recomputeGeneralLevelPoints(userId);
-    await checkScenarioCompletionAchievements(userId);
-    await checkChapterCompletionAchievements(userId, chapter);
-    // Graduate (2026-08-30) can only newly unlock the moment the last of the
-    // 3 chapter achievements above does, so it's checked right after them.
-    await checkGraduateAchievement(userId);
-    // HanCoins (2026-08-30): 5 coins, once per scenario ever - the
-    // `scenario:{scenarioId}` sourceKey means this is safe to call again on
-    // a later rescoring update (e.g. a lesson inside got redone), it just
-    // no-ops after the first real grant.
-    await grantCoins(userId, 5, "scenario_completed", `scenario:${scenarioId}`);
-    // Written last, on purpose (2026-09-05 fix) - see the field's own doc
-    // comment in schema.prisma. If anything above throws, this line never
-    // runs, so the guard above correctly retries the whole chain next time.
-    await db.scenarioCompletion.update({
-      where: { userId_scenarioId: { userId, scenarioId } },
-      data: { rewardsGrantedAt: new Date() },
-    });
+    if (!options.deferRewards) {
+      await finalizeScenarioCompletionBatch(userId, [{ scenarioId, chapter }]);
+    }
   }
 
-  return { earnedPoints, weightedReflectionAverage, scenarioPointsBudget, chapter };
+  return {
+    earnedPoints,
+    weightedReflectionAverage,
+    scenarioPointsBudget,
+    chapter,
+  };
 }
 
 /**
@@ -176,7 +191,10 @@ export async function getOrGenerateScenarioCompletion(
  * by both redoScenario() (all of a scenario's lessons) and redoLesson()
  * (just one) - the underlying tables to clear are identical either way.
  */
-async function resetLessonsData(userId: string, lessonIds: string[]): Promise<void> {
+async function resetLessonsData(
+  userId: string,
+  lessonIds: string[],
+): Promise<void> {
   if (lessonIds.length === 0) return;
   await db.$transaction([
     db.learnerLessonCompletion.deleteMany({
@@ -214,7 +232,8 @@ export async function redoScenario(
     where: { id: scenarioId },
     include: { levels: { select: { lessons: { select: { id: true } } } } },
   });
-  if (!scenario) throw new ScenarioCompletionNotFoundError("Scenario not found.");
+  if (!scenario)
+    throw new ScenarioCompletionNotFoundError("Scenario not found.");
 
   const lessonIds = scenario.levels.flatMap((level) =>
     level.lessons.map((lesson) => lesson.id),
@@ -231,7 +250,10 @@ export async function redoScenario(
  * complete once one of its lessons loses its Reflection score, so it
  * should stop contributing to the General Level until finished again.
  */
-export async function redoLesson(userId: string, lessonId: string): Promise<void> {
+export async function redoLesson(
+  userId: string,
+  lessonId: string,
+): Promise<void> {
   const lesson = await db.lesson.findUnique({
     where: { id: lessonId },
     select: { scenarioLevel: { select: { scenarioId: true } } },

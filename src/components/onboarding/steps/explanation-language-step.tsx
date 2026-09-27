@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { SectionTitle, Body } from "@/components/ui/typography";
 import { HanMascot } from "@/components/ui/han-mascot";
+import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { AppLocale } from "@/i18n/config";
 import type { OnboardingMessages } from "@/i18n/messages/types";
 
@@ -24,6 +25,7 @@ export interface ExplanationLanguageStepProps {
   locale: AppLocale;
   messages: OnboardingMessages["explanationLanguage"];
   commonMessages: OnboardingMessages["common"];
+  languageSwitcherLabel: string;
 }
 
 export function ExplanationLanguageStep({
@@ -33,6 +35,7 @@ export function ExplanationLanguageStep({
   locale,
   messages,
   commonMessages,
+  languageSwitcherLabel,
 }: ExplanationLanguageStepProps) {
   const [value, setValue] = useState(initialValue ?? "");
   const [error, setError] = useState<string>();
@@ -58,6 +61,13 @@ export function ExplanationLanguageStep({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* The interface-language control lives on this step alone (user
+          decision, 2026-09-20): it belongs next to the question about which
+          language the learner wants, and everywhere after this the choice
+          is changed from Settings instead. */}
+      <div className="flex justify-end">
+        <LanguageSwitcher locale={locale} label={languageSwitcherLabel} />
+      </div>
       <div className="flex flex-col items-center gap-2 text-center">
         <HanMascot pose="wave" size={110} />
         <SectionTitle>{messages.title}</SectionTitle>

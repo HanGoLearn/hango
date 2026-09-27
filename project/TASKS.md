@@ -1912,6 +1912,15 @@ whether the learner had 0 points or 1800.
   reconcile against points already granted per-lesson. Documented here so
   this doesn't get re-litigated as a "bug" later: `0/1850` after finishing
   only some of a scenario's lessons is correct, working as intended.
+- [x] **Decision changed (2026-09-23), implemented and verified**: the user
+  now wants visible progress after every finished lesson. General Level is
+  still fully derived, never incremented: an unfinished scenario contributes
+  a live partial value from its `LessonReflectionReport` rows, without
+  creating a `ScenarioCompletion`; once the scenario is complete, that row
+  replaces the partial contribution instead of being added to it. The lesson
+  results screen shows the lesson's weighted share. Regression coverage uses
+  the real seeded Getting Started scenario and proves both early credit and
+  absence of double counting.
 
 ## Speaking role-play, second round (2026-08-16, same day)
 
@@ -5803,6 +5812,37 @@ That document is the source of truth for pre-beta work; keep updates here terse.
   monitoring, rollback and a global AI cost circuit breaker.
   The initial security-header/CSP baseline is implemented and unit-tested; the
   deployment, private storage, backup and observability work remains open.
+- [x] **P1 first-run experience audit (2026-09-26):** completed the real
+  Spanish onboarding and both legs of Han's guided tour with a disposable,
+  verified learner at 390x844 and 1440x900. Route-driven interactions through
+  Aprender, Han, Progreso, Tienda and Configuración work; replay from Settings
+  works. Fixed the centred 6-of-6 card so it closes with “Empezar a estudiar”
+  instead of restarting the welcome choices, aligned the mobile copy with the
+  visible “Aprender” label, and removed the one-shot `?tour=1` flag on finish or
+  skip so a refresh cannot reopen it. The lowest onboarding level now explicitly
+  includes learners starting from zero in both locales. The focused component
+  suite passes 31/31, typecheck and targeted lint pass, and the temporary
+  learner was deleted.
+- [x] **P1 beginner-cohort learning scope (2026-09-26):** the first public
+  cohort now receives Foundations only, while Everyday Life and Advanced remain
+  visible as honest previews and are protected across chapter, scenario, lesson,
+  dashboard, progress and direct-URL entry points. Placement is omitted for this
+  cohort. Speaking Lab exposes exactly three curriculum-backed guided stations,
+  unlocked from the authenticated learner's own lesson progress, with pinyin
+  visible in practice. Administrator/QA and `HANGO_BETA_LEARNING_SCOPE=FULL`
+  preserve the complete original Journey, placement exam and Speaking Lab. The
+  switch is reversible, no curriculum/data was deleted, and Han Tutor/Companion,
+  Learning Journey Speaking, prompts, voice and transcription were not changed.
+  Verified in both locales, through a real 390x844 learner flow, with focused,
+  unit, component and accessibility coverage; see
+  [`BETA_PRIMERA_PRUEBA_ALCANCE_PEDAGOGICO.md`](BETA_PRIMERA_PRUEBA_ALCANCE_PEDAGOGICO.md).
+  Production build and smoke pass. Technical closure on 2026-09-27 brought the
+  complete integration suite to 296/296: private-retention fixtures are now
+  isolated by owner, database-backed integration tests have a dedicated
+  30-second ceiling, and high-level placement credit batches idempotent writes
+  and defers repeated reward recalculation until the scenario batch is ready.
+  The focused placement path improved from 331 seconds to 86 seconds (about
+  74%) without changing placement results, rewards or learner-visible scope.
 - [ ] **Beta readiness:** real Android/iPhone QA, privacy/terms/AI disclosure,
   human linguistic review, performance/image optimization and a measured closed
   beta before deciding on PWA/APK.

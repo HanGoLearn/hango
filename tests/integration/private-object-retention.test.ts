@@ -58,6 +58,21 @@ async function createAttempt(input: {
   return { user, attempt, key };
 }
 
+function storageScopedToOwner(ownerUserId: string): StorageProvider {
+  return {
+    name: "owner-scoped-local-test",
+    upload: storage.upload.bind(storage),
+    getUrl: storage.getUrl.bind(storage),
+    download: storage.download.bind(storage),
+    delete: storage.delete.bind(storage),
+    exists: storage.exists.bind(storage),
+    list: async (prefix) =>
+      (await storage.list(prefix)).filter((key) =>
+        key.startsWith(`speaking/${ownerUserId}/`),
+      ),
+  };
+}
+
 describe("private recording retention (integration)", () => {
   it("enforces 7/30/90-day and do-not-retain policies without deleting recent or indefinite recordings", async () => {
     const now = new Date("2026-09-19T12:00:00.000Z");
@@ -93,8 +108,22 @@ describe("private recording retention (integration)", () => {
     });
 
     expect(await queueExpiredSpeakingObjects(now, 20)).toBe(4);
-    const result = await processPrivateObjectDeletionJobs({ now, limit: 20 });
-    expect(result).toMatchObject({ completed: 4, failed: 0 });
+    const processingResults = [];
+    for (const item of [...expired, neverRetain]) {
+      processingResults.push(
+        await processPrivateObjectDeletionJobs({
+          now,
+          limit: 20,
+          ownerUserId: item.user.id,
+        }),
+      );
+    }
+    expect(
+      processingResults.reduce((total, result) => total + result.completed, 0),
+    ).toBe(4);
+    expect(
+      processingResults.reduce((total, result) => total + result.failed, 0),
+    ).toBe(0);
 
     for (const item of [...expired, neverRetain]) {
       expect(await storage.exists(item.key)).toBe(false);
@@ -116,7 +145,7 @@ describe("private recording retention (integration)", () => {
         ).audioFilePath,
       ).toBe(item.key);
     }
-  });
+  }, 45_000);
 
   it("records provider failures and retries them idempotently", async () => {
     const now = new Date("2026-09-19T12:00:00.000Z");
@@ -181,9 +210,14 @@ describe("private recording retention (integration)", () => {
     storageKeys.push(oldKey, freshKey);
     await storage.upload(oldKey, Buffer.from("old"), "audio/webm");
     await storage.upload(freshKey, Buffer.from("fresh"), "audio/webm");
+    const scopedStorage = storageScopedToOwner(owner.id);
 
-    expect(await queueOrphanedSpeakingObjects(now, 10, storage)).toBe(1);
-    await processPrivateObjectDeletionJobs({ now, storage });
+    expect(await queueOrphanedSpeakingObjects(now, 10, scopedStorage)).toBe(1);
+    await processPrivateObjectDeletionJobs({
+      now,
+      ownerUserId: owner.id,
+      storage: scopedStorage,
+    });
 
     expect(await storage.exists(oldKey)).toBe(false);
     expect(await storage.exists(freshKey)).toBe(true);

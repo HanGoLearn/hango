@@ -4,8 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+// usePathname is a vi.fn (not a fixed arrow) so a test can place the shell
+// on another route; every existing test keeps the "/en/dashboard" default.
+const usePathnameMock = vi.fn(() => "/en/dashboard");
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/en/dashboard",
+  usePathname: () => usePathnameMock(),
   useRouter: () => ({ replace: vi.fn() }),
 }));
 vi.mock("@/lib/actions/locale", () => ({ setInterfaceLocaleAction: vi.fn() }));
@@ -32,6 +35,7 @@ vi.mock("@/lib/actions/ai-teacher", () => ({
 import { Sidebar } from "@/components/shell/sidebar";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { TopBar } from "@/components/shell/top-bar";
+import { HomeOnly } from "@/components/shell/home-only";
 import { AiTeacherBubble } from "@/components/shell/ai-teacher-bubble";
 import { AppShell } from "@/components/shell/app-shell";
 import { UserMenu } from "@/components/shell/user-menu";
@@ -93,7 +97,6 @@ describe("Sidebar", () => {
       "Speaking Lab",
       "Writing Lab",
       "Progress",
-      "Settings",
     ]) {
       expect(
         screen.getByRole("link", { name: new RegExp(label) }),
@@ -103,18 +106,51 @@ describe("Sidebar", () => {
 });
 
 describe("BottomNav", () => {
-  it("omits Settings and uses compact mobile labels", () => {
+  it("uses compact mobile labels and leaves Settings to the user menu", () => {
     render(<BottomNav {...shellProps} />);
     expect(screen.getByRole("link", { name: "Home" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Journey" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /Settings/ }),
+      screen.queryByRole("link", { name: "Settings" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the three study surfaces behind the Learning menu", async () => {
+    const user = userEvent.setup();
+    render(<BottomNav {...shellProps} />);
+
+    // Collapsed by default: the study surfaces are not top-level tabs.
+    expect(
+      screen.queryByRole("link", { name: /Learning Journey/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Learning" }));
+
+    for (const name of ["Learning Journey", "Speaking Lab", "Writing Lab"]) {
+      expect(await screen.findByRole("menuitem", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("opens Han's three surfaces from the Han menu, each on its own route", async () => {
+    const user = userEvent.setup();
+    render(<BottomNav {...shellProps} />);
+
+    await user.click(screen.getByRole("button", { name: "Han" }));
+
+    for (const [name, href] of [
+      ["Han Tutor", "/en/han/tutor"],
+      ["Han Companion", "/en/han/companion"],
+      ["Han Vocabulary", "/en/han/vocabulary"],
+    ]) {
+      expect(await screen.findByRole("menuitem", { name })).toHaveAttribute(
+        "href",
+        href,
+      );
+    }
   });
 });
 
 describe("TopBar", () => {
-  it("derives the title from the current route and shows a user menu button", () => {
+  it("shows the HanGo brand on Home and a user menu button", () => {
     render(
       <TopBar
         streak={{ currentStreak: 5, activeToday: true }}
@@ -123,13 +159,49 @@ describe("TopBar", () => {
         avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
         isAdministrator={false}
         {...shellProps}
-        languageSwitcherLabel={englishMessages.common.languageSwitcher}
       />,
     );
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("HanGo")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "User menu" }),
     ).toBeInTheDocument();
+  });
+
+  it("is kept off every other section by HomeOnly, coins and avatar included", () => {
+    usePathnameMock.mockReturnValueOnce("/en/learning-journey");
+    render(
+      <HomeOnly>
+        <TopBar
+          streak={{ currentStreak: 5, activeToday: true }}
+          coinBalance={40}
+          avatarAnimal={null}
+          avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
+          isAdministrator={false}
+          {...shellProps}
+        />
+      </HomeOnly>,
+    );
+    expect(screen.queryByText("HanGo")).not.toBeInTheDocument();
+    expect(screen.queryByText("40")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "User menu" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders through HomeOnly on Home", () => {
+    render(
+      <HomeOnly>
+        <TopBar
+          streak={{ currentStreak: 5, activeToday: true }}
+          coinBalance={40}
+          avatarAnimal={null}
+          avatarEquipped={{ HEAD: null, FACE: null, TORSO: null }}
+          isAdministrator={false}
+          {...shellProps}
+        />
+      </HomeOnly>,
+    );
+    expect(screen.getByText("HanGo")).toBeInTheDocument();
   });
 });
 
@@ -324,9 +396,9 @@ describe("AppShell", () => {
       await AppShell({
         children: <p>Page content</p>,
         ...shellProps,
-        languageSwitcherLabel: englishMessages.common.languageSwitcher,
         achievementMessages: englishMessages.achievements,
         lessonMessages: englishMessages.lesson,
+        tourMessages: englishMessages.tour,
       }),
     );
     expect(screen.getByText("Page content")).toBeInTheDocument();

@@ -8,6 +8,7 @@ import {
   type OnboardingValues,
 } from "@/components/onboarding/types";
 import { WelcomeStep } from "@/components/onboarding/steps/welcome-step";
+import { AppearanceStep } from "@/components/onboarding/steps/appearance-step";
 import { ProfileStep } from "@/components/onboarding/steps/profile-step";
 import { AvatarStep } from "@/components/onboarding/steps/avatar-step";
 import { GoalStep } from "@/components/onboarding/steps/goal-step";
@@ -25,6 +26,8 @@ export interface OnboardingWizardProps {
   initialValues: OnboardingValues;
   locale: AppLocale;
   messages: OnboardingMessages;
+  languageSwitcherLabel: string;
+  placementExamEnabled?: boolean;
 }
 
 export function OnboardingWizard({
@@ -32,15 +35,24 @@ export function OnboardingWizard({
   initialValues,
   locale,
   messages,
+  languageSwitcherLabel,
+  placementExamEnabled = true,
 }: OnboardingWizardProps) {
-  const [step, setStep] = useState<OnboardingStep>(initialStep);
+  const steps = placementExamEnabled
+    ? STEP_ORDER
+    : STEP_ORDER.filter((candidate) => candidate !== "placement-offer");
+  const [step, setStep] = useState<OnboardingStep>(
+    !placementExamEnabled && initialStep === "placement-offer"
+      ? "recommendation"
+      : initialStep,
+  );
   const [values, setValues] = useState<OnboardingValues>(initialValues);
 
-  const stepIndex = STEP_ORDER.indexOf(step);
+  const stepIndex = steps.indexOf(step);
   const goNext = (patch: Partial<OnboardingValues> = {}) => {
     setValues((prev) => ({ ...prev, ...patch }));
-    const nextIndex = Math.min(stepIndex + 1, STEP_ORDER.length - 1);
-    setStep(STEP_ORDER[nextIndex]!);
+    const nextIndex = Math.min(stepIndex + 1, steps.length - 1);
+    setStep(steps[nextIndex]!);
   };
   const goBack = () => {
     const prevIndex = Math.max(stepIndex - 1, 0);
@@ -51,13 +63,21 @@ export function OnboardingWizard({
     <div className="flex flex-col gap-6">
       {step !== "welcome" && (
         <ProgressBar
-          value={(stepIndex / (STEP_ORDER.length - 1)) * 100}
-          label={`${messages.progress.step} ${stepIndex} ${messages.progress.of} ${STEP_ORDER.length - 1}`}
+          value={(stepIndex / (steps.length - 1)) * 100}
+          label={`${messages.progress.step} ${stepIndex} ${messages.progress.of} ${steps.length - 1}`}
         />
       )}
 
       {step === "welcome" && (
         <WelcomeStep messages={messages.welcome} onNext={() => goNext()} />
+      )}
+      {step === "appearance" && (
+        <AppearanceStep
+          onNext={() => goNext()}
+          onBack={goBack}
+          messages={messages.appearance}
+          commonMessages={messages.common}
+        />
       )}
       {step === "profile" && (
         <ProfileStep
@@ -110,6 +130,7 @@ export function OnboardingWizard({
           locale={locale}
           messages={messages.explanationLanguage}
           commonMessages={messages.common}
+          languageSwitcherLabel={languageSwitcherLabel}
         />
       )}
       {step === "skills" && (
@@ -134,7 +155,7 @@ export function OnboardingWizard({
           commonMessages={messages.common}
         />
       )}
-      {step === "placement-offer" && (
+      {placementExamEnabled && step === "placement-offer" && (
         <PlacementOfferStep
           locale={locale}
           messages={messages.placementOffer}

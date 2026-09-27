@@ -48,6 +48,8 @@ export function ExerciseItem({
   hideControls = false,
   externalResult,
   onAnswerChange,
+  initialAnswer = null,
+  locked = false,
 }: {
   item: ClientExercise;
   onSubmit: (answer: ExerciseAnswer) => Promise<ExerciseSubmitResult>;
@@ -60,13 +62,49 @@ export function ExerciseItem({
   externalResult?: ExerciseSubmitResult | null;
   /** Only called when `hideControls` - fires whenever the locally-built answer changes, so the parent can collect it. */
   onAnswerChange?: (answer: ExerciseAnswer | null) => void;
+  /**
+   * Only read once, at mount (hideControls mode, 2026-09-26 Grammar
+   * pagination) - a parent that pages between several exercises reuses one
+   * `ExerciseItem` at the same tree position rather than mounting N at once,
+   * so `item` can change identity across renders. This seeds the fields
+   * below from the learner's previously-recorded answer for THIS item, so
+   * navigating back to an already-answered screen shows their real choice
+   * instead of a blank slate - a fresh `key={item.id}` on this element
+   * (required whenever `item` can change) makes it re-seed correctly for
+   * each item instead of leaking the previous item's selection into this
+   * one.
+   */
+  initialAnswer?: ExerciseAnswer | null;
+  /**
+   * Only meaningful in hideControls mode - disables every input once the
+   * learner has answered, even before the parent's batched grade comes
+   * back, so picking an answer locks it in immediately (Duolingo-style)
+   * without waiting on (or paying for) a per-exercise server round trip.
+   */
+  locked?: boolean;
 }) {
   const messages = useLessonMessages();
-  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [textAnswer, setTextAnswer] = useState("");
-  const [pool, setPool] = useState<string[]>(item.tokens);
-  const [built, setBuilt] = useState<string[]>([]);
-  const [pairs, setPairs] = useState<[string, string][]>([]);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(
+    initialAnswer?.type === "MULTIPLE_CHOICE" ||
+      initialAnswer?.type === "TRUE_FALSE"
+      ? initialAnswer.optionId
+      : null,
+  );
+  const [textAnswer, setTextAnswer] = useState(
+    initialAnswer?.type === "FILL_IN_BLANK" ||
+      initialAnswer?.type === "SHORT_RESPONSE"
+      ? initialAnswer.text
+      : "",
+  );
+  const [pool, setPool] = useState<string[]>(
+    initialAnswer?.type === "SENTENCE_ORDERING" ? [] : item.tokens,
+  );
+  const [built, setBuilt] = useState<string[]>(
+    initialAnswer?.type === "SENTENCE_ORDERING" ? initialAnswer.order : [],
+  );
+  const [pairs, setPairs] = useState<[string, string][]>(
+    initialAnswer?.type === "MATCHING" ? initialAnswer.pairs : [],
+  );
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [internalResult, setInternalResult] =
@@ -152,7 +190,7 @@ export function ExerciseItem({
               <button
                 key={option.id}
                 type="button"
-                disabled={!!result}
+                disabled={!!result || locked}
                 onClick={() => setSelectedOptionId(option.id)}
                 aria-pressed={isSelected}
                 className={cn(
@@ -191,7 +229,7 @@ export function ExerciseItem({
         <Input
           value={textAnswer}
           onChange={(event) => setTextAnswer(event.target.value)}
-          disabled={!!result}
+          disabled={!!result || locked}
           placeholder={messages.exercise.answerPlaceholder}
           aria-label={messages.exercise.answerLabel}
         />
@@ -201,7 +239,7 @@ export function ExerciseItem({
         <Textarea
           value={textAnswer}
           onChange={(event) => setTextAnswer(event.target.value)}
-          disabled={!!result}
+          disabled={!!result || locked}
           placeholder={messages.exercise.responsePlaceholder}
           aria-label={messages.exercise.responseLabel}
           showCharacterCount
@@ -219,7 +257,7 @@ export function ExerciseItem({
               <button
                 key={`${token}-${index}`}
                 type="button"
-                disabled={!!result}
+                disabled={!!result || locked}
                 onClick={() => {
                   setBuilt(built.filter((_, i) => i !== index));
                   setPool([...pool, token]);
@@ -235,7 +273,7 @@ export function ExerciseItem({
               <button
                 key={`${token}-${index}`}
                 type="button"
-                disabled={!!result}
+                disabled={!!result || locked}
                 onClick={() => {
                   setPool(pool.filter((_, i) => i !== index));
                   setBuilt([...built, token]);
@@ -257,7 +295,7 @@ export function ExerciseItem({
                 <button
                   key={term}
                   type="button"
-                  disabled={!!result || usedLefts.has(term)}
+                  disabled={!!result || locked || usedLefts.has(term)}
                   aria-pressed={selectedLeft === term}
                   onClick={() => setSelectedLeft(term)}
                   className={cn(
@@ -276,7 +314,9 @@ export function ExerciseItem({
                 <button
                   key={term}
                   type="button"
-                  disabled={!!result || !selectedLeft || usedRights.has(term)}
+                  disabled={
+                    !!result || locked || !selectedLeft || usedRights.has(term)
+                  }
                   onClick={() => {
                     if (!selectedLeft) return;
                     setPairs([...pairs, [selectedLeft, term]]);
@@ -298,7 +338,7 @@ export function ExerciseItem({
                 <button
                   key={`${left}-${right}`}
                   type="button"
-                  disabled={!!result}
+                  disabled={!!result || locked}
                   onClick={() =>
                     setPairs(
                       pairs.filter(([l, r]) => !(l === left && r === right)),

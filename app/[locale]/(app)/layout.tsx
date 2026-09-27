@@ -72,9 +72,9 @@ export default async function AppGroupLayout({
     <AppShell
       locale={locale}
       messages={dictionary.shell}
-      languageSwitcherLabel={dictionary.common.languageSwitcher}
       achievementMessages={dictionary.achievements}
       lessonMessages={dictionary.lesson}
+      tourMessages={dictionary.tour}
     >
       {children}
     </AppShell>

@@ -74,12 +74,7 @@ describe("lesson progress (integration, real seeded database)", () => {
 
     let last;
     for (const step of steps) {
-      last = await advanceLessonStep(
-        user.id,
-        lesson!.id,
-        step.id,
-        undefined,
-      );
+      last = await advanceLessonStep(user.id, lesson!.id, step.id, undefined);
     }
 
     expect(last!.completedAt).not.toBeNull();
@@ -99,16 +94,71 @@ describe("lesson progress (integration, real seeded database)", () => {
     const steps = lesson!.steps.map((s) => ({ id: s.id, order: s.order }));
 
     await getOrCreateLessonProgress(user.id, lesson!.id, steps[0]!.id);
-    const updated = await advanceLessonStep(
-      user.id,
-      lesson!.id,
-      steps[0]!.id,
-      { answered: true },
-    );
+    const updated = await advanceLessonStep(user.id, lesson!.id, steps[0]!.id, {
+      answered: true,
+    });
 
     expect(
       (updated.responses as Record<string, unknown>)[steps[0]!.id],
     ).toEqual({ answered: true });
+  });
+
+  it("treats a resubmitted step already advanced past as a no-op, not an error", async () => {
+    // The bug this guards (2026-09-26): a double-tapped Continue button
+    // fired this same call twice with the same stale step id. The first
+    // call legitimately advanced progress; the second used to throw "not
+    // the current step," which - uncaught on the client - surfaced as the
+    // lesson's generic "couldn't load" error for progress that had in fact
+    // already saved.
+    const user = await createTestUser(
+      `lesson-duplicate-${Date.now()}@hango.dev`,
+    );
+    const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
+    const first = lesson!.steps[0]!;
+    const second = lesson!.steps[1]!;
+    await getOrCreateLessonProgress(user.id, lesson!.id, first.id);
+
+    const advanced = await advanceLessonStep(
+      user.id,
+      lesson!.id,
+      first.id,
+      undefined,
+    );
+    expect(advanced.currentStepId).toBe(second.id);
+
+    // The stale resend, still carrying `first.id`.
+    const resent = await advanceLessonStep(
+      user.id,
+      lesson!.id,
+      first.id,
+      undefined,
+    );
+    expect(resent.currentStepId).toBe(second.id);
+    expect(resent.completedStepIds).toEqual(advanced.completedStepIds);
+
+    const progress = await db.learnerLessonProgress.findUniqueOrThrow({
+      where: { userId_lessonId: { userId: user.id, lessonId: lesson!.id } },
+    });
+    expect(progress.currentStepId).toBe(second.id);
+    // Never double-recorded - the duplicate must not add a second entry.
+    expect(
+      progress.completedStepIds.filter((id) => id === first.id),
+    ).toHaveLength(1);
+  });
+
+  it("still rejects a step that was never reached, duplicate or not", async () => {
+    // The distinguishing rule the fix above relies on: only a step already
+    // in completedStepIds is a benign duplicate. A step skipped ahead to -
+    // never completed - must keep failing loudly.
+    const user = await createTestUser(`lesson-skip-${Date.now()}@hango.dev`);
+    const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
+    const first = lesson!.steps[0]!;
+    const later = lesson!.steps[2]!;
+    await getOrCreateLessonProgress(user.id, lesson!.id, first.id);
+
+    await expect(
+      advanceLessonStep(user.id, lesson!.id, later.id, undefined),
+    ).rejects.toThrow("not the current step");
   });
 
   it("derives the step sequence from the database and rejects skipping ahead", async () => {
@@ -130,7 +180,9 @@ describe("lesson progress (integration, real seeded database)", () => {
   });
 
   it("cannot navigate to an unfinished or foreign lesson step", async () => {
-    const user = await createTestUser(`lesson-navigation-${Date.now()}@hango.dev`);
+    const user = await createTestUser(
+      `lesson-navigation-${Date.now()}@hango.dev`,
+    );
     const lesson = await getLessonBySlug("restaurant-entering-and-ordering");
     const otherLesson = await getLessonBySlug(
       "restaurant-ingredients-and-preferences",

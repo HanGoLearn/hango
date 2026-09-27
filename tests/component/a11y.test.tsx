@@ -6,9 +6,17 @@ import { axe, toHaveNoViolations } from "jest-axe";
 
 expect.extend(toHaveNoViolations);
 
+const pathname = vi.hoisted(() => ({ current: "/en/dashboard" }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/en/dashboard",
-  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => pathname.current,
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}));
+vi.mock("@/lib/actions/tour", () => ({
+  completeTourAction: vi.fn(),
+  skipTourAction: vi.fn(),
+  markTourHintsSeenAction: vi.fn(),
+  restartTourAction: vi.fn(),
+  restoreTourHintsAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/locale", () => ({ setInterfaceLocaleAction: vi.fn() }));
 // See tests/component/shell.test.tsx for why these are mocked here.
@@ -40,6 +48,9 @@ import { InformationBanner } from "@/components/ui/banner";
 import { EmptyState } from "@/components/ui/states";
 import { AppShell } from "@/components/shell/app-shell";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
+import { TourProvider } from "@/components/tour/tour-provider";
+import { TourOverlay } from "@/components/tour/tour-overlay";
+import { TourHint } from "@/components/tour/tour-hint";
 import { messages as englishMessages } from "@/i18n/messages/en";
 
 afterEach(() => {
@@ -101,9 +112,9 @@ describe("Accessibility (axe)", () => {
         ),
         locale: "en",
         messages: englishMessages.shell,
-        languageSwitcherLabel: englishMessages.common.languageSwitcher,
         achievementMessages: englishMessages.achievements,
         lessonMessages: englishMessages.lesson,
+        tourMessages: englishMessages.tour,
       }),
     );
     expect(await axe(container)).toHaveNoViolations();
@@ -114,6 +125,7 @@ describe("Accessibility (axe)", () => {
       <OnboardingWizard
         locale="en"
         messages={englishMessages.onboarding}
+        languageSwitcherLabel={englishMessages.common.languageSwitcher}
         initialStep="goal"
         initialValues={{
           displayName: "Ana",
@@ -135,6 +147,7 @@ describe("Accessibility (axe)", () => {
       <OnboardingWizard
         locale="en"
         messages={englishMessages.onboarding}
+        languageSwitcherLabel={englishMessages.common.languageSwitcher}
         initialStep="avatar"
         initialValues={{
           displayName: "Ana",
@@ -149,5 +162,36 @@ describe("Accessibility (axe)", () => {
       />,
     );
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("guided tour accessibility", () => {
+  it("the tour card has no violations", async () => {
+    window.history.replaceState({}, "", "/en/dashboard?tour=1");
+    const { container } = render(
+      <TourProvider>
+        <div data-tour-id="dashboard-hero">Continue</div>
+        <TourOverlay messages={englishMessages.tour} />
+      </TourProvider>,
+    );
+
+    expect(await axe(container)).toHaveNoViolations();
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("a section hint has no violations", async () => {
+    // A page that actually has a hint - on the dashboard it would render
+    // nothing and the check would pass without testing anything.
+    pathname.current = "/en/writing-lab";
+    window.history.replaceState({}, "", "/en/writing-lab");
+    const { container } = render(
+      <TourProvider>
+        <TourHint messages={englishMessages.tour} />
+      </TourProvider>,
+    );
+
+    expect(container.textContent).toContain("Writing outside the journey");
+    expect(await axe(container)).toHaveNoViolations();
+    pathname.current = "/en/dashboard";
   });
 });

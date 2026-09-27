@@ -110,55 +110,81 @@ export async function advanceLessonStep(
   stepId: string,
   response: unknown,
 ) {
-  const { updated, complete } = await db.$transaction(async (tx) => {
-    const progress = await tx.learnerLessonProgress.findUniqueOrThrow({
-      where: { userId_lessonId: { userId, lessonId } },
-    });
-    const steps = await tx.lessonStep.findMany({
-      where: { lessonId },
-      orderBy: { order: "asc" },
-      select: { id: true, order: true },
-    });
-    const validStepIds = new Set(steps.map((step) => step.id));
-    if (!validStepIds.has(stepId) || progress.currentStepId !== stepId) {
-      throw new Error("This is not the current step for this lesson.");
-    }
-
-    const responses =
-      response === undefined
-        ? (progress.responses as Record<string, unknown>)
-        : {
-            ...(progress.responses as Record<string, unknown>),
-            [stepId]: response,
-          };
-    const completedStepIds = new Set(
-      progress.completedStepIds.filter((id) => validStepIds.has(id)),
-    );
-    completedStepIds.add(stepId);
-    const complete = isLessonComplete(steps, completedStepIds);
-    const nextStepId = resolveNextStepId(steps, stepId) ?? stepId;
-
-    const updated = await tx.learnerLessonProgress.update({
-      where: { userId_lessonId: { userId, lessonId } },
-      data: {
-        responses: responses as Prisma.InputJsonValue,
-        completedStepIds: [...completedStepIds],
-        currentStepId: nextStepId,
-        completedAt: complete ? new Date() : null,
-      },
-    });
-
-    if (complete) {
-      await tx.learnerLessonCompletion.upsert({
+  const { updated, complete, isDuplicate } = await db.$transaction(
+    async (tx) => {
+      const progress = await tx.learnerLessonProgress.findUniqueOrThrow({
         where: { userId_lessonId: { userId, lessonId } },
-        update: {},
-        create: { userId, lessonId },
       });
-    }
-    return { updated, complete };
-  });
+      const steps = await tx.lessonStep.findMany({
+        where: { lessonId },
+        orderBy: { order: "asc" },
+        select: { id: true, order: true },
+      });
+      const validStepIds = new Set(steps.map((step) => step.id));
+      if (!validStepIds.has(stepId)) {
+        throw new Error("This step does not belong to this lesson.");
+      }
 
-  if (complete) {
+      if (progress.currentStepId !== stepId) {
+        // A step already advanced past, submitted again: the client-side
+        // guard in LessonEngine should prevent this, but a genuinely resent
+        // request (a dropped response, a retried fetch) can still reach here
+        // after the first call already recorded it. Treat it as the no-op it
+        // actually is instead of throwing "not the current step" - that error
+        // was reaching the learner as an unhandled "couldn't load this
+        // lesson" screen, for progress that had in fact already saved fine.
+        // A step never reached at all - out of order, not a duplicate -
+        // still fails loudly below.
+        if (progress.completedStepIds.includes(stepId)) {
+          return {
+            updated: progress,
+            complete: progress.completedAt !== null,
+            isDuplicate: true,
+          };
+        }
+        throw new Error("This is not the current step for this lesson.");
+      }
+
+      const responses =
+        response === undefined
+          ? (progress.responses as Record<string, unknown>)
+          : {
+              ...(progress.responses as Record<string, unknown>),
+              [stepId]: response,
+            };
+      const completedStepIds = new Set(
+        progress.completedStepIds.filter((id) => validStepIds.has(id)),
+      );
+      completedStepIds.add(stepId);
+      const complete = isLessonComplete(steps, completedStepIds);
+      const nextStepId = resolveNextStepId(steps, stepId) ?? stepId;
+
+      const updated = await tx.learnerLessonProgress.update({
+        where: { userId_lessonId: { userId, lessonId } },
+        data: {
+          responses: responses as Prisma.InputJsonValue,
+          completedStepIds: [...completedStepIds],
+          currentStepId: nextStepId,
+          completedAt: complete ? new Date() : null,
+        },
+      });
+
+      if (complete) {
+        await tx.learnerLessonCompletion.upsert({
+          where: { userId_lessonId: { userId, lessonId } },
+          update: {},
+          create: { userId, lessonId },
+        });
+      }
+      return { updated, complete, isDuplicate: false };
+    },
+  );
+
+  // Skipped on the duplicate path on purpose: the first, real call already
+  // ran this when `complete` first became true, so a resend re-running it
+  // would be the exact wasted extra Prisma work the duplicate check exists
+  // to avoid, not just a wasted check.
+  if (complete && !isDuplicate) {
     await checkLessonCompletionAchievements(userId);
   }
 

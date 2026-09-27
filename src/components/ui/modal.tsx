@@ -19,7 +19,12 @@ export const ModalContent = forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-panel border border-border bg-surface p-6 shadow-modal",
+          // `dvh` (dynamic viewport height), not `vh`: `vh` is fixed to the
+          // layout viewport and doesn't shrink when mobile browser chrome or
+          // a keyboard reduces the visible area, so a modal near the bottom
+          // of the screen could end up partially hidden with no way to
+          // scroll to it. `dvh` tracks the actual visible viewport.
+          "fixed top-1/2 left-1/2 z-50 max-h-[85dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-panel border border-border bg-surface p-6 shadow-modal",
           "focus:outline-none",
           className,
         )}
@@ -28,7 +33,7 @@ export const ModalContent = forwardRef<
         {children}
         <DialogPrimitive.Close
           aria-label="Close"
-          className="absolute top-4 right-4 rounded-control p-1 text-text-secondary hover:bg-elevated hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+          className="absolute top-4 right-4 rounded-control p-3.5 text-text-secondary hover:bg-elevated hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
         >
           <X className="size-4" aria-hidden="true" />
         </DialogPrimitive.Close>

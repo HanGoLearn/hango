@@ -50,7 +50,12 @@ describe("lesson interface translations", () => {
     expect(
       screen.getByRole("button", { name: "Situación — disponible" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Gramática")).toBeInTheDocument();
+    // The nodes carry no visible labels since the 2026-09-23 redesign - the
+    // step's name lives in its accessible name (and LessonHeader names the
+    // current one), so that is what this asserts is still translated.
+    expect(
+      screen.getByRole("button", { name: "Gramática — bloqueado" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("Escribe tu respuesta"),
     ).toBeInTheDocument();

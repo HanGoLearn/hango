@@ -26,6 +26,7 @@ import { cn } from "@/lib/cn";
 import type { WritingLabMessages } from "@/i18n/messages/types";
 import { formatMessage } from "@/i18n/format";
 import { localizeWritingError } from "@/i18n/writing";
+import { randomId } from "@/lib/client-id";
 
 const MAX_PHOTOS = 3;
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -173,7 +174,7 @@ export function HandwrittenParagraph({
       setPhotos((current) => [
         ...current,
         ...prepared.map((file) => ({
-          id: crypto.randomUUID(),
+          id: randomId(),
           file,
           previewUrl: URL.createObjectURL(file),
         })),

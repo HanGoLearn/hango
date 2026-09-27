@@ -8,7 +8,7 @@ import {
   localePath,
 } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
-import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { LessonMessagesProvider } from "@/components/lesson/lesson-messages";
 
 /**
  * Full-screen focused flow, deliberately outside AppShell (no sidebar/nav —
@@ -42,13 +42,14 @@ export default async function OnboardingLayout({
   const dictionary = await getDictionary(locale);
 
   return (
-    <div className="relative flex min-h-dvh items-center justify-center bg-page px-4 py-20 sm:py-12">
-      <LanguageSwitcher
-        locale={locale}
-        label={dictionary.common.languageSwitcher}
-        className="absolute top-4 right-4"
-      />
-      <div className="w-full max-w-md">{children}</div>
-    </div>
+    // LessonMessagesProvider, even though this flow sits outside AppShell:
+    // the placement offer step renders PlacementExamHome, which reaches into
+    // shared lesson components (AudioPlayButton) that read these strings.
+    // Without it, a listening question throws instead of rendering.
+    <LessonMessagesProvider messages={dictionary.lesson}>
+      <div className="relative flex min-h-dvh items-center justify-center bg-page px-4 py-20 sm:py-12">
+        <div className="w-full max-w-md">{children}</div>
+      </div>
+    </LessonMessagesProvider>
   );
 }

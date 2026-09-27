@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { notFound } from "next/navigation";
 import "../globals.css";
@@ -10,6 +10,12 @@ import {
 } from "@/components/root-document";
 import { isAppLocale, SUPPORTED_LOCALES } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export function generateStaticParams() {
   return SUPPORTED_LOCALES.map((locale) => ({ locale }));

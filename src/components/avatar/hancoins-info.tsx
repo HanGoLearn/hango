@@ -77,7 +77,7 @@ export interface HanCoinsInfoTriggerProps {
  * este la misma informacion"). The earlier "too tall, needed 90% zoom"
  * problem is fixed by going wider (max-w-lg) and shrinking the header to a
  * compact horizontal row (icon + title + balance, not stacked), not by
- * cutting body content. `max-h-[85vh]` + internal scroll stays as a safety
+ * cutting body content. `max-h-[85dvh]` + internal scroll stays as a safety
  * net regardless of viewport height.
  *
  * The gradient header stays on the darker end of the accent ramp (700->500,
@@ -107,13 +107,13 @@ export function HanCoinsInfoTrigger({
           {children}
         </button>
       </ModalTrigger>
-      <ModalContent className="max-h-[85vh] max-w-lg overflow-y-auto p-0">
+      <ModalContent className="max-h-[85dvh] max-w-lg overflow-y-auto p-0">
         <motion.div
           initial={reduceMotion ? undefined : { opacity: 0, scale: 0.96 }}
           animate={reduceMotion ? undefined : { opacity: 1, scale: 1 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
         >
-          <div className="flex items-center gap-3 bg-linear-to-br from-accent-700 to-accent-500 px-5 py-3.5">
+          <div className="flex items-center gap-3 bg-linear-to-br from-accent-700 to-accent-500 px-5 py-3.5 pr-16">
             <HanCoinsIcon size={36} />
             <div className="flex-1 text-left">
               <ModalTitle className="text-card-title text-on-color-dark">

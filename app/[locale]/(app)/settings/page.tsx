@@ -15,6 +15,7 @@ import { LearningPreferencesSection } from "@/components/settings/learning-prefe
 import { RecordingRetentionSelect } from "@/components/settings/recording-retention-select";
 import { DeleteAccountButton } from "@/components/settings/delete-account-button";
 import { HanAudioSettings } from "@/components/settings/han-audio-settings";
+import { TourSection } from "@/components/settings/tour-section";
 import { interfaceLanguageFromLocale, isAppLocale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 
@@ -185,6 +186,12 @@ export default async function SettingsPage({
             </Caption>
           </div>
           <ThemeToggle messages={dictionary.shell.theme} />
+        </Card>
+        {/* Grouped with appearance rather than given a heading of its own:
+            it is a preference about how the app presents itself, and a
+            separate section for two buttons would overstate it. */}
+        <Card>
+          <TourSection messages={dictionary.tour} locale={locale} />
         </Card>
       </div>
 

@@ -60,7 +60,7 @@ export function HeroDemoCard({
   }));
 
   return (
-    <div className="relative mx-auto w-full max-w-[34rem] lg:mr-0">
+    <div className="relative mx-auto min-w-0 w-full max-w-[34rem] lg:mr-0">
       <div
         className="absolute inset-x-12 top-7 h-56 rounded-full bg-primary-500/15 blur-3xl"
         aria-hidden="true"
@@ -140,7 +140,14 @@ export function HeroDemoCard({
           <div className="relative mb-3 flex h-56 items-center justify-center sm:mb-0 sm:block sm:h-auto">
             <div
               className={cn(
-                "sm:absolute sm:-right-16",
+                // Mobile: HanMascot's own `size` prop is a fixed 340px, wider
+                // than the available card width on small phones. `scale`
+                // shrinks the painted box without changing its layout size,
+                // so the flex parent still centers it correctly and nothing
+                // downstream needs to know about the smaller footprint.
+                // `sm:scale-100` restores the original, unscaled desktop
+                // rendering exactly.
+                "scale-[0.55] sm:scale-100 sm:absolute sm:-right-16",
                 tab === "practica" ? "sm:top-14" : "sm:top-8",
               )}
             >

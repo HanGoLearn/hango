@@ -231,11 +231,19 @@ Where `lesson_hsk` is the lesson's existing `hskReference` field and
 This is fully derivable from existing data — no manual weight table to
 maintain.
 
-**Earning general points from a scenario**: once a learner completes a
-scenario, their earned points = `scenario_points × (weighted average of that
-scenario's lesson Reflection scores ÷ 100)`. Example: a scenario worth 46.4
-points, completed with a lesson-weighted average Reflection score of 78.5%,
-earns the learner `46.4 × 0.785 ≈ 36.4` points toward their General Level.
+**Earning general points from a scenario**: each lesson begins contributing
+as soon as its Reflection report is complete. While the scenario is still in
+progress, finished lessons use their real Reflection scores and unfinished
+lessons contribute zero to the same weighted scenario formula. This gives the
+learner visible General Level progress after every lesson without recording a
+false scenario completion.
+
+Once every lesson is complete, the persisted `ScenarioCompletion` contribution
+replaces that live partial value; the two are never added together. Its earned
+points = `scenario_points × (weighted average of that scenario's lesson
+Reflection scores ÷ 100)`. Example: a scenario worth 46.4 points, completed
+with a lesson-weighted average Reflection score of 78.5%, earns the learner
+`46.4 × 0.785 ≈ 36.4` points toward their General Level.
 
 ## Computed Scenario Points (current curriculum)
 

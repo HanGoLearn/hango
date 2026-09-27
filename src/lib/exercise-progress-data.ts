@@ -55,7 +55,10 @@ export async function recordExerciseAttempt(
   }
 
   if (isCorrect !== null) {
-    const competencyIds = await getLessonCompetencyIds(exercise.lessonId, "EXERCISE");
+    const competencyIds = await getLessonCompetencyIds(
+      exercise.lessonId,
+      "EXERCISE",
+    );
     await recordProgressEvidence(
       userId,
       competencyIds,
@@ -102,16 +105,27 @@ export async function recordExerciseAttempts(
   if (answers.length === 0) return [];
 
   const exerciseIds = [...new Set(answers.map((a) => a.exerciseId))];
-  const exercises = await db.exercise.findMany({
-    where: { id: { in: exerciseIds } },
-    include: { options: true },
-  });
-  const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
 
-  const previousAttemptRows = await db.exerciseAttempt.findMany({
-    where: { userId, exerciseId: { in: exerciseIds } },
-    select: { exerciseId: true },
-  });
+  // Grading and the resend-count both only need the exercise ids the
+  // learner just answered, so neither depends on the other's result - this
+  // was two sequential round trips to the database before (2026-09-26
+  // performance fix, "tarda mucho al comprobar respuestas"), which on the
+  // real remote database is two full network round trips of pure waiting
+  // for nothing. Run together instead.
+  const [exercises, previousAttemptRows] = await Promise.all([
+    db.exercise.findMany({
+      where: { id: { in: exerciseIds } },
+      include: { options: true },
+    }),
+    db.exerciseAttempt.findMany({
+      where: { userId, exerciseId: { in: exerciseIds } },
+      select: { exerciseId: true },
+    }),
+  ]);
+  const exerciseById = new Map(
+    exercises.map((exercise) => [exercise.id, exercise]),
+  );
+
   const attemptNumberByExercise = new Map<string, number>();
   for (const row of previousAttemptRows) {
     attemptNumberByExercise.set(
@@ -123,12 +137,40 @@ export async function recordExerciseAttempts(
   const graded = answers.map(({ exerciseId, answer }) => {
     const exercise = exerciseById.get(exerciseId);
     if (!exercise) throw new Error(`Exercise not found: ${exerciseId}`);
-    const isCorrect = evaluateAnswer(exercise.correctAnswer, exercise.options, answer);
+    const isCorrect = evaluateAnswer(
+      exercise.correctAnswer,
+      exercise.options,
+      answer,
+    );
     return { exercise, answer, isCorrect };
   });
 
-  const attempts = await db.$transaction(
-    graded.map(({ exercise, answer, isCorrect }) => {
+  // One reflection-invalidation covering every distinct lesson in the
+  // batch (in practice always one - a single Grammar step) instead of
+  // once per exercise. Computed before the transaction below so it can
+  // join the same one.
+  const lessonIds = [
+    ...new Set(
+      graded
+        .map(({ exercise }) => exercise.lessonId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  // The N attempt creates plus the reflection-invalidation used to be two
+  // separate round trips - the array form of $transaction already sends
+  // every operation inside it as one batched round trip (same as before
+  // this fix, for the N creates alone); this just folds the previously
+  // separate reflection deleteMany into that same array instead of
+  // awaiting it afterward. Neither depends on the other's result, so
+  // combining them costs nothing and saves a full round trip on every
+  // check - and it makes the invalidation atomic with the attempts it
+  // describes, which the previous two-step version wasn't quite.
+  type ExerciseAttemptRow = Awaited<
+    ReturnType<typeof db.exerciseAttempt.create>
+  >;
+  const createOps: Prisma.PrismaPromise<ExerciseAttemptRow>[] = graded.map(
+    ({ exercise, answer, isCorrect }) => {
       const attemptNumber = (attemptNumberByExercise.get(exercise.id) ?? 0) + 1;
       attemptNumberByExercise.set(exercise.id, attemptNumber);
       return db.exerciseAttempt.create({
@@ -140,34 +182,46 @@ export async function recordExerciseAttempts(
           attemptNumber,
         },
       });
-    }),
+    },
   );
 
-  // One reflection-invalidation covering every distinct lesson in the
-  // batch (in practice always one - a single Grammar step) instead of
-  // once per exercise.
-  const lessonIds = [
-    ...new Set(
-      graded
-        .map(({ exercise }) => exercise.lessonId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  if (lessonIds.length > 0) {
-    await db.lessonReflectionReport.deleteMany({
-      where: { userId, lessonId: { in: lessonIds } },
-    });
-  }
+  const transactionOps: Prisma.PrismaPromise<unknown>[] =
+    lessonIds.length > 0
+      ? [
+          ...createOps,
+          db.lessonReflectionReport.deleteMany({
+            where: { userId, lessonId: { in: lessonIds } },
+          }),
+        ]
+      : createOps;
+
+  const results = await db.$transaction(transactionOps);
+  const attempts = results.slice(0, createOps.length) as ExerciseAttemptRow[];
 
   // One combined evidence write for the whole batch instead of N separate
-  // recordProgressEvidence calls - getLessonCompetencyIds is already
-  // TTL-cached (Tier 3), so repeated lookups for the same lessonId across
-  // exercises cost nothing extra either way.
+  // recordProgressEvidence calls. The distinct lessonId lookups run
+  // together rather than once per exercise (2026-09-26): getLessonCompetencyIds
+  // is TTL-cached, so in practice this only ever issues one real query
+  // regardless, but resolving them concurrently instead of inside a
+  // sequential loop removes even that first-call latency from the critical
+  // path when several grammar points share one lesson.
+  const competencyIdsByLesson = new Map(
+    await Promise.all(
+      lessonIds.map(
+        async (lessonId) =>
+          [
+            lessonId,
+            await getLessonCompetencyIds(lessonId, "EXERCISE"),
+          ] as const,
+      ),
+    ),
+  );
+
   const evidenceRows: Prisma.ProgressEvidenceCreateManyInput[] = [];
   for (let i = 0; i < graded.length; i++) {
     const { exercise, isCorrect } = graded[i]!;
-    if (isCorrect === null) continue;
-    const competencyIds = await getLessonCompetencyIds(exercise.lessonId, "EXERCISE");
+    if (isCorrect === null || !exercise.lessonId) continue;
+    const competencyIds = competencyIdsByLesson.get(exercise.lessonId) ?? [];
     const difficulty = normalizeDifficulty("EXERCISE", exercise.difficulty);
     for (const competencyId of competencyIds) {
       evidenceRows.push({

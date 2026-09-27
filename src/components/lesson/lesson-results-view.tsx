@@ -103,7 +103,13 @@ export function LessonResultsView({
           {messages.common.tryAgain}
         </Button>
         <ModalContent>
-          <ModalTitle>{messages.results.tryAgainTitle}</ModalTitle>
+          {/* pr-10: the ES string ("¿Quieres repetir esta lección?") is long
+              enough at the default max-w-md width to reach under the
+              close button's enlarged 44px tap target in its top-right
+              corner. */}
+          <ModalTitle className="pr-10">
+            {messages.results.tryAgainTitle}
+          </ModalTitle>
           <ModalDescription>
             {messages.results.tryAgainDescription}
           </ModalDescription>

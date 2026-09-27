@@ -371,7 +371,17 @@ export function HomeSections({
               className="absolute inset-12 rounded-full bg-primary-500/20 blur-3xl"
               aria-hidden="true"
             />
-            <HanMascot pose="curious" size={390} />
+            <div className="scale-[0.55] sm:scale-100">
+              {/* HanMascot's `size` prop is a fixed 390px, wider than the
+                  available width on small phones; this section's own
+                  `overflow-hidden` would silently crop it instead of
+                  wrapping/scrolling. `scale` shrinks the painted box without
+                  changing its layout size, so `items-center justify-center`
+                  above still centers it correctly, and `sm:scale-100`
+                  restores the exact original desktop rendering (matches the
+                  same fix already applied to HeroDemoCard's mascot). */}
+              <HanMascot pose="curious" size={390} />
+            </div>
           </div>
 
           <div className="lg:pl-12">

@@ -76,9 +76,7 @@ function mockSynthesis() {
 
 describe("Welcome audio (2026-09-05, integration, real database + local storage, mocked TTS provider)", () => {
   it("generates audio for an allowed phrase once, then reuses the cached file on replay", async () => {
-    const user = await createTestUser(
-      `welcome-audio-${Date.now()}@hango.dev`,
-    );
+    const user = await createTestUser(`welcome-audio-${Date.now()}@hango.dev`);
     const text = await freshPhrase("你好");
     mockSynthesis();
 
@@ -110,11 +108,42 @@ describe("Welcome audio (2026-09-05, integration, real database + local storage,
     mockSynthesis();
 
     // 30 distinct allowlisted phrases, none reused by the other tests in
-    // this file - the allowlist has exactly 33 entries total.
+    // this file - the allowlist has exactly 33 entries total. Every cache
+    // miss intentionally records cap, operation and cost data in the real
+    // database, so this one test performs far more remote round trips than
+    // an ordinary assertion. Give that work its own budget instead of
+    // weakening the 15-second default for every integration test.
     const phrases = [
-      "再见", "谢谢", "不客气", "对不起", "没关系", "妈", "麻", "马", "骂", "我",
-      "你", "他", "她", "我们", "你们", "他们", "她们", "一", "二", "三",
-      "四", "五", "六", "七", "八", "九", "十", "十一", "二十", "二十一",
+      "再见",
+      "谢谢",
+      "不客气",
+      "对不起",
+      "没关系",
+      "妈",
+      "麻",
+      "马",
+      "骂",
+      "我",
+      "你",
+      "他",
+      "她",
+      "我们",
+      "你们",
+      "他们",
+      "她们",
+      "一",
+      "二",
+      "三",
+      "四",
+      "五",
+      "六",
+      "七",
+      "八",
+      "九",
+      "十",
+      "十一",
+      "二十",
+      "二十一",
     ];
     for (const phrase of phrases) {
       const text = await freshPhrase(phrase);
@@ -125,7 +154,7 @@ describe("Welcome audio (2026-09-05, integration, real database + local storage,
     await expect(
       getOrGenerateWelcomeAudioUrl(user.id, oneTooMany),
     ).rejects.toBeInstanceOf(WelcomeAudioRateLimitError);
-  });
+  }, 45_000);
 
   it("the server action rejects unauthenticated requests", async () => {
     authMock.mockResolvedValue(null);

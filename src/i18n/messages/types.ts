@@ -23,3 +23,4 @@ export type ShopMessages = AppMessages["shop"];
 export type SpeakingLabMessages = AppMessages["speakingLab"];
 export type WritingLabMessages = AppMessages["writingLab"];
 export type HanVocabularyMessages = AppMessages["hanVocabulary"];
+export type TourMessages = AppMessages["tour"];

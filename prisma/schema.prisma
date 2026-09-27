@@ -281,12 +281,13 @@ model LearnerProfile {
 
   /// Points & Leveling System (docs/02_academy/points_system.md, added
   /// 2026-08-15) - the earned General Level, 0-2000, mapped to HSK 1-9.
-  /// Derived, not an incrementing counter: recomputed as the sum of
-  /// ScenarioCompletion.earnedPoints (+ future Lab points) whenever a
-  /// scenario is completed or redone, so a redo's replacement is always
-  /// reflected correctly. Distinct from the self-reported `currentLevel`
-  /// above - this is the precise, evidence-based signal Han should treat
-  /// as authoritative when the two disagree.
+  /// Derived, not an incrementing counter: recomputed from completed
+  /// ScenarioCompletion rows, live partial credit for in-progress scenarios,
+  /// and Lab points. Recomputed after each finished lesson and after a
+  /// scenario is completed or redone, so partial and replacement values are
+  /// never double-counted. Distinct from the self-reported `currentLevel`
+  /// above - this is the precise, evidence-based signal Han should treat as
+  /// authoritative when the two disagree.
   generalLevelPoints Float @default(0)
 
   /// Null until onboarding is finished — the single source of truth for
@@ -299,6 +300,24 @@ model LearnerProfile {
   /// shown; resolveResumeStep uses this to skip straight to "recommendation"
   /// once it's set, same pattern as every other onboarding field.
   placementExamOfferAcknowledgedAt DateTime?
+
+  /// Guided tour of the app (2026-09-23) - distinct from `onboarding*`
+  /// above, which is the questionnaire that runs before the app is ever
+  /// seen. This is the walkthrough of the real interface that follows it.
+  ///
+  /// Completed and skipped are separate fields rather than one status,
+  /// because the two states are treated differently: someone who finished
+  /// gets nothing further, while someone who left partway still receives
+  /// the per-section hints when they first reach each place.
+  tourCompletedAt DateTime?
+  tourSkippedAt   DateTime?
+
+  /// Which section explanations the learner has already been shown. Written
+  /// both by the optional second leg of the tour and by the hints
+  /// themselves, and read before a hint renders - one list for both, so a
+  /// hint can never repeat something the tour just said. A list rather than
+  /// a column per section so new sections need no further migration.
+  seenTourHints String[] @default([])
 
   /// FASE 8.6 "Store conversations only when enabled" - when false, the AI
   /// Teacher still answers but nothing is written to AiConversation/

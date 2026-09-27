@@ -26,6 +26,11 @@ export const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Dev-only. Without this, `next dev` returns 403 for its own JS chunks to
+  // any origin that isn't localhost, so a phone on the LAN loads the
+  // server-rendered HTML but never hydrates - the page looks right and
+  // nothing responds to taps. Has no effect on production builds.
+  allowedDevOrigins: ["192.168.0.*", "10.0.0.*", "172.16.0.*"],
   experimental: {
     // Speaking Lab accepts recordings up to 15 MiB. Next counts the complete
     // multipart request, so keep a small allowance for its field metadata;

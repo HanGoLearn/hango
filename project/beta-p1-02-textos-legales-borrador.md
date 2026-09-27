@@ -71,7 +71,8 @@ invitadas. Esto significa:
 - Tu opinión es esencial: puedes enviar feedback directamente desde la
   aplicación en cualquier momento.
 
-Contacto de soporte y privacidad: `[COMPLETAR: correo de soporte]`
+Contacto de soporte y privacidad: `arean.mendoza@unmsm.edu.pe` (correo
+temporal para esta beta cerrada, autorizado por el usuario el 2026-09-20)
 
 ### 1.2 English
 
@@ -96,7 +97,8 @@ means:
   show this inside the app.
 - Your feedback matters: you can send it directly from the app at any time.
 
-Support and privacy contact: `[COMPLETAR / FILL IN: support email]`
+Support and privacy contact: `arean.mendoza@unmsm.edu.pe` (temporary email
+for this closed beta, authorized by the user on 2026-09-20)
 
 ---
 
@@ -185,7 +187,8 @@ absolute source of truth about the language.
 Última actualización: `[COMPLETAR: fecha de publicación]`
 
 **Quién procesa tus datos.** `[COMPLETAR: razón social o nombre del
-responsable]`, contacto: `[COMPLETAR: correo]`.
+responsable]`, contacto: `arean.mendoza@unmsm.edu.pe` (correo temporal
+para esta beta cerrada).
 
 **Qué datos recopilamos:**
 
@@ -235,7 +238,7 @@ publicitarios de terceros.
   reintentos automáticos.
 - Retirar tu consentimiento y dejar de participar en la beta en cualquier
   momento.
-- Escribir a `[COMPLETAR: correo de privacidad]` para cualquier solicitud
+- Escribir a `arean.mendoza@unmsm.edu.pe` para cualquier solicitud
   relacionada con tus datos.
 
 **Seguridad.** Tu contraseña se almacena cifrada. Las conexiones a HanGo usan
@@ -256,7 +259,7 @@ aceptar la nueva versión antes de continuar usándola.
 Last updated: `[COMPLETE: publication date]`
 
 **Who processes your data.** `[COMPLETE: legal name/entity]`, contact:
-`[COMPLETE: email]`.
+`arean.mendoza@unmsm.edu.pe` (temporary email for this closed beta).
 
 **What data we collect:**
 
@@ -302,7 +305,7 @@ third-party advertising trackers.
   database and queues deletion of your private files (audio, images); file
   deletion may take a little time but is guaranteed via automatic retries.
 - Withdraw your consent and stop participating in the beta at any time.
-- Write to `[COMPLETE: privacy email]` for any data-related request.
+- Write to `arean.mendoza@unmsm.edu.pe` for any data-related request.
 
 **Security.** Your password is stored encrypted. Connections to HanGo use
 HTTPS. Your audio recordings are private: only you can access them through
@@ -371,7 +374,8 @@ requiere revisión legal]`.
 
 **10. Ley aplicable.** `[COMPLETAR: jurisdicción — requiere decisión legal]`.
 
-**11. Contacto.** `[COMPLETAR: correo de soporte/legal]`.
+**11. Contacto.** `arean.mendoza@unmsm.edu.pe` (correo temporal para esta
+beta cerrada).
 
 ### 4.2 English
 
@@ -423,7 +427,8 @@ review]`.
 **10. Governing law.** `[COMPLETE: jurisdiction — requires a legal
 decision]`.
 
-**11. Contact.** `[COMPLETE: support/legal email]`.
+**11. Contact.** `arean.mendoza@unmsm.edu.pe` (temporary email for this
+closed beta).
 
 ---
 
@@ -431,8 +436,15 @@ decision]`.
 
 Esto es información para Codex/el usuario, no una tarea mía:
 
-- Decidir y rellenar cada `[COMPLETAR]` (razón social, correos, fecha,
-  jurisdicción, edad mínima, política de backups del proveedor elegido).
+- Decidir y rellenar lo que sigue pendiente: razón social/nombre del
+  responsable, fecha de publicación, jurisdicción, edad mínima, proveedor
+  de correo transaccional y de almacenamiento en la nube, política de
+  backups del proveedor elegido. **Los correos de contacto ya se
+  completaron** (2026-09-20): el usuario autorizó usar
+  `arean.mendoza@unmsm.edu.pe` temporalmente como correo de soporte y
+  privacidad durante la beta cerrada — reemplaza ese correo antes de
+  cualquier lanzamiento público, no es una dirección pensada para ese uso
+  a largo plazo.
 - `P1-02` del lado de Codex: modelo de consentimiento versionado
   (usuario, versión, fecha, idioma), enforcement en credenciales y OAuth sin
   casillas premarcadas, y persistencia.

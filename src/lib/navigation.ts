@@ -1,10 +1,14 @@
 import {
+  AudioLines,
+  GraduationCap,
   LayoutDashboard,
   Map,
   Mic,
   PenLine,
+  Search,
   TrendingUp,
   Store,
+  Trophy,
   Settings,
   MessageCircle,
   type LucideIcon,
@@ -17,8 +21,12 @@ export type NavItemKey =
   | "speakingLab"
   | "writingLab"
   | "han"
+  | "hanTutor"
+  | "hanCompanion"
+  | "hanVocabulary"
   | "progress"
   | "shop"
+  | "leaderboard"
   | "settings";
 
 export interface NavItem {
@@ -111,6 +119,45 @@ export const primaryNavItems: NavItem[] = [
     badgeClassName: "bg-primary-700",
     badgeIconClassName: "text-on-color-light",
   },
+  // Han's three surfaces as their own destinations (2026-09-23, user
+  // decision): the hub at /han already offered Tutor, Companion and
+  // Vocabulary as three cards, but from the nav they were invisible - one
+  // "Han" entry gave no hint that there were three different tools behind
+  // it. Now they're a group, the same shape Learning uses, so the product
+  // explains itself every time the menu opens rather than once in an
+  // onboarding tour.
+  //
+  // All three keep Han's own primary-700/on-color-light badge pairing (the
+  // one already verified for the parent entry above) - they're one family,
+  // and varying the fill per item would read as three unrelated sections.
+  // Han Class stays out: it's still a locked teaser on the hub.
+  //
+  // Names are not translated, same rule as Speaking Lab/Writing Lab -
+  // branding.md's official terminology.
+  {
+    key: "hanTutor",
+    label: "Han Tutor",
+    href: "/han/tutor",
+    icon: MessageCircle,
+    badgeClassName: "bg-primary-700",
+    badgeIconClassName: "text-on-color-light",
+  },
+  {
+    key: "hanCompanion",
+    label: "Han Companion",
+    href: "/han/companion",
+    icon: AudioLines,
+    badgeClassName: "bg-primary-700",
+    badgeIconClassName: "text-on-color-light",
+  },
+  {
+    key: "hanVocabulary",
+    label: "Han Vocabulary",
+    href: "/han/vocabulary",
+    icon: Search,
+    badgeClassName: "bg-primary-700",
+    badgeIconClassName: "text-on-color-light",
+  },
   {
     key: "progress",
     label: "Progress",
@@ -133,6 +180,19 @@ export const primaryNavItems: NavItem[] = [
     badgeIconClassName: "text-on-color-dark",
   },
   {
+    // 2026-09-20 (user request) - its own nav slot beside Shop. Reuses the
+    // accent-500/on-color-dark pairing Dashboard's badge already uses: the
+    // documented hard constraint on these badges is contrast (that pairing
+    // is verified in both themes), and gold reads as the right colour for a
+    // trophy. The two are never adjacent in the bar.
+    key: "leaderboard",
+    label: "Leaderboard",
+    href: "/leaderboard",
+    icon: Trophy,
+    badgeClassName: "bg-accent-500",
+    badgeIconClassName: "text-on-color-dark",
+  },
+  {
     key: "settings",
     label: "Settings",
     href: "/settings",
@@ -146,6 +206,75 @@ export const primaryNavItems: NavItem[] = [
 export const mobileNavItems: NavItem[] = primaryNavItems.filter(
   (item) => item.key !== "settings",
 );
+
+/**
+ * How navigation is *rendered* (user decision, 2026-09-20): the three study
+ * surfaces collapse behind one "Learning" entry, so the bar carries six
+ * entries instead of eight. Deliberately a separate structure from
+ * `primaryNavItems`, which stays the flat route->label source of truth that
+ * `resolveCurrentPageName` (Han's page awareness) and TopBar read - grouping
+ * is a presentation choice and must not change how a route resolves.
+ *
+ * The group keeps Learning Journey, Speaking Lab and Writing Lab as three
+ * distinct destinations inside the menu, not merged into one surface.
+ */
+export type NavEntry =
+  | { kind: "item"; item: NavItem }
+  | {
+      kind: "group";
+      key: "learning" | "han";
+      icon: LucideIcon;
+      badgeClassName: string;
+      badgeIconClassName: string;
+      items: NavItem[];
+    };
+
+function navItem(key: NavItemKey): NavItem {
+  const item = primaryNavItems.find((entry) => entry.key === key);
+  if (!item) throw new Error(`Unknown nav item: ${key}`);
+  return item;
+}
+
+export const navEntries: NavEntry[] = [
+  { kind: "item", item: navItem("dashboard") },
+  {
+    kind: "group",
+    key: "learning",
+    icon: GraduationCap,
+    badgeClassName: "bg-primary-500",
+    badgeIconClassName: "text-on-color-light",
+    items: [
+      navItem("learningJourney"),
+      navItem("speakingLab"),
+      navItem("writingLab"),
+    ],
+  },
+  // Han's own group (2026-09-23): tapping Han opens the three surfaces and
+  // each one lands directly on its own route, rather than dropping the
+  // learner on a hub they then have to read. `/han` itself stays reachable
+  // and unchanged for anyone who arrives there by link or history - it's
+  // simply no longer the only way in.
+  {
+    kind: "group",
+    key: "han",
+    icon: MessageCircle,
+    badgeClassName: "bg-primary-700",
+    badgeIconClassName: "text-on-color-light",
+    items: [
+      navItem("hanTutor"),
+      navItem("hanCompanion"),
+      navItem("hanVocabulary"),
+    ],
+  },
+  { kind: "item", item: navItem("progress") },
+  { kind: "item", item: navItem("shop") },
+  { kind: "item", item: navItem("leaderboard") },
+  // No Settings entry (2026-09-20, user decision): UserMenu in the top bar
+  // already links there from every screen, and a duplicated destination was
+  // costing a slot in a bar that only has room for a handful. It stays in
+  // `primaryNavItems` because that list is what resolves a route to its
+  // label (TopBar's title, Han's page awareness), not what the nav renders.
+];
 
 /**
  * Human-readable label for the current route, for Han's own text/voice page

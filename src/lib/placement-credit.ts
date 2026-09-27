@@ -7,7 +7,11 @@ import {
   type PlacementQuestionMeta,
 } from "@/lib/placement-exam";
 import { computeReflectionTotal } from "@/lib/points-system";
-import { getOrGenerateScenarioCompletion } from "@/lib/scenario-completion";
+import {
+  finalizeScenarioCompletionBatch,
+  getOrGenerateScenarioCompletion,
+  type DeferredScenarioCompletion,
+} from "@/lib/scenario-completion";
 
 /**
  * Levels 7-9 are diagnostic only, never real placement/points
@@ -166,22 +170,15 @@ export async function applyPlacementCredit(
       : null;
   }
 
-  // Batched into fixed-size transactions rather than one $transaction for
-  // every credited lesson - a full curriculum-below-level-6 credit can
-  // touch 100+ lessons, and Prisma's default interactive-transaction
-  // timeout (5s) can't reliably cover that many round trips to a remote
-  // database in a single transaction. Each chunk is independently
-  // idempotent (upsert), so a failure partway through just means a retry
-  // picks up wherever it left off.
-  const CREDIT_BATCH_SIZE = 8;
-  let ops: Prisma.PrismaPromise<unknown>[] = [];
+  // A high placement can credit 100+ lessons. Sending two upserts per lesson
+  // used to mean hundreds of remote database operations and could exceed five
+  // minutes. The same unique (userId, lessonId) constraints make two bulk
+  // inserts with skipDuplicates equally idempotent while keeping the learner's
+  // completion rows and reflection reports atomic.
+  const completionRows: Prisma.LearnerLessonCompletionCreateManyInput[] = [];
+  const reportRows: Prisma.LessonReflectionReportCreateManyInput[] = [];
   const scenarioIds = new Set<string>();
-
-  async function flushOps(): Promise<void> {
-    if (ops.length === 0) return;
-    await db.$transaction(ops, { timeout: 20_000 });
-    ops = [];
-  }
+  const placementRewardsGrantedAt = new Date();
 
   for (const lesson of toCredit) {
     const level = lesson.hskReference!;
@@ -192,8 +189,10 @@ export async function applyPlacementCredit(
       ratioAt("LISTENING", level),
     ].filter((ratio): ratio is number => ratio != null);
 
-    const vocabularyScore = vocabRatio != null ? Math.round(vocabRatio * 100) : null;
-    const grammarScore = grammarRatio != null ? Math.round(grammarRatio * 100) : null;
+    const vocabularyScore =
+      vocabRatio != null ? Math.round(vocabRatio * 100) : null;
+    const grammarScore =
+      grammarRatio != null ? Math.round(grammarRatio * 100) : null;
     const comprehensionScore =
       comprehensionRatios.length > 0
         ? Math.round(
@@ -210,48 +209,74 @@ export async function applyPlacementCredit(
       speakingScore,
     });
 
-    ops.push(
-      db.learnerLessonCompletion.upsert({
-        where: { userId_lessonId: { userId, lessonId: lesson.id } },
-        create: { userId, lessonId: lesson.id, source: "PLACEMENT" },
-        update: {},
-      }),
-      db.lessonReflectionReport.upsert({
-        where: { userId_lessonId: { userId, lessonId: lesson.id } },
-        create: {
-          userId,
-          lessonId: lesson.id,
-          vocabularyCovered: 0,
-          vocabularyTotal: lesson.vocabulary.length,
-          vocabularyScore,
-          grammarScore,
-          comprehensionScore,
-          speakingScore,
-          totalScore,
-          hanNarrative:
-            "This lesson was placed from your placement exam result, not a real attempt.",
-          strengths: [],
-          improvements: [
-            "Complete this lesson yourself to confirm or improve this score.",
-          ],
-          // Placement credit never owes the lesson_completed coin grant or
-          // reflection achievements (this path bypasses
-          // getOrGenerateLessonReflectionReport's reward chain entirely) -
-          // marked settled at creation so a later read there doesn't treat
-          // this as a pending, never-yet-retried reward and grant it late.
-          rewardsGrantedAt: new Date(),
-        },
-        update: {},
-      }),
-    );
+    completionRows.push({
+      userId,
+      lessonId: lesson.id,
+      source: "PLACEMENT",
+    });
+    reportRows.push({
+      userId,
+      lessonId: lesson.id,
+      vocabularyCovered: 0,
+      vocabularyTotal: lesson.vocabulary.length,
+      vocabularyScore,
+      grammarScore,
+      comprehensionScore,
+      speakingScore,
+      totalScore,
+      hanNarrative:
+        "This lesson was placed from your placement exam result, not a real attempt.",
+      strengths: [],
+      improvements: [
+        "Complete this lesson yourself to confirm or improve this score.",
+      ],
+      // Placement credit never owes the lesson_completed coin grant or
+      // reflection achievements (this path bypasses
+      // getOrGenerateLessonReflectionReport's reward chain entirely) -
+      // marked settled at creation so a later read there doesn't treat
+      // this as a pending, never-yet-retried reward and grant it late.
+      rewardsGrantedAt: placementRewardsGrantedAt,
+    });
     scenarioIds.add(lesson.scenarioLevel.scenarioId);
-    if (ops.length >= CREDIT_BATCH_SIZE * 2) await flushOps();
   }
-  await flushOps();
+  await db.$transaction(
+    [
+      db.learnerLessonCompletion.createMany({
+        data: completionRows,
+        skipDuplicates: true,
+      }),
+      db.lessonReflectionReport.createMany({
+        data: reportRows,
+        skipDuplicates: true,
+      }),
+    ],
+    { timeout: 30_000 },
+  );
 
-  for (const scenarioId of scenarioIds) {
-    await getOrGenerateScenarioCompletion(userId, scenarioId);
+  const deferredCompletions: DeferredScenarioCompletion[] = [];
+  const scenarioIdList = [...scenarioIds];
+  const SCENARIO_BATCH_SIZE = 6;
+  for (
+    let offset = 0;
+    offset < scenarioIdList.length;
+    offset += SCENARIO_BATCH_SIZE
+  ) {
+    const batch = scenarioIdList.slice(offset, offset + SCENARIO_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (scenarioId) => ({
+        scenarioId,
+        result: await getOrGenerateScenarioCompletion(userId, scenarioId, {
+          deferRewards: true,
+        }),
+      })),
+    );
+    for (const { scenarioId, result } of results) {
+      if (result) {
+        deferredCompletions.push({ scenarioId, chapter: result.chapter });
+      }
+    }
   }
+  await finalizeScenarioCompletionBatch(userId, deferredCompletions);
 
   return { creditedLevel, creditedLessonCount: toCredit.length };
 }

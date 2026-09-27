@@ -22,10 +22,15 @@ import {
   getContinueLearningTarget,
 } from "@/lib/progress-data";
 import { getReviewQueue } from "@/lib/review-data";
+import { getAchievementSummary } from "@/lib/achievements";
+import { getLearnerRank } from "@/lib/leaderboard-data";
+import { AchievementIcon } from "@/components/achievements/achievement-icon";
+import { ChevronRight, Trophy } from "lucide-react";
 import { CURRENT_MAX_GENERAL_LEVEL_POINTS } from "@/lib/points-system";
 import { isAppLocale, localePath } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { formatMessage } from "@/i18n/format";
+import { getMaximumJourneyChapter } from "@/lib/beta-learning-scope";
 
 export default async function ProgressPage({
   params,
@@ -39,6 +44,7 @@ export default async function ProgressPage({
   const messages = dictionary.progress;
   const session = await auth();
   const userId = session!.user!.id!;
+  const maximumChapter = getMaximumJourneyChapter(session!.user!.role);
 
   const [
     competencies,
@@ -48,14 +54,23 @@ export default async function ProgressPage({
     scenarios,
     continueTarget,
     reviewQueue,
+    achievements,
+    rank,
   ] = await Promise.all([
     getCompetencyProgress(userId),
     getVocabularyGrammarExposure(userId),
     getEstimatedLevel(userId),
     getGeneralLevelSummary(userId),
     getScenarioMastery(userId, locale),
-    getContinueLearningTarget(userId, locale),
+    getContinueLearningTarget(userId, locale, maximumChapter),
     getReviewQueue(userId),
+    // Moved off the Dashboard (2026-09-20): achievements and rank are
+    // progress data, and this is the page a learner opens when they want
+    // to look at their progress. On the Dashboard they were permanent
+    // teasers competing with the one action that page exists for. Both
+    // calls are React.cache()'d and cheap.
+    getAchievementSummary(userId),
+    getLearnerRank(userId),
   ]);
 
   if (competencies.length === 0 && exposure.vocabularyCount === 0) {
@@ -142,6 +157,77 @@ export default async function ProgressPage({
               {generalLevel.learningJourneyAverage}%
             </Body>
           </div>
+        )}
+      </div>
+
+      {/* Achievements and rank, moved here from the Dashboard (2026-09-20).
+          Two compact tiles side by side rather than two more full-width
+          sections - they are entry points to their own pages, not content
+          in their own right. Rank only renders once the learner is ranked;
+          before that it would just say "unranked", which tells them
+          nothing they can act on. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link
+          href={localePath(locale, "/achievements")}
+          className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <Caption className="font-semibold uppercase tracking-wide text-text-muted">
+              {dictionary.dashboard.achievements.title}
+            </Caption>
+            <ChevronRight
+              className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
+              aria-hidden="true"
+            />
+          </div>
+          <Body className="text-text-primary">
+            {formatMessage(dictionary.dashboard.achievements.unlocked, {
+              unlocked: achievements.unlockedCount,
+              total: achievements.totalCount,
+            })}
+          </Body>
+          {achievements.recent.length > 0 && (
+            <div className="flex items-center gap-2">
+              {achievements.recent.map((achievement) => (
+                <span
+                  key={achievement.key}
+                  className="flex size-8 items-center justify-center rounded-full bg-accent-500 text-on-color-dark"
+                  title={achievement.title}
+                >
+                  <AchievementIcon
+                    name={achievement.iconName}
+                    className="size-4"
+                  />
+                </span>
+              ))}
+            </div>
+          )}
+        </Link>
+
+        {rank && (
+          <Link
+            href={localePath(locale, "/leaderboard")}
+            className="group flex flex-col gap-2 rounded-panel border-none bg-elevated p-5 shadow-none transition-colors duration-fast ease-standard hover:bg-elevated/70"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <Caption className="font-semibold uppercase tracking-wide text-text-muted">
+                {dictionary.dashboard.leaderboard.title}
+              </Caption>
+              <ChevronRight
+                className="size-4 shrink-0 text-text-secondary transition-transform duration-fast ease-standard group-hover:translate-x-1"
+                aria-hidden="true"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Trophy className="size-5 text-accent-300" aria-hidden="true" />
+              <Body className="text-text-primary">
+                {formatMessage(dictionary.dashboard.leaderboard.rank, {
+                  rank: rank.rank,
+                  total: rank.totalRanked,
+                })}
+              </Body>
+            </div>
+          </Link>
         )}
       </div>
 

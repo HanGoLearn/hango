@@ -3,6 +3,8 @@ import { startPlacementExamAction } from "@/lib/actions/placement-exam";
 import { PlacementExamHome } from "@/components/placement/placement-exam-home";
 import { isAppLocale, localePath } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
+import { auth } from "@/lib/auth";
+import { isPlacementExamAvailable } from "@/lib/beta-learning-scope";
 
 /**
  * Adaptive placement exam pilot (HSK1-2 only, project/TASKS.md - "Adaptive
@@ -20,6 +22,10 @@ export default async function PlacementExamPage({
   const { locale: localeParam } = await params;
   if (!isAppLocale(localeParam)) return null;
   const locale = localeParam;
+  const session = await auth();
+  if (!isPlacementExamAvailable(session!.user!.role)) {
+    redirect(localePath(locale, "/learning-journey"));
+  }
   const dictionary = await getDictionary(locale);
   const started = await startPlacementExamAction();
   if (!started.ok) {

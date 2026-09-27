@@ -6,6 +6,7 @@ import type { AppLocale } from "@/i18n/config";
 import { localizeContentRecord } from "@/lib/content/localization";
 import {
   JOURNEY_CHAPTER_ORDER,
+  type JourneyChapter,
   resolveJourneyChapter,
   resolveScenarioStatus,
   resolveLessonAvailability,
@@ -213,6 +214,7 @@ export async function getPublishedJourneyCatalog() {
 export async function getScenariosWithProgress(
   userId: string,
   locale: AppLocale = "en",
+  maximumChapter: JourneyChapter = "ADVANCED",
 ) {
   const [scenarios, completedIdsList] = await Promise.all([
     getCachedPublishedScenarioTree(),
@@ -222,19 +224,28 @@ export async function getScenariosWithProgress(
   const completedIds = new Set(completedIdsList);
   const localizedScenarios = localizePublishedScenarioTree(scenarios, locale);
 
-  return localizedScenarios.map((scenario) => {
-    const allLessons = scenario.levels.flatMap((level) => level.lessons);
-    const completedLessons = allLessons.filter((lesson) =>
-      completedIds.has(lesson.id),
-    ).length;
+  return localizedScenarios
+    .filter(
+      (scenario) =>
+        JOURNEY_CHAPTER_ORDER.indexOf(
+          resolveJourneyChapter(
+            scenario.levels.map((level) => level.difficulty),
+          ),
+        ) <= JOURNEY_CHAPTER_ORDER.indexOf(maximumChapter),
+    )
+    .map((scenario) => {
+      const allLessons = scenario.levels.flatMap((level) => level.lessons);
+      const completedLessons = allLessons.filter((lesson) =>
+        completedIds.has(lesson.id),
+      ).length;
 
-    return {
-      ...scenario,
-      totalLessons: allLessons.length,
-      completedLessons,
-      status: resolveScenarioStatus(allLessons.length, completedLessons),
-    };
-  });
+      return {
+        ...scenario,
+        totalLessons: allLessons.length,
+        completedLessons,
+        status: resolveScenarioStatus(allLessons.length, completedLessons),
+      };
+    });
 }
 
 export async function getScenarioDetailWithProgress(
@@ -303,6 +314,7 @@ export async function getScenarioDetailWithProgress(
 export async function getContinueLearningTarget(
   userId: string,
   locale: AppLocale = "en",
+  maximumChapter: JourneyChapter = "ADVANCED",
 ) {
   const [scenarios, completedIdsList] = await Promise.all([
     getCachedPublishedScenarioTree(),
@@ -310,8 +322,14 @@ export async function getContinueLearningTarget(
   ]);
 
   const completedIds = new Set(completedIdsList);
-  return resolveContinueLearning(
-    localizePublishedScenarioTree(scenarios, locale),
-    completedIds,
+  const scopedScenarios = localizePublishedScenarioTree(
+    scenarios,
+    locale,
+  ).filter(
+    (scenario) =>
+      JOURNEY_CHAPTER_ORDER.indexOf(
+        resolveJourneyChapter(scenario.levels.map((level) => level.difficulty)),
+      ) <= JOURNEY_CHAPTER_ORDER.indexOf(maximumChapter),
   );
+  return resolveContinueLearning(scopedScenarios, completedIds);
 }

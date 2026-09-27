@@ -127,7 +127,7 @@ export default async function LeaderboardPage({
                     size={36}
                   />
                 )}
-                <span className="flex-1 font-interface text-body font-medium text-text-primary">
+                <span className="min-w-0 flex-1 truncate font-interface text-body font-medium text-text-primary">
                   @{entry.accountName}
                   {isMe && (
                     <span className="ml-1.5 text-supporting text-accent-300">

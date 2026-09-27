@@ -60,7 +60,8 @@ export function AiTeacherBubble() {
       <DialogPrimitive.Trigger
         aria-label="Open Han"
         data-activity-surface="HAN_TUTOR"
-        className="fixed right-4 bottom-20 z-40 size-14 rounded-full shadow-modal transition-transform duration-fast ease-standard hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 md:bottom-4"
+        data-tour-id="han-bubble"
+        className="fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 size-14 rounded-full shadow-modal transition-transform duration-fast ease-standard hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 md:bottom-4"
       >
         {/* Fills the trigger edge-to-edge (2026-08-21) - previously a
             smaller 44px avatar centered inside a 56px bg-primary-500
@@ -84,7 +85,7 @@ export function AiTeacherBubble() {
             // Mobile: near-full-screen floating card (small viewports can't
             // fit a compact anchored card usefully) - clears TopBar above
             // and the trigger bubble + BottomNav below.
-            "top-20 right-3 bottom-24 left-3",
+            "top-[calc(5rem+env(safe-area-inset-top))] right-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] left-3",
             // sm+: compact card anchored above the trigger bubble, same
             // position/behavior all the way up through desktop - one
             // interaction model, not a desktop-vs-mobile split.
@@ -100,7 +101,7 @@ export function AiTeacherBubble() {
             </div>
             <DialogPrimitive.Close
               aria-label="Close Han"
-              className="rounded-control p-1 text-text-secondary hover:bg-elevated hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+              className="-m-2 rounded-control p-3.5 text-text-secondary hover:bg-elevated hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
             >
               <X className="size-4" aria-hidden="true" />
             </DialogPrimitive.Close>

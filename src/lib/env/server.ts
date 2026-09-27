@@ -34,6 +34,12 @@ const serverSchema = z.object({
   // <value>` - Vercel Cron does this automatically for a var named exactly
   // CRON_SECRET.
   CRON_SECRET: z.string().optional(),
+  // Closed-beta curriculum scope. FOUNDATIONS_ONLY is the safe default for
+  // the first beginner cohort; FULL restores the complete published journey
+  // and the existing full Speaking Lab without a code change.
+  HANGO_BETA_LEARNING_SCOPE: z
+    .enum(["FOUNDATIONS_ONLY", "FULL"])
+    .default("FOUNDATIONS_ONLY"),
 });
 
 const parsed = serverSchema.safeParse({
@@ -47,6 +53,7 @@ const parsed = serverSchema.safeParse({
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   CRON_SECRET: process.env.CRON_SECRET,
+  HANGO_BETA_LEARNING_SCOPE: process.env.HANGO_BETA_LEARNING_SCOPE,
 });
 
 if (!parsed.success) {

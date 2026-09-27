@@ -6,19 +6,14 @@ import {
   toUtcDateString,
   type StreakResult,
 } from "@/lib/study-streak";
-import {
-  getContinueLearningTarget,
-  getCompetencyProgress,
-} from "@/lib/progress-data";
+import { getContinueLearningTarget } from "@/lib/progress-data";
 import { getScenariosWithProgress } from "@/lib/content/learning-journey-data";
 import { getReviewQueue } from "@/lib/review-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
 import { hskLevelForPoints, hskNumberForPoints } from "@/lib/points-system";
-import { getLeaderboardTop, getLearnerRank } from "@/lib/leaderboard-data";
-import { getAchievementSummary } from "@/lib/achievements";
-import { getAvatarPageData } from "@/lib/avatar-data";
 import { getWordsOfTheDay } from "@/lib/words-of-the-day";
 import type { AppLocale } from "@/i18n/config";
+import type { JourneyChapter } from "@/lib/content/learning-journey";
 
 // 120, not 60 (2026-08-30) - achievements-catalog.ts now has a streak_100
 // achievement ("studied 100 days in a row"), and computeStreak can never
@@ -94,6 +89,7 @@ export const getStudyStreak = cache(
 export async function getDashboardData(
   userId: string,
   locale: AppLocale = "en",
+  maximumChapter: JourneyChapter = "ADVANCED",
 ) {
   // Resolved first, not inside the Promise.all below (2026-09-01) - Words
   // of the Day needs the learner's real level to pick its pool, and
@@ -106,35 +102,18 @@ export async function getDashboardData(
     continueTarget,
     streak,
     scenarios,
-    competencies,
     reviewQueue,
     activityDates,
-    leaderboardTop,
-    leaderboardRank,
-    achievementSummary,
-    avatar,
     wordsOfTheDay,
   ] = await Promise.all([
-    getContinueLearningTarget(userId, locale),
+    getContinueLearningTarget(userId, locale, maximumChapter),
     getStudyStreak(userId),
-    getScenariosWithProgress(userId, locale),
-    getCompetencyProgress(userId),
+    getScenariosWithProgress(userId, locale, maximumChapter),
     getReviewQueue(userId),
     // Same cached call getStudyStreak makes internally (see above) - zero
     // additional queries, just reused for the weekly strip's per-day detail
     // that computeStreak's own {currentStreak, activeToday} doesn't expose.
     getRecentActivityDates(userId),
-    // Top 3 only - this is a teaser linking to the full /leaderboard page,
-    // not the ranked list itself (getLeaderboardTop(50) there is a
-    // separate, TTL-cached call, not duplicated here).
-    getLeaderboardTop(3),
-    getLearnerRank(userId),
-    // Teaser for the /achievements page (2026-08-29) - same "small taste,
-    // not the full catalog" shape as the leaderboard teaser above.
-    getAchievementSummary(userId),
-    // Teaser for /tienda (2026-08-30) - reused wholesale (React.cache'd),
-    // not a separate summary shape, since it's already this compact.
-    getAvatarPageData(userId),
     // Shared across every learner at this level today (2026-09-01,
     // words-of-the-day.ts) - zero AI cost to show; a lookup only fires if
     // the learner taps a word (reuses lookupVocabularyWordAction as-is).
@@ -145,13 +124,8 @@ export async function getDashboardData(
     continueTarget,
     streak,
     scenarios,
-    competencies,
     reviewQueue: reviewQueue.slice(0, 3),
     displayName: profile.displayName,
-    leaderboardTop,
-    leaderboardRank,
-    achievementSummary,
-    avatar,
     dailyStudyTargetMinutes: profile.dailyStudyTargetMinutes,
     // Rule-based, not AI-generated (consistent with FASE 3's recommendation
     // engine) - the top review-queue item's own reason, reused here so the

@@ -38,6 +38,7 @@ import {
   buildSentenceOrderQuestion,
   seededRandom,
   planVocabularyQuestions,
+  type VocabularyQuestionPlan,
   type VocabularyQuizField,
   type VocabularyQuizItem,
 } from "@/lib/content/vocabulary-quiz";
@@ -105,6 +106,24 @@ export function VocabularyStep({
   const [mode, setMode] = useState<VocabularyMode>("choose");
   const [activeVocabulary, setActiveVocabulary] = useState(vocabulary);
   const [index, setIndex] = useState(0);
+  /**
+   * Position within the CURRENT word's own question plan (2026-09-26
+   * restructure, "cuando aprendes el vocabulario paso a paso debes bajar
+   * mucho"). `-1` is the word's flashcard + examples; `0..plan.length-1` is
+   * one question screen at a time - previously every plan entry rendered
+   * stacked in the same scrolling card, so a word with its full four-
+   * question plan (meaning, chineseForm, blank, order) was one long card a
+   * learner had to scroll through question by question anyway, just
+   * without ever losing sight of the ones already answered. This makes
+   * that same walk a sequence of screens instead, the same shape Grammar's
+   * per-exercise cards and Comprehension already use.
+   *
+   * Nothing about *when* answers are sent changes - `flushPendingAttempts`
+   * still only fires on a word boundary (`goToWord` below), never per
+   * question, so this costs zero extra Prisma round trips over the
+   * original stacked version.
+   */
+  const [screenIndex, setScreenIndex] = useState(-1);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [answeredByQuestion, setAnsweredByQuestion] = useState<
     Record<string, string>
@@ -201,10 +220,11 @@ export function VocabularyStep({
     );
   }
 
-  function goTo(nextIndex: number, nextDirection: "forward" | "back") {
+  function goToWord(nextIndex: number, nextDirection: "forward" | "back") {
     flushPendingAttempts();
     setDirection(nextDirection);
     setIndex(nextIndex);
+    setScreenIndex(-1);
   }
 
   function handleAnswer(
@@ -216,8 +236,7 @@ export function VocabularyStep({
     if (answeredByQuestion[questionKey]) return;
     setAnsweredByQuestion((previous) => ({
       ...previous,
-      [questionKey]:
-        answer.type === "OPTION" ? answer.optionId : "submitted",
+      [questionKey]: answer.type === "OPTION" ? answer.optionId : "submitted",
     }));
     pendingAttemptsRef.current.push({
       vocabularyItemId,
@@ -229,6 +248,7 @@ export function VocabularyStep({
   function startWalkthrough(words: LessonWithContent["vocabulary"]) {
     setActiveVocabulary(words);
     setIndex(0);
+    setScreenIndex(-1);
     setMode("walkthrough");
   }
 
@@ -405,6 +425,37 @@ export function VocabularyStep({
 
   if (!currentItem) return null;
 
+  // The screen this word is currently showing: -1 is its flashcard, any
+  // other value indexes straight into `plan`.
+  const currentEntry = screenIndex >= 0 ? plan[screenIndex] : undefined;
+  const isLastScreenOfWord = screenIndex === plan.length - 1;
+  const canAdvance =
+    screenIndex === -1 ||
+    Boolean(currentEntry && answeredByQuestion[currentEntry.key]);
+
+  function handleBack() {
+    if (screenIndex > -1) {
+      setDirection("back");
+      setScreenIndex(screenIndex - 1);
+      return;
+    }
+    if (index > 0) goToWord(index - 1, "back");
+  }
+
+  function handleNext() {
+    if (!isLastScreenOfWord) {
+      setDirection("forward");
+      setScreenIndex(screenIndex + 1);
+      return;
+    }
+    if (isLast) {
+      flushPendingAttempts();
+      onContinue();
+      return;
+    }
+    goToWord(index + 1, "forward");
+  }
+
   return (
     <div data-activity-surface="HAN_VOCABULARY" className="flex flex-col gap-4">
       <SectionTitle>{messages.vocabulary.title}</SectionTitle>
@@ -430,155 +481,126 @@ export function VocabularyStep({
         ))}
       </div>
 
+      {/* Keyed on the screen, not just the word, so the slide-in animation
+          plays for every question change too, not only when the word
+          itself changes - the same cue Grammar's per-exercise cards use. */}
       <div
-        key={currentItem.id}
+        key={`${currentItem.id}:${screenIndex}`}
         style={cardStyle}
         className="flex flex-col gap-3"
       >
-        <div className="relative overflow-hidden rounded-panel bg-elevated px-6 py-7 text-center">
-          <div className="absolute top-3 right-3">
-            <AudioPlayButton
-              label={formatMessage(messages.audio.pronunciation, {
-                word: currentItem.chineseForm,
-              })}
-              size="md"
-              fetchUrl={() => getVocabularyItemAudioAction(currentItem.id)}
-            />
-          </div>
-
-          <ChineseText className="text-5xl">
-            {currentItem.chineseForm}
-          </ChineseText>
-          {showPinyin && (
-            <Pinyin className="mt-1 font-mono text-[1.05rem] text-accent-300">
-              {currentItem.pinyin}
-            </Pinyin>
-          )}
-          <Body className="mt-1 font-semibold">{currentItem.meaning}</Body>
-          {currentItem.partOfSpeech && (
-            <span className="mt-2 inline-block rounded-full bg-page px-3 py-0.5 font-interface text-caption text-text-secondary">
-              {currentItem.partOfSpeech}
-            </span>
-          )}
-        </div>
-
-        <div className="rounded-card bg-surface p-4">
-          <Caption className="text-text-muted">
-            {messages.vocabulary.example}
-          </Caption>
-
-          {currentExamples.length === 0 && (
-            <Caption className="mt-2">{messages.vocabulary.noExamples}</Caption>
-          )}
-
-          {currentExamples.map((example) => (
-            <div
-              key={example.id}
-              className="mt-2 flex gap-2 border-t border-border pt-2 first:border-t-0 first:pt-0"
-            >
-              <AudioPlayButton
-                label={formatMessage(messages.audio.example, {
-                  text: example.chineseText,
-                })}
-                fetchUrl={() => getVocabularyExampleAudioAction(example.id)}
-              />
-              <div className="flex flex-col gap-0.5">
-                <ChineseText className="text-body">
-                  {example.chineseText}
-                </ChineseText>
-                {showPinyin && <Pinyin>{example.pinyin}</Pinyin>}
-                {showTranslation && (
-                  <Translation>{example.translation}</Translation>
-                )}
+        {screenIndex === -1 ? (
+          <>
+            <div className="relative overflow-hidden rounded-panel bg-elevated px-6 py-7 text-center">
+              <div className="absolute top-3 right-3">
+                <AudioPlayButton
+                  label={formatMessage(messages.audio.pronunciation, {
+                    word: currentItem.chineseForm,
+                  })}
+                  size="md"
+                  fetchUrl={() => getVocabularyItemAudioAction(currentItem.id)}
+                />
               </div>
+
+              <ChineseText className="text-5xl">
+                {currentItem.chineseForm}
+              </ChineseText>
+              {showPinyin && (
+                <Pinyin className="mt-1 font-mono text-[1.05rem] text-accent-300">
+                  {currentItem.pinyin}
+                </Pinyin>
+              )}
+              <Body className="mt-1 font-semibold">{currentItem.meaning}</Body>
+              {currentItem.partOfSpeech && (
+                <span className="mt-2 inline-block rounded-full bg-page px-3 py-0.5 font-interface text-caption text-text-secondary">
+                  {currentItem.partOfSpeech}
+                </span>
+              )}
             </div>
-          ))}
 
-          <AskAiButton
-            label={messages.ai.practiceVocabulary}
-            contextPatch={{
-              selectedDialogueLine: {
-                chineseText: currentItem.chineseForm,
-                pinyin: currentItem.pinyin,
-                translation: currentItem.meaning,
-              },
-            }}
-          />
-        </div>
+            <div className="rounded-card bg-surface p-4">
+              <Caption className="text-text-muted">
+                {messages.vocabulary.example}
+              </Caption>
 
-        {plan.map((entry) => {
-          const selectedOptionId = answeredByQuestion[entry.key];
-          const onAnswer = (
-            answer: VocabularyQuizAnswerInput,
-            isCorrect: boolean,
-          ) => handleAnswer(entry.key, answer, isCorrect, currentItem.id);
+              {currentExamples.length === 0 && (
+                <Caption className="mt-2">
+                  {messages.vocabulary.noExamples}
+                </Caption>
+              )}
 
-          if (entry.type === "meaning") {
-            return (
-              <VocabularyQuizCheck
-                key={entry.key}
-                question={formatMessage(messages.vocabulary.whatDoesMean, {
-                  word: currentItem.chineseForm,
-                })}
-                items={quizItems}
-                currentItemId={currentItem.id}
-                field="meaning"
-                selectedOptionId={selectedOptionId}
-                onAnswer={onAnswer}
+              {currentExamples.map((example) => (
+                <div
+                  key={example.id}
+                  className="mt-2 flex gap-2 border-t border-border pt-2 first:border-t-0 first:pt-0"
+                >
+                  <AudioPlayButton
+                    label={formatMessage(messages.audio.example, {
+                      text: example.chineseText,
+                    })}
+                    fetchUrl={() => getVocabularyExampleAudioAction(example.id)}
+                  />
+                  <div className="flex flex-col gap-0.5">
+                    <ChineseText className="text-body">
+                      {example.chineseText}
+                    </ChineseText>
+                    {showPinyin && <Pinyin>{example.pinyin}</Pinyin>}
+                    {showTranslation && (
+                      <Translation>{example.translation}</Translation>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              <AskAiButton
+                label={messages.ai.practiceVocabulary}
+                contextPatch={{
+                  selectedDialogueLine: {
+                    chineseText: currentItem.chineseForm,
+                    pinyin: currentItem.pinyin,
+                    translation: currentItem.meaning,
+                  },
+                }}
               />
-            );
-          }
-          if (entry.type === "chineseForm") {
-            return (
-              <VocabularyQuizCheck
-                key={entry.key}
-                question={formatMessage(messages.vocabulary.whichWordMeans, {
-                  meaning: currentItem.meaning,
-                })}
-                items={quizItems}
-                currentItemId={currentItem.id}
-                field="chineseForm"
-                selectedOptionId={selectedOptionId}
-                onAnswer={onAnswer}
-              />
-            );
-          }
-          if (entry.type === "blank") {
-            const example = currentExamples[entry.exampleIndex!];
-            if (!example) return null;
-            return (
-              <VocabularyFillBlankCheck
-                key={entry.key}
-                items={quizItems}
-                currentItemId={currentItem.id}
-                exampleText={example.chineseText}
-                hint={messages.vocabulary.completeSentence}
-                selectedOptionId={selectedOptionId}
-                onAnswer={onAnswer}
-              />
-            );
-          }
-          const orderExample = currentExamples[entry.exampleIndex!];
-          if (!orderExample) return null;
-          return (
-            <VocabularySentenceOrderCheck
-              key={entry.key}
-              items={quizItems}
-              currentItemId={currentItem.id}
-              exampleText={orderExample.chineseText}
-              exampleTranslation={orderExample.translation}
-              answered={Boolean(selectedOptionId)}
-              onAnswer={onAnswer}
+            </div>
+          </>
+        ) : (
+          currentEntry && (
+            <VocabularyQuestionCard
+              entry={currentEntry}
+              quizItems={quizItems}
+              currentItem={currentItem}
+              currentExamples={currentExamples}
+              selectedOptionId={answeredByQuestion[currentEntry.key]}
+              onAnswer={(answer, isCorrect) =>
+                handleAnswer(
+                  currentEntry.key,
+                  answer,
+                  isCorrect,
+                  currentItem.id,
+                )
+              }
             />
-          );
-        })}
+          )
+        )}
       </div>
+
+      {/* Question-within-word progress, shown only once there's more than
+          one to count - a lone question needs no counter of its own. */}
+      {plan.length > 1 && (
+        <Caption className="self-center text-text-muted">
+          {formatMessage(messages.vocabulary.questionProgress, {
+            current: screenIndex + 1,
+            total: plan.length,
+          })}
+        </Caption>
+      )}
 
       <div className="mt-2 flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => goTo(index - 1, "back")}
-          disabled={index === 0}
+          onClick={handleBack}
+          disabled={index === 0 && screenIndex === -1}
           className="flex items-center gap-1 font-interface text-supporting text-text-secondary transition-opacity duration-fast ease-standard hover:text-text-primary disabled:pointer-events-none disabled:opacity-0"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
@@ -589,21 +611,100 @@ export function VocabularyStep({
           {index + 1} {messages.common.of} {activeVocabulary.length}
         </Caption>
 
-        <Button
-          type="button"
-          onClick={() => {
-            if (isLast) {
-              flushPendingAttempts();
-              onContinue();
-            } else {
-              goTo(index + 1, "forward");
-            }
-          }}
-        >
-          {isLast ? messages.common.continue : messages.vocabulary.nextWord}
+        <Button type="button" onClick={handleNext} disabled={!canAdvance}>
+          {isLast && isLastScreenOfWord
+            ? messages.common.continue
+            : isLastScreenOfWord
+              ? messages.vocabulary.nextWord
+              : messages.common.next}
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * One question screen, as a real component rather than a helper function
+ * called inline or a `.map()` over a synthetic array (2026-09-26). Both of
+ * those shapes tripped React's ref-safety lint rule on `onAnswer`'s closure
+ * over `handleAnswer` (which pushes into `VocabularyStep`'s
+ * `pendingAttemptsRef`) even though the ref is only ever touched later,
+ * inside a real click handler - the rule's static analysis apparently
+ * trusts a genuine component boundary here in a way it didn't trust a
+ * helper function or an inline array literal built fresh each render. The
+ * branching itself is unchanged from the original stacked version, just
+ * picking one entry instead of mapping every entry at once.
+ */
+function VocabularyQuestionCard({
+  entry,
+  quizItems,
+  currentItem,
+  currentExamples,
+  selectedOptionId,
+  onAnswer,
+}: {
+  entry: VocabularyQuestionPlan;
+  quizItems: VocabularyQuizItem[];
+  currentItem: LessonWithContent["vocabulary"][number]["vocabularyItem"];
+  currentExamples: LessonWithContent["vocabulary"][number]["vocabularyItem"]["examples"];
+  selectedOptionId: string | undefined;
+  onAnswer: (answer: VocabularyQuizAnswerInput, isCorrect: boolean) => void;
+}) {
+  const messages = useLessonMessages();
+
+  if (entry.type === "meaning") {
+    return (
+      <VocabularyQuizCheck
+        question={formatMessage(messages.vocabulary.whatDoesMean, {
+          word: currentItem.chineseForm,
+        })}
+        items={quizItems}
+        currentItemId={currentItem.id}
+        field="meaning"
+        selectedOptionId={selectedOptionId}
+        onAnswer={onAnswer}
+      />
+    );
+  }
+  if (entry.type === "chineseForm") {
+    return (
+      <VocabularyQuizCheck
+        question={formatMessage(messages.vocabulary.whichWordMeans, {
+          meaning: currentItem.meaning,
+        })}
+        items={quizItems}
+        currentItemId={currentItem.id}
+        field="chineseForm"
+        selectedOptionId={selectedOptionId}
+        onAnswer={onAnswer}
+      />
+    );
+  }
+  if (entry.type === "blank") {
+    const example = currentExamples[entry.exampleIndex!];
+    if (!example) return null;
+    return (
+      <VocabularyFillBlankCheck
+        items={quizItems}
+        currentItemId={currentItem.id}
+        exampleText={example.chineseText}
+        hint={messages.vocabulary.completeSentence}
+        selectedOptionId={selectedOptionId}
+        onAnswer={onAnswer}
+      />
+    );
+  }
+  const orderExample = currentExamples[entry.exampleIndex!];
+  if (!orderExample) return null;
+  return (
+    <VocabularySentenceOrderCheck
+      items={quizItems}
+      currentItemId={currentItem.id}
+      exampleText={orderExample.chineseText}
+      exampleTranslation={orderExample.translation}
+      answered={Boolean(selectedOptionId)}
+      onAnswer={onAnswer}
+    />
   );
 }
 
