@@ -85,6 +85,13 @@ export default async function AdminCommunicationsPage({
                         ? "Importante"
                         : "Urgente"}
                   </Badge>
+                  <Badge>
+                    {announcement.locale === "ES"
+                      ? "Español"
+                      : announcement.locale === "EN"
+                        ? "English"
+                        : "Todos los idiomas"}
+                  </Badge>
                 </div>
                 <p className="mt-2 max-w-3xl whitespace-pre-wrap font-interface text-supporting text-text-secondary">
                   {announcement.message}

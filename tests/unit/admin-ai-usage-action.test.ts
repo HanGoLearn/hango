@@ -12,23 +12,34 @@ vi.mock("@/lib/db", () => ({ db: { user: { findUnique: findUser } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { setDailyUsageCapMock, setUserAiUsageCapMock } = vi.hoisted(() => ({
+const {
+  setDailyUsageCapMock,
+  setGlobalAiBudgetPolicyMock,
+  setUserAiUsageCapMock,
+} = vi.hoisted(() => ({
   setDailyUsageCapMock: vi.fn(),
+  setGlobalAiBudgetPolicyMock: vi.fn(),
   setUserAiUsageCapMock: vi.fn(),
 }));
 vi.mock("@/lib/admin-ai-usage", () => {
   class InvalidDailyCapError extends Error {}
+  class InvalidGlobalAiBudgetPolicyError extends Error {}
   class InvalidUserAiUsageCapError extends Error {}
   return {
     setDailyUsageCap: setDailyUsageCapMock,
+    setGlobalAiBudgetPolicy: setGlobalAiBudgetPolicyMock,
     setUserAiUsageCap: setUserAiUsageCapMock,
     InvalidDailyCapError,
+    InvalidGlobalAiBudgetPolicyError,
     InvalidUserAiUsageCapError,
   };
 });
 
-const { updateDailyUsageCapAction, updateUserAiUsageCapAction } =
-  await import("@/lib/actions/admin-ai-usage");
+const {
+  updateDailyUsageCapAction,
+  updateGlobalAiBudgetPolicyAction,
+  updateUserAiUsageCapAction,
+} = await import("@/lib/actions/admin-ai-usage");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,6 +131,31 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
       mode: "CUSTOM",
       dailyLimitUsd: 0.25,
     });
+  });
+
+  it("updates the global budget and family switches for an administrator", async () => {
+    auth.mockResolvedValueOnce({
+      user: { id: "admin-1", role: "ADMINISTRATOR" },
+    });
+    findUser.mockResolvedValueOnce({
+      id: "admin-1",
+      email: "arean.mendoza@unmsm.edu.pe",
+      name: "Arean",
+      role: "ADMINISTRATOR",
+    });
+    setGlobalAiBudgetPolicyMock.mockResolvedValueOnce(undefined);
+    const input = {
+      dailyLimitUsd: 5,
+      textEnabled: true,
+      sttEnabled: true,
+      ttsEnabled: false,
+      realtimeEnabled: true,
+    };
+
+    const result = await updateGlobalAiBudgetPolicyAction(input);
+
+    expect(result).toEqual({ ok: true });
+    expect(setGlobalAiBudgetPolicyMock).toHaveBeenCalledWith(input);
   });
 
   it("rejects an unknown per-user limit mode", async () => {

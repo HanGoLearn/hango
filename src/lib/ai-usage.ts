@@ -31,10 +31,55 @@ export const AI_USAGE_FEATURES = [
   "han-speech",
   "han-teacher-transcribe",
   "speaking-transcribe",
+  "han-realtime-session",
   "han-realtime-assessment",
 ] as const;
 
 export type AiUsageFeature = (typeof AI_USAGE_FEATURES)[number];
+
+export const AI_USAGE_FAMILIES = ["TEXT", "STT", "TTS", "REALTIME"] as const;
+export type AiUsageFamily = (typeof AI_USAGE_FAMILIES)[number];
+
+export const AI_FEATURE_FAMILY: Record<AiUsageFeature, AiUsageFamily> = {
+  "ai-teacher-chat": "TEXT",
+  "learner-fact-extraction": "TEXT",
+  "vocabulary-lookup": "TEXT",
+  "mission-chat": "TEXT",
+  "mission-report": "TEXT",
+  "speaking-feedback": "TEXT",
+  "speaking-scenario": "TEXT",
+  "lesson-reflection": "TEXT",
+  "writing-feedback": "TEXT",
+  "placement-grading": "TEXT",
+  "free-topic-feedback": "TEXT",
+  "handwritten-writing": "TEXT",
+  "welcome-audio": "TTS",
+  "dialogue-audio": "TTS",
+  "grammar-audio": "TTS",
+  "vocabulary-audio": "TTS",
+  "placement-listening-audio": "TTS",
+  "han-speech": "TTS",
+  "han-teacher-transcribe": "STT",
+  "speaking-transcribe": "STT",
+  "han-realtime-session": "REALTIME",
+  // This is a text-model assessment made after Realtime transcript turns.
+  "han-realtime-assessment": "TEXT",
+};
+
+const MICROUSD_PER_USD = 1_000_000;
+export const DEFAULT_GLOBAL_DAILY_BUDGET_USD = 5;
+
+/**
+ * Conservative maximum exposure authorized before one provider operation.
+ * These are intentionally round safety allowances, not pricing claims or a
+ * substitute for the provider invoice. Realtime authorizes one live session.
+ */
+export const AI_FAMILY_AUTHORIZATION_USD: Record<AiUsageFamily, number> = {
+  TEXT: 0.02,
+  STT: 0.03,
+  TTS: 0.08,
+  REALTIME: 0.25,
+};
 
 export interface TrackAiOperationInput {
   userId: string;
@@ -49,6 +94,65 @@ export interface TrackAiOperationInput {
 export const DEFAULT_DAILY_CAP_USD = 1;
 
 export class DailyUsageCapExceededError extends Error {}
+export class AiFamilyDisabledError extends DailyUsageCapExceededError {}
+export class GlobalAiBudgetExceededError extends DailyUsageCapExceededError {}
+
+export function utcBudgetDay(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function usdToMicrousd(value: number): number {
+  return Math.round(value * MICROUSD_PER_USD);
+}
+
+export function microusdToUsd(value: number): number {
+  return value / MICROUSD_PER_USD;
+}
+
+function defaultGlobalBudgetMicrousd(): number {
+  return usdToMicrousd(DEFAULT_GLOBAL_DAILY_BUDGET_USD);
+}
+
+function shouldReserveGlobalBudgetInThisEnvironment(): boolean {
+  if (process.env.NODE_ENV !== "test") return true;
+  // Integration tests share the development database. Ordinary provider
+  // mocks must not consume or replace its real daily budget. Dedicated
+  // budget tests explicitly opt in for the duration of their own test.
+  return process.env.HANGO_ENFORCE_GLOBAL_AI_BUDGET_IN_TESTS === "true";
+}
+
+async function getGlobalBudgetPolicy() {
+  const existing = await db.aiBudgetPolicy.findUnique({
+    where: { id: "global" },
+  });
+  if (existing) return existing;
+
+  await db.aiBudgetPolicy.createMany({
+    data: [
+      {
+        id: "global",
+        dailyLimitMicrousd: defaultGlobalBudgetMicrousd(),
+      },
+    ],
+    skipDuplicates: true,
+  });
+  return db.aiBudgetPolicy.findUniqueOrThrow({ where: { id: "global" } });
+}
+
+function isFamilyEnabled(
+  family: AiUsageFamily,
+  policy: {
+    textEnabled: boolean;
+    sttEnabled: boolean;
+    ttsEnabled: boolean;
+    realtimeEnabled: boolean;
+  },
+): boolean {
+  if (family === "TEXT") return policy.textEnabled;
+  if (family === "STT") return policy.sttEnabled;
+  if (family === "TTS") return policy.ttsEnabled;
+  return policy.realtimeEnabled;
+}
 
 function normalizedOperationalErrorCode(error: unknown): string {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -117,7 +221,7 @@ export async function trackAiOperation<T>(
   input: TrackAiOperationInput,
   operation: () => Promise<T>,
 ): Promise<T> {
-  if (!input.capAlreadyChecked) {
+  if (!input.capAlreadyChecked && input.provider !== "mock") {
     await checkDailyUsageCap(input.userId, input.feature, {
       provider: input.provider,
       model: input.model,
@@ -272,7 +376,7 @@ export async function checkDailyUsageCap(
   feature: AiUsageFeature,
   identity: { provider?: string; model?: string } = {},
 ): Promise<void> {
-  const [userCap, cap, usage] = await Promise.all([
+  const [userCap, cap, usage, policy] = await Promise.all([
     db.aiUsageUserCap.findUnique({
       where: { userId_feature: { userId, feature } },
     }),
@@ -281,6 +385,7 @@ export async function checkDailyUsageCap(
       where: { userId, feature, createdAt: { gte: startOfTodayUtc() } },
       _sum: { estimatedCostUsd: true },
     }),
+    getGlobalBudgetPolicy(),
   ]);
   const limit =
     userCap?.dailyLimitUsd ?? cap?.dailyLimitUsd ?? DEFAULT_DAILY_CAP_USD;
@@ -302,6 +407,59 @@ export async function checkDailyUsageCap(
       limit === 0
         ? "This feature isn't available for your account."
         : "You've reached today's usage limit for this feature. Please try again tomorrow.",
+    );
+  }
+
+  const family = AI_FEATURE_FAMILY[feature];
+  if (!isFamilyEnabled(family, policy)) {
+    await recordAiOperationBestEffort({
+      userId,
+      feature,
+      ...identity,
+      outcome: "BLOCKED_CAP",
+      errorCode: `family_${family.toLowerCase()}_disabled`,
+    });
+    throw new AiFamilyDisabledError(
+      "This AI feature is temporarily paused. Please try again later.",
+    );
+  }
+
+  if (!shouldReserveGlobalBudgetInThisEnvironment()) {
+    return;
+  }
+
+  const reservationMicrousd = usdToMicrousd(
+    AI_FAMILY_AUTHORIZATION_USD[family],
+  );
+  const maximumBeforeReservation =
+    policy.dailyLimitMicrousd - reservationMicrousd;
+  const day = utcBudgetDay();
+
+  const authorizedRows =
+    maximumBeforeReservation < 0
+      ? 0
+      : await db.$executeRaw`
+          INSERT INTO "AiDailyBudgetCounter"
+            ("day", "authorizedMicrousd", "authorizationCount", "updatedAt")
+          VALUES
+            (${day}, ${reservationMicrousd}, 1, CURRENT_TIMESTAMP)
+          ON CONFLICT ("day") DO UPDATE SET
+            "authorizedMicrousd" = "AiDailyBudgetCounter"."authorizedMicrousd" + ${reservationMicrousd},
+            "authorizationCount" = "AiDailyBudgetCounter"."authorizationCount" + 1,
+            "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "AiDailyBudgetCounter"."authorizedMicrousd" <= ${maximumBeforeReservation}
+        `;
+
+  if (authorizedRows === 0) {
+    await recordAiOperationBestEffort({
+      userId,
+      feature,
+      ...identity,
+      outcome: "BLOCKED_CAP",
+      errorCode: "global_budget_exceeded",
+    });
+    throw new GlobalAiBudgetExceededError(
+      "AI is temporarily unavailable because the beta safety limit was reached. Please try again later.",
     );
   }
 }

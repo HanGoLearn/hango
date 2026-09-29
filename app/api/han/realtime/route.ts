@@ -21,6 +21,12 @@ import {
   realtimeNoiseReductionConfig,
   realtimeVadConfig,
 } from "@/lib/speech/realtime-vad";
+import {
+  AI_FAMILY_AUTHORIZATION_USD,
+  checkDailyUsageCap,
+  DailyUsageCapExceededError,
+  recordAiUsage,
+} from "@/lib/ai-usage";
 
 const REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
 const VOICES = new Set([
@@ -87,6 +93,17 @@ export async function POST(request: Request) {
   // Ephemeral app context is server-owned. Never let a browser-provided
   // x-han-context value inject persistent Realtime session instructions.
   delete context.onDemandAppContext;
+  try {
+    await checkDailyUsageCap(session.user.id, "han-realtime-session", {
+      provider: "openai",
+      model: "gpt-realtime-mini",
+    });
+  } catch (error) {
+    if (error instanceof DailyUsageCapExceededError) {
+      return Response.json({ error: error.message }, { status: 429 });
+    }
+    throw error;
+  }
   const [profile, competencyProgress, recentEvidence, learnerFacts] =
     await Promise.all([
       db.learnerProfile.findUnique({
@@ -211,6 +228,16 @@ export async function POST(request: Request) {
   });
   const body = await openAiResponse.text();
   if (openAiResponse.ok) {
+    // The browser talks directly to Realtime after this handshake, so the
+    // server never receives provider usage totals. Record the same explicit,
+    // conservative session allowance used by the global authorization gate.
+    await recordAiUsage({
+      userId: session.user.id,
+      feature: "han-realtime-session",
+      provider: "openai",
+      model: "gpt-realtime-mini",
+      estimatedCostUsd: AI_FAMILY_AUTHORIZATION_USD.REALTIME,
+    });
     return Response.json({
       sdp: body,
       instructions: realtimeInstructions,

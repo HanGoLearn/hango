@@ -7,6 +7,7 @@ import { HomeOnly } from "@/components/shell/home-only";
 import { AiTeacherBubble } from "@/components/shell/ai-teacher-bubble";
 import { AiTeacherProvider } from "@/components/ai-teacher/ai-teacher-provider";
 import { AnnouncementCenter } from "@/components/announcements/announcement-center";
+import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { ActivityTracker } from "@/components/analytics/activity-tracker";
 import { auth } from "@/lib/auth";
 import { getStudyStreak } from "@/lib/dashboard-data";
@@ -173,7 +174,15 @@ export async function AppShell({
                 messages={messages.coinCelebration}
               />
             )}
-            {userId && <AnnouncementCenter locale={locale} />}
+            {userId && (
+              <AnnouncementCenter
+                locale={locale}
+                messages={messages.announcements}
+              />
+            )}
+            {userId && (
+              <FeedbackWidget locale={locale} messages={messages.feedback} />
+            )}
             {/* Last inside the shell, so its scrim and card layer over
               everything the tour points at. */}
             <TourOverlay messages={tourMessages} />

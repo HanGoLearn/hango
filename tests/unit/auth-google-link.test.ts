@@ -2,17 +2,19 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: {
-    user: { findUnique: vi.fn() },
+    user: { findFirst: vi.fn() },
     account: { findUnique: vi.fn(), create: vi.fn() },
+    betaInvitation: { findUnique: vi.fn() },
   },
 }));
 
 import { db } from "@/lib/db";
 import { ensureGoogleAccountLinked } from "@/lib/auth-google-link";
 
-const findUniqueUser = vi.mocked(db.user.findUnique);
+const findFirstUser = vi.mocked(db.user.findFirst);
 const findUniqueAccount = vi.mocked(db.account.findUnique);
 const createAccount = vi.mocked(db.account.create);
+const findUniqueInvitation = vi.mocked(db.betaInvitation.findUnique);
 
 const googleAccount = {
   type: "oauth",
@@ -32,7 +34,7 @@ describe("ensureGoogleAccountLinked", () => {
       googleAccount,
     );
     expect(result).toBe(false);
-    expect(findUniqueUser).not.toHaveBeenCalled();
+    expect(findFirstUser).not.toHaveBeenCalled();
   });
 
   it("rejects when there is no email at all", async () => {
@@ -44,8 +46,9 @@ describe("ensureGoogleAccountLinked", () => {
     expect(result).toBe(false);
   });
 
-  it("allows sign-in without linking when no existing user has that email", async () => {
-    findUniqueUser.mockResolvedValueOnce(null);
+  it("rejects a new Google account when its email was not invited", async () => {
+    findFirstUser.mockResolvedValueOnce(null);
+    findUniqueInvitation.mockResolvedValueOnce(null);
 
     const result = await ensureGoogleAccountLinked(
       "new@hango.dev",
@@ -53,12 +56,32 @@ describe("ensureGoogleAccountLinked", () => {
       googleAccount,
     );
 
-    expect(result).toBe(true);
+    expect(result).toBe(false);
     expect(createAccount).not.toHaveBeenCalled();
   });
 
+  it("allows a new Google account with a pending invitation", async () => {
+    findFirstUser.mockResolvedValueOnce(null);
+    findUniqueInvitation.mockResolvedValueOnce({
+      status: "PENDING",
+      expiresAt: null,
+    } as never);
+
+    const result = await ensureGoogleAccountLinked(
+      "Invited@HanGo.dev",
+      true,
+      googleAccount,
+    );
+
+    expect(result).toBe(true);
+    expect(findUniqueInvitation).toHaveBeenCalledWith({
+      where: { email: "invited@hango.dev" },
+      select: { status: true, expiresAt: true },
+    });
+  });
+
   it("links the Google account to an existing user when not already linked", async () => {
-    findUniqueUser.mockResolvedValueOnce({ id: "user-1" } as never);
+    findFirstUser.mockResolvedValueOnce({ id: "user-1" } as never);
     findUniqueAccount.mockResolvedValueOnce(null);
 
     const result = await ensureGoogleAccountLinked(
@@ -74,7 +97,7 @@ describe("ensureGoogleAccountLinked", () => {
   });
 
   it("does not create a duplicate link when already linked", async () => {
-    findUniqueUser.mockResolvedValueOnce({ id: "user-1" } as never);
+    findFirstUser.mockResolvedValueOnce({ id: "user-1" } as never);
     findUniqueAccount.mockResolvedValueOnce({ id: "account-1" } as never);
 
     const result = await ensureGoogleAccountLinked(

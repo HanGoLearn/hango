@@ -50,17 +50,17 @@ operativas para una beta real.
 
 ## 4. Arquitectura mínima de la beta
 
-| Componente | Decisión recomendada | Regla de aislamiento |
-| --- | --- | --- |
-| Aplicación | Proyecto de despliegue exclusivo para la beta | No compartir variables con local |
-| Cliente | Web móvil responsive en Chrome y Safari | Sin instalación, offline ni caché de datos privados |
-| Dominio | Subdominio HTTPS de beta | No indexable por buscadores |
-| PostgreSQL | Base exclusiva en el proveedor elegido | Sin usuarios reales previos |
-| Archivos | Bucket cloud privado mediante el adaptador existente | Nunca usar URLs públicas permanentes |
-| Correo | Resend, cuyo adaptador ya existe | Dominio/remitente de beta verificado |
-| IA | Proyecto o clave de OpenAI para beta | Presupuesto externo bajo y límites internos |
-| Cron | Secreto exclusivo de alta entropía | Solo tareas autenticadas |
-| Errores | Proveedor de monitorización o canal operativo acordado | Sin prompts, tokens, audio ni PII en eventos |
+| Componente | Decisión recomendada                                   | Regla de aislamiento                                |
+| ---------- | ------------------------------------------------------ | --------------------------------------------------- |
+| Aplicación | Proyecto de despliegue exclusivo para la beta          | No compartir variables con local                    |
+| Cliente    | Web móvil responsive en Chrome y Safari                | Sin instalación, offline ni caché de datos privados |
+| Dominio    | Subdominio HTTPS de beta                               | No indexable por buscadores                         |
+| PostgreSQL | Base exclusiva en el proveedor elegido                 | Sin usuarios reales previos                         |
+| Archivos   | Bucket cloud privado mediante el adaptador existente   | Nunca usar URLs públicas permanentes                |
+| Correo     | Resend, cuyo adaptador ya existe                       | Dominio/remitente de beta verificado                |
+| IA         | Proyecto o clave de OpenAI para beta                   | Presupuesto externo bajo y límites internos         |
+| Cron       | Secreto exclusivo de alta entropía                     | Solo tareas autenticadas                            |
+| Errores    | Proveedor de monitorización o canal operativo acordado | Sin prompts, tokens, audio ni PII en eventos        |
 
 Los secretos se cargarán directamente en el proveedor de despliegue. No se
 enviarán por chat, no se guardarán en archivos del repositorio y no se
@@ -72,18 +72,18 @@ La división se organiza por propiedad técnica para evitar que ambos asistentes
 modifiquen simultáneamente los mismos archivos. Claude no recibe esta asignación
 automáticamente: debe leer este documento al comenzar cada bloque.
 
-| Lote | Codex | Claude |
-| --- | --- | --- |
-| `P1-00` | Reconciliar árbol, ejecutar gate, mantener tablero y crear punto de recuperación autorizado | No modificar código; revisar el plan y declarar cualquier trabajo previo no integrado |
-| `P1-01` | Modelo, migración, enforcement de invitaciones en credenciales/OAuth, administración y pruebas | Revisar claridad de los mensajes de beta por invitación, sin tocar autenticación |
-| `P1-02` | Consentimiento versionado, enforcement, persistencia y pruebas | Redactar privacidad, términos, aviso de IA y aviso de beta en ES/EN; revisar UX de aceptación |
-| `P1-03` | Hosting técnico, DB, storage, correo, cron, secretos, backups, migraciones y pruebas | Revisar instrucciones no técnicas para participantes; no modificar infraestructura |
-| `P1-04` | Corregir problemas técnicos de media, permisos, red, seguridad y performance; pruebas automatizables | Auditar e implementar responsive visual acordado; ejecutar recorridos Android/iPhone |
-| `P1-05` | Presupuesto global, reservas atómicas, kill switches, administración y pruebas | Revisar que los estados bloqueados sean comprensibles para una persona no técnica |
-| `P1-06` | Modelo, actions, autorización y bandeja administrativa de feedback | Diseñar la experiencia, textos de bienvenida, formulario, soporte y guía de participantes |
-| `P1-07` | Errores, health checks, alertas, privacidad de logs, runbooks y rollback | Revisar que mensajes de error y soporte orienten al usuario sin exponer información técnica |
-| `P1-08` | Seguridad, aislamiento A/B, automatización y gate final | QA manual visual, bilingüe y móvil; reporte reproducible con evidencia |
-| `P1-09` | Métricas, costos, incidentes y decisión técnica de ampliar/pausar | Entrevistas, síntesis cualitativa y recomendaciones de experiencia |
+| Lote    | Codex                                                                                                | Claude                                                                                        |
+| ------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `P1-00` | Reconciliar árbol, ejecutar gate, mantener tablero y crear punto de recuperación autorizado          | No modificar código; revisar el plan y declarar cualquier trabajo previo no integrado         |
+| `P1-01` | Modelo, migración, enforcement de invitaciones en credenciales/OAuth, administración y pruebas       | Revisar claridad de los mensajes de beta por invitación, sin tocar autenticación              |
+| `P1-02` | Consentimiento versionado, enforcement, persistencia y pruebas                                       | Redactar privacidad, términos, aviso de IA y aviso de beta en ES/EN; revisar UX de aceptación |
+| `P1-03` | Hosting técnico, DB, storage, correo, cron, secretos, backups, migraciones y pruebas                 | Revisar instrucciones no técnicas para participantes; no modificar infraestructura            |
+| `P1-04` | Corregir problemas técnicos de media, permisos, red, seguridad y performance; pruebas automatizables | Auditar e implementar responsive visual acordado; ejecutar recorridos Android/iPhone          |
+| `P1-05` | Presupuesto global, reservas atómicas, kill switches, administración y pruebas                       | Revisar que los estados bloqueados sean comprensibles para una persona no técnica             |
+| `P1-06` | Modelo, actions, autorización y bandeja administrativa de feedback                                   | Diseñar la experiencia, textos de bienvenida, formulario, soporte y guía de participantes     |
+| `P1-07` | Errores, health checks, alertas, privacidad de logs, runbooks y rollback                             | Revisar que mensajes de error y soporte orienten al usuario sin exponer información técnica   |
+| `P1-08` | Seguridad, aislamiento A/B, automatización y gate final                                              | QA manual visual, bilingüe y móvil; reporte reproducible con evidencia                        |
+| `P1-09` | Métricas, costos, incidentes y decisión técnica de ampliar/pausar                                    | Entrevistas, síntesis cualitativa y recomendaciones de experiencia                            |
 
 ### Propiedad exclusiva de Codex
 
@@ -173,19 +173,26 @@ se despliega directamente el árbol local sin confirmar.
 
 Objetivo: impedir registros no autorizados sin necesitar CAPTCHA en esta fase.
 
-- [ ] Crear una allowlist administrativa de correos para la beta, con estado,
+- [x] Crear una allowlist administrativa de correos para la beta, con estado,
       cohorte, fecha de invitación, activación y revocación.
-- [ ] Añadir administración para autorizar, revocar y consultar invitaciones.
-- [ ] Aplicar la allowlist tanto a credenciales como a Google OAuth.
-- [ ] Normalizar el correo y evitar respuestas que permitan enumerar cuentas.
-- [ ] Mantener acceso de administrador y una ruta de recuperación comprobada.
-- [ ] Bloquear el registro público; la pantalla debe explicar que es una beta
+- [x] Añadir administración para autorizar, revocar y consultar invitaciones.
+- [x] Aplicar la allowlist tanto a credenciales como a Google OAuth.
+- [x] Normalizar el correo y evitar respuestas que permitan enumerar cuentas.
+- [x] Mantener acceso de administrador y una ruta de recuperación comprobada.
+- [x] Bloquear el registro público; la pantalla debe explicar que es una beta
       por invitación.
-- [ ] Probar invitado, no invitado, invitación revocada, correo duplicado,
+- [x] Probar invitado, no invitado, invitación revocada, correo duplicado,
       mayúsculas/minúsculas y OAuth.
 
 Criterio de salida: únicamente un correo autorizado puede crear y activar una
 cuenta; revocar una invitación impide una activación futura sin borrar datos.
+
+Implementado el 27 de septiembre de 2026 con
+`HANGO_BETA_ACCESS_MODE=INVITE_ONLY` como valor seguro y `OPEN` como reversión
+sin cambios de código. La administración vive en `/admin/invitations`. Las
+pruebas cubren el registro real con PostgreSQL y la autorización OAuth; la
+prueba de Google contra el dominio HTTPS definitivo permanece dentro de
+`P1-03`, porque requiere las credenciales y callbacks del entorno de beta.
 
 ### P1-02 — Consentimiento y privacidad mínima real
 
@@ -215,7 +222,7 @@ Objetivo: ejecutar los flujos reales sin depender del disco local.
       contenga secretos.
 - [ ] Configurar la conexión PostgreSQL de beta con validación TLS explícita
       (`sslmode=verify-full`) y comprobar rechazo de certificados inválidos.
-- [ ] Implementar un proveedor cloud compatible con la interfaz
+- [x] Implementar un proveedor cloud compatible con la interfaz
       `StorageProvider` actual.
 - [ ] Mantener el bucket privado y la descarga mediada por el backend con
       comprobación de propiedad.
@@ -230,6 +237,17 @@ Objetivo: ejecutar los flujos reales sin depender del disco local.
 
 Criterio de salida: reiniciar o volver a desplegar la aplicación no pierde
 archivos ni datos; ningún objeto privado es accesible por otro usuario.
+
+Preparación técnica iniciada el 27 de septiembre de 2026: se añadió el proveedor
+privado de Vercel Blob, producción rechaza el disco local, se separaron la URL
+pooled de runtime y `DIRECT_URL` de migraciones, y el pool serverless quedó
+limitado. La compilación y las pruebas focalizadas pasan. El procedimiento,
+matriz de variables, gate y pendientes externos están en
+[`beta-p1-03-despliegue-runbook.md`](beta-p1-03-despliegue-runbook.md). P1-03
+continúa abierto: faltan crear los recursos reales y probar contra el Blob real
+la carga directa ya implementada para audios mayores de 4.5 MB. También faltan
+Resend/OAuth, migrar/cargar la base nueva, backups y el ensayo completo en el
+dominio HTTPS.
 
 ### P1-04 — Web móvil lista para la beta
 
@@ -277,74 +295,126 @@ nada, sin contenido oculto y sin necesitar cambiar a “sitio de escritorio”.
 
 Objetivo: impedir que 10 a 30 personas conviertan un error en gasto abierto.
 
-- [ ] Conservar los límites existentes por función y por usuario.
-- [ ] Añadir un presupuesto diario global del producto, independiente de los
+- [x] Conservar los límites existentes por función y por usuario.
+- [x] Añadir un presupuesto diario global del producto, independiente de los
       límites individuales.
-- [ ] Añadir kill switches por familia: texto, STT, TTS y Realtime, sin alterar
+- [x] Añadir kill switches por familia: texto, STT, TTS y Realtime, sin alterar
       la configuración pedagógica de Han.
-- [ ] Hacer atómica la reserva o autorización de gasto para evitar carreras
+- [x] Hacer atómica la reserva o autorización de gasto para evitar carreras
       entre instancias.
-- [ ] Mostrar consumo, porcentaje del presupuesto y bloqueos en administración.
-- [ ] Definir avisos al 50 %, 75 % y 90 % y bloqueo al 100 %.
+- [x] Mostrar consumo, porcentaje del presupuesto y bloqueos en administración.
+- [x] Definir avisos al 50 %, 75 % y 90 % y bloqueo al 100 %.
 - [ ] Configurar también un presupuesto bajo en el proveedor de IA.
-- [ ] Verificar fallbacks comprensibles cuando una función esté bloqueada.
+- [x] Verificar fallbacks comprensibles cuando una función esté bloqueada.
 
 Criterio de salida: una prueba concurrente no supera el límite acordado y el
 administrador puede desactivar una familia de IA sin apagar HanGo.
+
+Control interno implementado el 27 de septiembre de 2026. `/admin/limits`
+separa el costo completado estimado de la exposición máxima autorizada, permite
+editar el valor global (USD 5/día inicialmente) y pausar TEXT, STT, TTS o
+Realtime. Cada llamada reserva una cantidad conservadora mediante incremento
+condicional atómico en PostgreSQL. Una prueba con diez solicitudes concurrentes
+y presupuesto para tres autorizó exactamente tres y bloqueó siete, sin exceder
+el límite. Realtime usa una estimación preventiva por sesión porque el audio
+posterior al handshake fluye directamente entre navegador y proveedor. Falta
+configurar el segundo cinturón de seguridad en la cuenta del proveedor.
 
 ### P1-06 — Comunicación, feedback y soporte
 
 Objetivo: poder orientar a la cohorte y entender sus problemas.
 
-- [ ] Reutilizar el sistema existente de anuncios para el mensaje de bienvenida,
+- [x] Reutilizar el sistema existente de anuncios para el mensaje de bienvenida,
       mantenimiento y solicitudes de feedback.
-- [ ] Crear feedback dentro de HanGo con categoría, puntuación opcional,
+- [x] Crear feedback dentro de HanGo con categoría, puntuación opcional,
       mensaje, ruta, idioma y usuario.
-- [ ] No aceptar archivos adjuntos en la primera cohorte.
-- [ ] Crear bandeja administrativa con estado: nuevo, revisando, resuelto.
-- [ ] Definir un correo de soporte y un tiempo de respuesta operativo.
-- [ ] Preparar una guía breve: qué probar, qué es beta y cómo informar fallos.
+- [x] No aceptar archivos adjuntos en la primera cohorte.
+- [x] Crear bandeja administrativa con estado: nuevo, revisando, resuelto.
+- [x] Definir un correo de soporte y un tiempo de respuesta operativo.
+- [x] Preparar una guía breve: qué probar, qué es beta y cómo informar fallos.
 
 Criterio de salida: un usuario puede informar un problema desde móvil en menos
 de un minuto y el administrador puede responder o marcarlo como resuelto.
+
+Implementado el 27 de septiembre de 2026. El botón Feedback está disponible en
+toda la aplicación autenticada, captura ruta e idioma automáticamente y muestra
+al autor su seguimiento y la respuesta administrativa. `/admin/feedback`
+permite filtrar y responder; Configuración publica el correo temporal
+`arean.mendoza@unmsm.edu.pe` con un compromiso inicial de hasta 2 días hábiles.
+Los anuncios existentes ahora admiten destino ES, EN o ambos sin modificar los
+anuncios históricos. El formulario no contiene carga de archivos. Antes de la
+cohorte aún deben publicarse las dos bienvenidas y hacerse la comprobación
+cronometrada en un teléfono físico autenticado.
 
 ### P1-07 — Observabilidad mínima
 
 Objetivo: detectar problemas antes de que todos los usuarios los reporten.
 
-- [ ] Reutilizar `AiOperationLog`, el dashboard de analítica y las métricas de
+- [x] Reutilizar `AiOperationLog`, el dashboard de analítica y las métricas de
       costos existentes.
-- [ ] Incorporar captura centralizada de excepciones del servidor y cliente.
-- [ ] Eliminar de eventos: tokens, cookies, audio, prompts, transcripciones,
+- [x] Incorporar captura centralizada de excepciones del servidor y cliente.
+- [x] Eliminar de eventos: tokens, cookies, audio, prompts, transcripciones,
       contraseñas y datos innecesarios del usuario.
-- [ ] Añadir comprobaciones de salud para aplicación, base, storage, correo y
+- [x] Añadir comprobaciones de salud para aplicación, base, storage, correo y
       cron sin ejecutar operaciones pagadas.
-- [ ] Alertar por errores críticos, fallos repetidos de proveedor, cron fallido,
+- [x] Alertar por errores críticos, fallos repetidos de proveedor, cron fallido,
       outbox de borrado acumulada y presupuesto cercano al límite.
-- [ ] Documentar diagnóstico, rollback, pausa de invitaciones y responsable.
+- [x] Documentar diagnóstico, rollback, pausa de invitaciones y responsable.
 
 Criterio de salida: cada fallo crítico tiene una señal, un responsable y un
 procedimiento que no depende de revisar manualmente la base de datos.
+
+Implementado el 27 de septiembre de 2026. `/admin/operations` ahora combina la
+telemetría segura de IA con salud de aplicación, base de datos, storage, correo,
+cron, presupuesto y cola de borrado; agrupa excepciones de servidor/cliente sin
+guardar contenido privado y permite cerrar incidentes. `GET /api/health`
+expone únicamente `ok/unavailable`, los cron y el correo conservan su último
+resultado normalizado, y las pantallas de error ES/EN permiten recuperarse sin
+mostrar detalles técnicos. La migración aditiva
+`20260927150000_add_operational_observability` fue aplicada y validada con
+pruebas unitarias/de integración, typecheck, lint, build y respuesta real 200
+de localhost. Diagnóstico, umbrales, rollback y pausa de invitaciones están en
+[`beta-p1-07-observabilidad-runbook.md`](beta-p1-07-observabilidad-runbook.md).
+La notificación externa se configurará junto con el hosting real; hasta entonces
+el panel, el health check y la revisión diaria son la señal oficial de la beta.
 
 ### P1-08 — QA de beta y privacidad
 
 Objetivo: comprobar el producto que realmente recibirán los invitados.
 
-- [ ] Probar cuentas A/B y verificar aislamiento de audios, progreso, feedback,
+- [x] Probar cuentas A/B y verificar aislamiento de audios, progreso, feedback,
       anuncios, límites y datos administrativos.
-- [ ] Probar registro, verificación, login, recuperación y borrado de cuenta.
-- [ ] Probar onboarding desde cero y examen de ubicación.
-- [ ] Probar una ruta completa de Learning Journey, Han Tutor, Han Companion,
+- [x] Automatizar registro, verificación, login, recuperación y borrado de
+      cuenta contra PostgreSQL temporal, sin servicios pagados.
+- [ ] Repetir el flujo de cuenta con email y OAuth reales en el dominio HTTPS.
+- [x] Probar onboarding desde cero y examen de ubicación en integración.
+- [x] Probar a nivel de componentes y servicios una ruta de Learning Journey,
+      Han Tutor, Han Companion, Speaking de Learning Journey, Speaking Lab,
+      Writing Lab, Missions y HanVocabulary por separado.
+- [ ] Repetir manualmente la ruta completa de Learning Journey, Han Tutor,
+      Han Companion,
       Speaking Lab, Writing Lab, Missions y HanVocabulary por separado.
-- [ ] Probar español e inglés y cambio de idioma.
+- [x] Probar la localización española e inglesa de los flujos críticos mediante
+      componentes y servicios.
+- [ ] Probar manualmente español, inglés y cambio de idioma en el dominio.
 - [ ] Probar Android Chrome e iPhone Safari con voz, cámara, permisos negados,
       red lenta, interrupción y reanudación.
-- [ ] Probar retención en 0 días y el procesamiento de borrados pendientes.
+- [x] Probar retención en 0 días y el procesamiento/reintento de borrados
+      pendientes con storage temporal.
+- [ ] Repetir retención y borrado contra el bucket privado de beta.
 - [ ] Comprobar recuperación de una copia de seguridad en un destino aislado.
 - [ ] Ejecutar un smoke final desde una cuenta invitada nueva.
 
 Criterio de salida: cero fallos críticos abiertos, cero acceso cruzado y todos
 los flujos esenciales completables en ambos idiomas y dispositivos objetivo.
+
+El gate automatizable y la matriz reproducible quedaron preparados el 27 de
+septiembre de 2026. `npm run test:beta` ejecuta la capa estática, crea una base y
+un storage temporales, aplica migraciones/seed, recorre los servicios críticos y
+termina con smoke. La evidencia, los casos A/B y el checklist físico están en
+[`beta-p1-08-qa-matrix.md`](beta-p1-08-qa-matrix.md). La capa automatizada está
+verde; P1-08 permanece abierto hasta completar dominio HTTPS, correo/OAuth,
+bucket cloud, restore de backup y Android/iPhone reales.
 
 ### P1-09 — Apertura gradual de la cohorte
 
@@ -409,7 +479,7 @@ La beta cerrada puede comenzar cuando:
 - [ ] correo, OAuth habilitado, cron y HTTPS fueron probados en el dominio;
 - [ ] audios y archivos son privados y sobreviven a un despliegue;
 - [ ] existe presupuesto global y límites por usuario/función;
-- [ ] anuncios, feedback y soporte están disponibles;
+- [x] anuncios, feedback y soporte están disponibles;
 - [ ] errores, costos y borrados pendientes generan señales operativas;
 - [ ] una restauración de DB y un rollback fueron ensayados;
 - [ ] Android Chrome e iPhone Safari completan los flujos críticos;

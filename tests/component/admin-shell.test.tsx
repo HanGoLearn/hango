@@ -28,9 +28,10 @@ describe("AdminShell", () => {
     expect(screen.getByRole("link", { name: "Analítica" })).toHaveClass(
       "bg-primary-500",
     );
-    expect(
-      screen.getByRole("link", { name: "Operaciones IA" }),
-    ).toHaveAttribute("href", "/admin/operations");
+    expect(screen.getByRole("link", { name: "Operaciones" })).toHaveAttribute(
+      "href",
+      "/admin/operations",
+    );
     expect(
       screen.queryByRole("link", { name: "Speaking Lab" }),
     ).not.toBeInTheDocument();

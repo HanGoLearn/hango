@@ -1,6 +1,6 @@
-# P1-06 — Experiencia, textos y guía de comunicación con la cohorte (borrador)
+# P1-06 — Experiencia, textos y guía de comunicación con la cohorte
 
-Estado: **diseño de experiencia y textos, sin implementar código**
+Estado: **implementado el 2026-09-27; publicación de la bienvenida pendiente de la cohorte**
 Responsable de este borrador: Claude (P1-06, `PLAN_BETA_CERRADA_FASE_1.md`)
 Fecha: 2026-09-19
 
@@ -28,6 +28,7 @@ que no se sientan perfectas, y tu ayuda para encontrarlos es exactamente lo
 que necesitamos.
 
 Un par de cosas antes de empezar:
+
 - Puedes reportar cualquier problema desde el botón de feedback dentro de la
   app, en cualquier momento.
 - Tu progreso y tus datos de esta beta son solo tuyos — no se comparten con
@@ -47,6 +48,7 @@ still being polished — you might run into bugs or things that don't feel
 perfect yet, and your help finding them is exactly what we need.
 
 A couple of things before you start:
+
 - You can report any problem from the feedback button inside the app, at
   any time.
 - Your progress and data from this beta are yours alone — they're not
@@ -64,6 +66,7 @@ siente para quien lo llena — pensado para completarse **en menos de un
 minuto desde el celular** (criterio de salida de P1-06).
 
 ### Punto de entrada
+
 Un botón/ícono de feedback siempre visible y de fácil alcance con el pulgar
 en móvil — sugiero integrarlo junto al ícono de Han flotante o en el menú de
 Configuración, no como una pantalla nueva separada de todo lo demás.
@@ -72,6 +75,7 @@ cumplir: alcanzable con una mano, visible en cualquier pantalla de la app
 autenticada.
 
 ### Categorías propuestas (para el campo "categoría")
+
 Alineadas con las superficies reales de la app, no genéricas:
 
 - 🐛 Encontré un error / algo no funciona
@@ -82,6 +86,7 @@ Alineadas con las superficies reales de la app, no genéricas:
 - ⭐ Otro comentario
 
 ### Estructura del formulario
+
 1. **¿Qué tipo de comentario es?** (las categorías de arriba, selección
    única, con ícono — fácil de tocar).
 2. **¿Cómo calificarías tu experiencia hasta ahora?** (opcional,
@@ -101,6 +106,7 @@ servidor (mismo patrón que otras acciones de esta app), no algo que la
 persona deba escribir.
 
 ### Qué NO incluir en esta primera cohorte (por decisión explícita del plan)
+
 - Adjuntar archivos o capturas de pantalla.
 - Campos obligatorios de puntuación.
 - Cualquier paso adicional después de enviar (mantenerlo en un solo envío).
@@ -112,19 +118,19 @@ persona deba escribir.
 **Español:**
 "¿Necesitas ayuda o encontraste un problema? Escríbenos a
 `arean.mendoza@unmsm.edu.pe`. Normalmente respondemos en
-`[COMPLETAR: tiempo de respuesta, ej. 24-48 horas hábiles]`."
+un máximo de 2 días hábiles durante la beta cerrada."
 
 **English:**
 "Need help or found a problem? Write to us at
 `arean.mendoza@unmsm.edu.pe`. We usually reply within
-`[COMPLETE: response time, e.g. 24-48 business hours]`."
+2 business days during the closed beta."
 
 El correo ya está definido: el usuario autorizó (2026-09-20) usar
 `arean.mendoza@unmsm.edu.pe` como correo temporal de soporte y privacidad
 para esta beta cerrada — mismo correo usado en P1-02, para no tener dos
 fuentes de verdad distintas del mismo dato. Reemplazarlo antes de un
-lanzamiento público. El tiempo de respuesta sigue siendo una decisión
-operativa pendiente del usuario.
+lanzamiento público. Para la primera cohorte se adopta un compromiso inicial
+de hasta 2 días hábiles; puede ajustarse antes de enviar invitaciones.
 
 ## 4. Guía breve para participantes (qué probar, qué es beta, cómo reportar)
 
@@ -144,14 +150,15 @@ funciones limitadas o cambios de un día a otro. Tu opinión ayuda a decidir
 qué mejorar antes de abrirlo a más gente.
 
 **Qué te pedimos que pruebes:**
+
 1. Regístrate y completa el perfil inicial (onboarding).
-2. Haz el examen de ubicación si te lo ofrece, o empieza por tu primera
-   lección.
+2. Empieza en Fundamentos desde cero y abre tu primera lección.
 3. Completa al menos una lección completa, incluyendo su parte de práctica
    oral si tu dispositivo tiene micrófono.
 4. Habla con Han (el tutor) al menos una vez — pregúntale algo sobre lo que
    acabas de aprender.
-5. Si tienes un momento libre, explora Speaking Lab o Writing Lab.
+5. Si tienes un momento libre, explora una de las tres estaciones guiadas de
+   Speaking Lab o prueba Writing Lab.
 
 **Cómo reportar un problema:**
 Usa el botón de feedback dentro de la app en cualquier momento — no hace
@@ -178,13 +185,15 @@ limited features, or day-to-day changes. Your feedback helps decide what
 to improve before opening it up to more people.
 
 **What we're asking you to try:**
+
 1. Register and complete the initial profile (onboarding).
-2. Take the placement exam if offered, or start with your first lesson.
+2. Start from zero in Foundations and open your first lesson.
 3. Complete at least one full lesson, including its speaking practice part
    if your device has a microphone.
 4. Talk to Han (the tutor) at least once — ask about something you just
    learned.
-5. If you have a free moment, explore Speaking Lab or Writing Lab.
+5. If you have a free moment, explore one of the three guided Speaking Lab
+   stations or try Writing Lab.
 
 **How to report a problem:**
 Use the feedback button inside the app at any time — no need to wait until
@@ -198,13 +207,18 @@ share your access with anyone else — it's personal, invitation-only.
 
 Thank you for trying HanGo with us. 🙏
 
-## 5. Lo que falta para implementar (no lo hago yo)
+## 5. Implementación cerrada
 
-- Codex: modelo `Feedback` (o el nombre que definan), actions, autorización,
-  bandeja administrativa con estados nuevo/revisando/resuelto.
-- Usuario: rellenar el tiempo de respuesta objetivo (el correo de soporte
-  ya quedó definido el 2026-09-20: `arean.mendoza@unmsm.edu.pe`, temporal
-  para esta beta).
-- Decidir junto con Codex dónde vive exactamente el botón de feedback en la
-  interfaz (yo doy el criterio de ubicación, no el pixel exacto hasta que
-  se implemente).
+- `BetaFeedback` guarda categoría, puntuación opcional, mensaje, ruta, idioma,
+  usuario, estado y seguimiento administrativo; no acepta adjuntos.
+- El botón Feedback permanece accesible en la aplicación autenticada y abre
+  un formulario de una sola pantalla. En móvil queda a la izquierda, separado
+  de Han, y en escritorio en la esquina inferior izquierda.
+- El usuario ve sus cinco reportes recientes y cualquier respuesta del equipo.
+- `/admin/feedback` permite filtrar por nuevo, revisando o resuelto, responder
+  al usuario y guardar una nota interna.
+- Configuración muestra el correo temporal de soporte y el compromiso de
+  respuesta. Los anuncios ahora pueden dirigirse a español, inglés o ambos.
+- Antes de abrir la cohorte solo falta crear/publicar los dos anuncios de
+  bienvenida con el contenido de la sección 1 y comprobar el recorrido en un
+  teléfono físico autenticado.

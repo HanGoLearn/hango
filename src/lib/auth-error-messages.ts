@@ -17,7 +17,7 @@ export function getAuthErrorMessage(
     case "OAuthAccountNotLinked":
       return messages.oauthNotLinked;
     case "AccessDenied":
-      return messages.oauthCancelled;
+      return messages.registrationUnavailable;
     case "Configuration":
       return messages.oauthUnavailable;
     default:

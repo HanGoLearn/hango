@@ -81,8 +81,8 @@ export function AudioRecorder({
   onToneAnalysis,
   messages,
 }: {
-  onSubmitRecording: (formData: FormData) => Promise<void>;
-  onSubmitText: (text: string) => Promise<void>;
+  onSubmitRecording: (formData: FormData) => Promise<boolean>;
+  onSubmitText: (text: string) => Promise<boolean>;
   /** When present, enables local (no-AI-cost) tone-contour scoring against this pinyin. */
   expectedPinyin?: string;
   /** Fires with the full per-syllable breakdown as soon as local analysis finishes - lets a parent shade the prompt text (CharacterToneFeedback) before the recording is even submitted. */
@@ -192,13 +192,23 @@ export function AudioRecorder({
     if (typeof toneScore === "number") {
       formData.append("toneScore", String(toneScore));
     }
-    await onSubmitRecording(formData);
+    try {
+      const submitted = await onSubmitRecording(formData);
+      if (!submitted) setState("recorded");
+    } catch {
+      setState("recorded");
+    }
   }
 
   async function handleSubmitText() {
     if (!textDraft.trim()) return;
     setState("submitting");
-    await onSubmitText(textDraft.trim());
+    try {
+      const submitted = await onSubmitText(textDraft.trim());
+      if (!submitted) setState("idle");
+    } catch {
+      setState("idle");
+    }
   }
 
   if (useTextFallback) {

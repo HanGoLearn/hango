@@ -6,16 +6,25 @@ import {
   getPendingAnnouncementsForUser,
 } from "@/lib/learner-notices";
 import type { LearnerAnnouncement } from "@/lib/learner-notices";
+import {
+  interfaceLanguageFromLocale,
+  isAppLocale,
+  type AppLocale,
+} from "@/i18n/config";
 export type { LearnerAnnouncement } from "@/lib/learner-notices";
 
-export async function getPendingAnnouncementsAction(): Promise<
-  LearnerAnnouncement[]
-> {
+export async function getPendingAnnouncementsAction(
+  locale: AppLocale,
+): Promise<LearnerAnnouncement[]> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return [];
 
-  return getPendingAnnouncementsForUser(userId);
+  if (!isAppLocale(locale)) return [];
+  return getPendingAnnouncementsForUser(
+    userId,
+    interfaceLanguageFromLocale(locale),
+  );
 }
 
 export async function acknowledgeAnnouncementAction(id: string): Promise<void> {

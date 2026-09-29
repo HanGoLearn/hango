@@ -12,11 +12,11 @@ import { CharacterToneFeedback } from "@/components/speaking/character-tone-feed
 import { SpeakingFeedbackDisplay } from "@/components/speaking/speaking-feedback-display";
 import type { SyllableScore } from "@/lib/tone-analysis";
 import {
-  submitRecordingAction,
   submitTextFallbackAction,
   completeSpeakingSessionAction,
   type SpeakingAttemptResult,
 } from "@/lib/actions/speaking";
+import { submitSpeakingRecording } from "@/lib/speaking-upload-client";
 import { getDialogueAudioAction } from "@/lib/actions/dialogue-audio";
 import { localePath, type AppLocale } from "@/i18n/config";
 import type { SpeakingLabMessages } from "@/i18n/messages/types";
@@ -60,12 +60,14 @@ export function SpeakingSession({
   }
 
   async function handleSubmitRecording(formData: FormData) {
-    const attemptResult = await submitRecordingAction(sessionId, formData);
+    const attemptResult = await submitSpeakingRecording(sessionId, formData);
     if (attemptResult.ok) {
       setError(null);
       setResult(attemptResult.result);
+      return true;
     } else {
       setError(localizeSpeakingError(attemptResult.error, messages.errors));
+      return false;
     }
   }
 
@@ -74,8 +76,10 @@ export function SpeakingSession({
     if (attemptResult.ok) {
       setError(null);
       setResult(attemptResult.result);
+      return true;
     } else {
       setError(localizeSpeakingError(attemptResult.error, messages.errors));
+      return false;
     }
   }
 

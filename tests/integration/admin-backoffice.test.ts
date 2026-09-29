@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { grantAdminCoins } from "@/lib/admin-communications";
+import {
+  createBetaFeedback,
+  getRecentBetaFeedbackForUser,
+} from "@/lib/beta-feedback";
 import { getAdminOverview, getAdminUserDetail } from "@/lib/admin-dashboard";
 import {
   acknowledgeAnnouncementForUser,
@@ -21,6 +25,7 @@ beforeAll(async () => {
         { email: { startsWith: "learner-notice-", endsWith: "@hango.dev" } },
         { email: { startsWith: "admin-coins-", endsWith: "@hango.dev" } },
         { email: { startsWith: "learner-coins-", endsWith: "@hango.dev" } },
+        { email: { startsWith: "learner-feedback-", endsWith: "@hango.dev" } },
         { email: { startsWith: "admin-user-360-", endsWith: "@hango.dev" } },
       ],
     },
@@ -72,14 +77,27 @@ describe("admin back-office (integration, real database)", () => {
         createdByUserId: administrator.id,
       },
     });
-    testAnnouncementIds.push(active.id, draft.id);
+    const englishOnly = await db.announcement.create({
+      data: {
+        title: "English beta notice",
+        message: "This should only be delivered on the English interface.",
+        status: "PUBLISHED",
+        locale: "EN",
+        startsAt: new Date(now - 60_000),
+        createdByUserId: administrator.id,
+      },
+    });
+    testAnnouncementIds.push(active.id, draft.id, englishOnly.id);
 
-    const firstVisit = await getPendingAnnouncementsForUser(learner.id);
+    const firstVisit = await getPendingAnnouncementsForUser(learner.id, "ES");
     expect(firstVisit.map((announcement) => announcement.id)).toContain(
       active.id,
     );
     expect(firstVisit.map((announcement) => announcement.id)).not.toContain(
       draft.id,
+    );
+    expect(firstVisit.map((announcement) => announcement.id)).not.toContain(
+      englishOnly.id,
     );
     expect(
       await db.announcementReceipt.findUnique({
@@ -94,10 +112,41 @@ describe("admin back-office (integration, real database)", () => {
 
     await acknowledgeAnnouncementForUser(learner.id, active.id);
     expect(
-      (await getPendingAnnouncementsForUser(learner.id)).map(
+      (await getPendingAnnouncementsForUser(learner.id, "ES")).map(
         (announcement) => announcement.id,
       ),
     ).not.toContain(active.id);
+  });
+
+  it("stores attachment-free feedback and returns only the author's history", async () => {
+    const [author, otherLearner] = await Promise.all([
+      createUser("learner-feedback-author"),
+      createUser("learner-feedback-other"),
+    ]);
+
+    await expect(
+      createBetaFeedback({
+        userId: author.id,
+        category: "CONFUSING",
+        rating: 3,
+        message: "I was not sure what to press after the exercise.",
+        path: "/en/lesson/example",
+        locale: "EN",
+      }),
+    ).resolves.toBe("CREATED");
+
+    const [authorHistory, otherHistory] = await Promise.all([
+      getRecentBetaFeedbackForUser(author.id),
+      getRecentBetaFeedbackForUser(otherLearner.id),
+    ]);
+    expect(authorHistory).toHaveLength(1);
+    expect(authorHistory[0]).toMatchObject({
+      category: "CONFUSING",
+      rating: 3,
+      status: "NEW",
+      adminResponse: null,
+    });
+    expect(otherHistory).toEqual([]);
   });
 
   it("grants HanCoins atomically and is idempotent for a retried request", async () => {
@@ -324,9 +373,9 @@ describe("admin back-office (integration, real database)", () => {
 
       const overview = await getAdminOverview(admin.id);
 
-      expect(
-        overview.topAiUsers.some((user) => user.id === admin.id),
-      ).toBe(false);
+      expect(overview.topAiUsers.some((user) => user.id === admin.id)).toBe(
+        false,
+      );
       // The admin's $999 entry must not leak into the shared monthly total -
       // the strongest possible sign the exclusion filter still works.
       expect(overview.ai.monthCostUsd).toBeLessThan(999);

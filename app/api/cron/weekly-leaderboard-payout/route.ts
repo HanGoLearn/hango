@@ -1,5 +1,10 @@
 import { serverEnv } from "@/lib/env/server";
 import { runWeeklyLeaderboardPayout } from "@/lib/weekly-leaderboard-payout";
+import {
+  markOperationalHeartbeatBestEffort,
+  normalizedOperationalErrorCode,
+  recordOperationalEventBestEffort,
+} from "@/lib/operational-events";
 
 /**
  * Weekly leaderboard payout trigger (2026-08-30). GET, not POST - matches
@@ -18,6 +23,36 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const result = await runWeeklyLeaderboardPayout();
-  return Response.json(result);
+  await markOperationalHeartbeatBestEffort({
+    key: "cron.weekly-leaderboard-payout",
+    status: "RUNNING",
+  });
+
+  try {
+    const result = await runWeeklyLeaderboardPayout();
+    await markOperationalHeartbeatBestEffort({
+      key: "cron.weekly-leaderboard-payout",
+      status: "HEALTHY",
+    });
+    return Response.json(result, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    const errorCode = normalizedOperationalErrorCode(error);
+    await Promise.all([
+      markOperationalHeartbeatBestEffort({
+        key: "cron.weekly-leaderboard-payout",
+        status: "FAILED",
+        errorCode,
+      }),
+      recordOperationalEventBestEffort({
+        source: "CRON",
+        severity: "CRITICAL",
+        code: errorCode,
+        route: "/api/cron/weekly-leaderboard-payout",
+        method: "GET",
+      }),
+    ]);
+    throw error;
+  }
 }

@@ -1106,7 +1106,7 @@ direct DB query (not full suite re-run this round, since the fix is in
 
 ## FASE 17 — Closed Beta Deployment
 
-Not started. The goal isn't "finish code" — it's to get HanGo running in
+In progress. The goal isn't "finish code" — it's to get HanGo running in
 production with real invited users, on real (not simulated) services
 where it matters, with a way to know if something breaks and what it's
 costing. (Merged in 2026-08-08 from the former `TASKS_CIERRE_BETA.md`,
@@ -1129,11 +1129,10 @@ Nothing below can seriously proceed without these:
       fail-closed behavior and verification requirement already exist. Pending:
       verify the beta sending domain, load credentials outside Git and test
       delivery, failure and safe resend.
-- [ ] **Where to host the app.** Being Next.js, Vercel is the
-      lowest-friction path (same team that maintains the framework), but
-      any host that supports Node.js + Postgres works.
-- [ ] **Where to host the Postgres database**, if not bundled with the
-      chosen host (e.g. Vercel Postgres, Neon, Supabase, Railway).
+- [x] **Where to host the app.** Vercel was selected for the closed beta;
+      creation and domain verification remain in P1-03.
+- [x] **Where to host the Postgres database.** Prisma Postgres was selected as
+      an isolated beta database; provisioning and backup drill remain in P1-03.
 - [ ] **Error monitoring tool** (e.g. Sentry) — free tier is plenty for a
       closed beta.
 - [ ] **Product analytics tool** (optional for initial launch, but
@@ -1159,23 +1158,27 @@ Nothing below can seriously proceed without these:
 ### Fase 2 — Deploy
 
 - [ ] Configure the chosen host (Next.js build, env vars, domain).
-- [ ] Configure the production database and run Prisma migrations
-      (`npm run db:migrate` against the real database).
+- [ ] Configure the production database and run Prisma migrations with the
+      non-development command (`npm run db:migrate:deploy`) over `DIRECT_URL`.
 - [ ] Run the content seed (`prisma/seed.ts`) against production — the 12
       real Restaurant/Hotel/Shopping lessons.
-- [ ] Configure real audio storage for Speaking Lab (today it's a local
-      disk adapter — `src/lib/storage/providers/local.ts` — needs a real
-      cloud storage adapter before production, since local filesystem
-      doesn't persist on most hosts). This now also covers dialogue/
-      vocabulary/grammar audio, which use the same storage abstraction.
+- [ ] Configure the implemented private Vercel Blob provider for Speaking Lab,
+      dialogue, vocabulary and grammar audio. The adapter exists and production
+      now rejects local disk. Speaking Lab's authenticated direct browser upload
+      for recordings over 4.5 MB is implemented; the private store/token and its
+      real-domain persistence, interruption and A/B isolation tests remain.
 - [ ] Configure the chosen error monitoring.
 - [ ] Configure the chosen product analytics (if included now).
 - [ ] Configure automatic database backups.
 
+P1-03 deployment decisions, variables, exact order, verification gate and
+rollback are documented in
+[`beta-p1-03-despliegue-runbook.md`](beta-p1-03-despliegue-runbook.md).
+
 ### Fase 3 — Beta access
 
-- [ ] Decide the invitation mechanism (manual email list? invite code?
-      open but limited registration?).
+- [x] Use an administrator-managed email allowlist with cohort, expiration,
+      activation and revocation, enforced for credentials and Google OAuth.
 - [ ] Prepare a welcome message explaining the product's real limitations
       right now: content in Chinese without a human linguistic review yet
       (FASE 15.5 pending) — be honest with early users about what a beta
@@ -1186,13 +1189,30 @@ Nothing below can seriously proceed without these:
 
 With real users in, watch:
 
+- [x] Add a privacy-minimized internal operations baseline: centralized
+      server/client exception signals, service health, cron/email heartbeats,
+      deletion-outbox alerts, AI budget/provider signals and a documented
+      incident/rollback procedure. Admin: `/admin/operations`; public status:
+      `/api/health`; runbook:
+      [`beta-p1-07-observabilidad-runbook.md`](beta-p1-07-observabilidad-runbook.md).
+      Implemented and migrated 2026-09-27. External notification still belongs
+      to the real hosting/monitoring setup below.
+
+- [x] Protect paid AI calls with an application-wide daily budget, atomic
+      authorizations, per-family TEXT/STT/TTS/Realtime kill switches and the
+      existing per-user/per-feature limits. Admin control lives at
+      `/admin/limits`; the initial editable application limit is USD 5/day.
+- [ ] Configure a separate low budget/alert in the AI provider account before
+      inviting the cohort; the application control is not a substitute for the
+      provider-side ceiling.
 - [ ] Registrations and onboarding completion.
 - [ ] Real lesson progress (where do people drop off?).
 - [ ] AI Teacher / Speaking / Writing / Missions usage.
 - [ ] Day-1 and day-7 retention.
 - [ ] Real AI cost per active user (`AiUsageLog` already tracks this in
       the database — build a simple report off that table).
-- [ ] Provider failures (AI, STT, email).
+- [x] Provider failures (AI, STT, email) have internal normalized signals;
+      external delivery/alert routing remains part of production setup.
 
 At the end of this phase: decide whether HanGo is ready for a wider
 launch, or what needs fixing first.
@@ -1214,8 +1234,9 @@ launch, or what needs fixing first.
   by a fluent human.
 - [ ] **16.3/16.4** — Real device/browser testing (only automated
   tests + manual dev-server checks so far).
-- [ ] **16.7** — Production monitoring/error tracking (not configured;
-  also tracked in FASE 17 Paso 0 above).
+- [ ] **16.7** — Internal monitoring/error tracking is implemented; production
+  hosting must still connect the external notification destination and verify
+  it with an incident drill (also tracked in FASE 17 Paso 0 above).
 
 ---
 
@@ -5843,6 +5864,50 @@ That document is the source of truth for pre-beta work; keep updates here terse.
   and defers repeated reward recalculation until the scenario batch is ready.
   The focused placement path improved from 331 seconds to 86 seconds (about
   74%) without changing placement results, rewards or learner-visible scope.
+- [x] **P1 closed-beta invitation access (2026-09-27):** new account creation
+  is now controlled by a normalized administrative email allowlist shared by
+  credentials and Google OAuth. `/admin/invitations` records cohort, expiry,
+  activation and revocation; generic registration responses avoid account or
+  invitation enumeration, existing accounts keep normal sign-in, and
+  `HANGO_BETA_ACCESS_MODE=OPEN` provides a code-free rollback. The migration is
+  additive and applied to development. Focused invite/OAuth, registration and
+  full learner-path tests pass; real Google callback verification remains part
+  of the future HTTPS beta deployment. Han was not changed.
+- [x] **P1 closed-beta feedback and support (2026-09-27):** added an
+  attachment-free, bilingual report flow available throughout the authenticated
+  app. Reports derive their owner from the session and capture category,
+  optional score, route and locale; learners can see the five latest reports
+  and administrative replies. `/admin/feedback` provides NEW/REVIEWING/RESOLVED
+  triage, visible responses and private notes. Existing announcements now target
+  ES, EN or both, while historical null-locale announcements remain global.
+  Settings publishes the temporary beta support address and a two-business-day
+  response target. The additive migration is applied; targeted unit/component
+  tests pass 12/12 and the real-database communication suite passes 5/5. Han's
+  behavior and all four distinct speaking/tutor systems were untouched.
+- [x] **P1-08 local beta/privacy gate (2026-09-27):** added the reproducible
+  `npm run test:beta` gate and
+  [`beta-p1-08-qa-matrix.md`](beta-p1-08-qa-matrix.md). It uses an ephemeral
+  PostgreSQL/storage environment, never a paid AI key or learner data. The
+  selected static suites pass 246/246; the deep integration selection passes
+  163/163 plus smoke, including 3/3 for one-time email verification and 2/2 for
+  A/B lesson-progress/announcement isolation. Existing
+  coverage also verifies private audio, feedback, per-user limits, placement,
+  quiz, Missions, Writing and Speaking ownership. No Han behavior was changed.
+- [ ] **P1-08 external/manual closure:** repeat the matrix on the HTTPS beta
+  domain with Resend, Google OAuth, cloud storage, an isolated backup restore,
+  Android Chrome, iPhone Safari and one newly invited real account. Until then,
+  P1-09/ola 0 remains blocked even though the local gate is green.
+- [x] **P1-03 private Speaking Lab direct upload (2026-09-27):** production no
+  longer sends learner recordings through a Server Action body. It requests a
+  ten-minute, path/owner/session-bound Vercel Blob token, uploads directly to a
+  private object, then downloads and validates the bytes server-side before STT
+  or feedback. Token requests must originate from HanGo itself. Invalid uploads
+  are removed, interrupted uploads are covered by orphan retention, and
+  cross-user finalization cannot delete the owner's object. Local development
+  retains the previous filesystem path. Focused storage/security tests pass
+  24/24, Speaking Lab passes 12/12 against ephemeral PostgreSQL, the static beta
+  gate passes 246/246 and the production build is green. Real Blob, >4.5 MB
+  mobile upload and redeploy persistence remain P1-03.
 - [ ] **Beta readiness:** real Android/iPhone QA, privacy/terms/AI disclosure,
   human linguistic review, performance/image optimization and a measured closed
   beta before deciding on PWA/APK.

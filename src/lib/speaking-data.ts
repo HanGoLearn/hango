@@ -37,6 +37,10 @@ import {
   processPrivateObjectDeletionJobs,
   queuePrivateSpeakingObjectDeletion,
 } from "@/lib/private-object-retention";
+import {
+  assertOwnedSpeakingUploadKey,
+  buildSpeakingUploadKey,
+} from "@/lib/speaking-upload";
 
 /** Only lesson-scoped sessions produce evidence - Competency has no scenario-level link (see progress-evidence.ts). */
 async function recordSpeakingEvidence(
@@ -189,9 +193,71 @@ export async function submitRecording(
   const session = await assertOwnedSession(userId, sessionId);
 
   const storage = getStorageProvider();
-  const extension = speakingAudioExtension(mimeType);
-  const key = `speaking/${userId}/${sessionId}-${Date.now()}.${extension}`;
+  const key = buildSpeakingUploadKey(userId, sessionId, mimeType);
   await storage.upload(key, audio, mimeType);
+
+  return processStoredRecording({
+    userId,
+    session,
+    key,
+    audio,
+    mimeType,
+    durationSeconds,
+    toneScore,
+  });
+}
+
+/** Finalizes a browser-to-Blob upload after the action validated its bytes. */
+export async function submitUploadedRecording(
+  userId: string,
+  sessionId: string,
+  storageKey: string,
+  audio: Buffer,
+  mimeType: string,
+  durationSeconds: number,
+  toneScore: number | null = null,
+) {
+  checkRateLimit(userId);
+  const session = await assertOwnedSession(userId, sessionId);
+  const key = assertOwnedSpeakingUploadKey(
+    storageKey,
+    userId,
+    sessionId,
+    mimeType,
+  );
+  const existing = await db.speakingAttempt.findFirst({
+    where: { audioFilePath: key },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new SpeakingInputError(
+      "Something went wrong submitting your attempt. Please try again.",
+    );
+  }
+
+  return processStoredRecording({
+    userId,
+    session,
+    key,
+    audio,
+    mimeType,
+    durationSeconds,
+    toneScore,
+  });
+}
+
+async function processStoredRecording(input: {
+  userId: string;
+  session: Awaited<ReturnType<typeof assertOwnedSession>>;
+  key: string;
+  audio: Buffer;
+  mimeType: string;
+  durationSeconds: number;
+  toneScore: number | null;
+}) {
+  const { userId, session, key, audio, mimeType, durationSeconds, toneScore } =
+    input;
+  const storage = getStorageProvider();
 
   let transcript = "";
   let confidence: number | null = null;
@@ -215,22 +281,7 @@ export async function submitRecording(
       result.confidence,
     );
     if (!assessment.ok) {
-      try {
-        await storage.delete(key);
-      } catch {
-        // A cleanup failure must not turn a repeatable learner-input problem
-        // into a generic submission error. Persist it for the daily retry.
-        try {
-          await queuePrivateSpeakingObjectDeletion({
-            storageKey: key,
-            ownerUserId: userId,
-            reason: "FAILED_UPLOAD",
-          });
-        } catch {
-          // The orphan scanner is the final fallback if even the outbox write
-          // is temporarily unavailable.
-        }
-      }
+      await deleteOrQueueFailedSpeakingObject(key, userId);
       throw new SpeakingInputError(HAN_STT_REPEAT_MESSAGE);
     }
     transcript = assessment.transcript;
@@ -256,7 +307,7 @@ export async function submitRecording(
 
   const attempt = await db.speakingAttempt.create({
     data: {
-      sessionId,
+      sessionId: session.id,
       audioFilePath: key,
       durationSeconds,
       transcript,
@@ -287,13 +338,40 @@ export async function submitRecording(
   return attempt;
 }
 
-function speakingAudioExtension(
-  mimeType: string,
-): "webm" | "ogg" | "m4a" | "wav" {
-  if (mimeType === "audio/ogg") return "ogg";
-  if (mimeType === "audio/mp4") return "m4a";
-  if (mimeType === "audio/wav") return "wav";
-  return "webm";
+async function deleteOrQueueFailedSpeakingObject(
+  storageKey: string,
+  ownerUserId: string,
+): Promise<void> {
+  try {
+    await getStorageProvider().delete(storageKey);
+  } catch {
+    // A cleanup failure must not replace a useful learner-facing error. Keep
+    // it in the durable outbox; the orphan scanner is the final fallback.
+    try {
+      await queuePrivateSpeakingObjectDeletion({
+        storageKey,
+        ownerUserId,
+        reason: "FAILED_UPLOAD",
+      });
+    } catch {
+      // Intentionally best effort.
+    }
+  }
+}
+
+export async function discardUnclaimedSpeakingUpload(
+  userId: string,
+  sessionId: string,
+  storageKey: string,
+): Promise<void> {
+  const key = assertOwnedSpeakingUploadKey(storageKey, userId, sessionId);
+  const referenced = await db.speakingAttempt.findFirst({
+    where: { audioFilePath: key },
+    select: { id: true },
+  });
+  if (!referenced) {
+    await deleteOrQueueFailedSpeakingObject(key, userId);
+  }
 }
 
 /** 10.2 "Provide text fallback" - no microphone/recording involved, transcript is exactly what the learner typed. */

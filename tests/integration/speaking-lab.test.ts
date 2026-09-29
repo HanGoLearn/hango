@@ -11,6 +11,7 @@ import {
 } from "@/lib/speaking-data";
 import { getStorageProvider } from "@/lib/storage";
 import { resolveSafePath } from "@/lib/storage/providers/local";
+import { buildSpeakingUploadKey } from "@/lib/speaking-upload";
 
 // Only auth() is mocked — everything else runs against the real database
 // and the real local filesystem storage adapter. No OPENAI_API_KEY is set
@@ -19,7 +20,8 @@ import { resolveSafePath } from "@/lib/storage/providers/local";
 const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
-const { createSpeakingSessionAction } = await import("@/lib/actions/speaking");
+const { createSpeakingSessionAction, submitUploadedRecordingAction } =
+  await import("@/lib/actions/speaking");
 
 const testEmails: string[] = [];
 
@@ -37,6 +39,26 @@ async function createTestUser(email: string) {
   await db.learnerProfile.create({ data: { userId: user.id } });
   authMock.mockResolvedValue({ user: { id: user.id } });
   return user;
+}
+
+function pcmWav(durationSeconds = 0.1, sampleRate = 8_000): Buffer {
+  const sampleCount = Math.max(1, Math.floor(durationSeconds * sampleRate));
+  const dataSize = sampleCount * 2;
+  const buffer = Buffer.alloc(44 + dataSize);
+  buffer.write("RIFF", 0, "ascii");
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVE", 8, "ascii");
+  buffer.write("fmt ", 12, "ascii");
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36, "ascii");
+  buffer.writeUInt32LE(dataSize, 40);
+  return buffer;
 }
 
 describe("Speaking Lab (integration, real database, mock AI/STT providers)", () => {
@@ -82,6 +104,91 @@ describe("Speaking Lab (integration, real database, mock AI/STT providers)", () 
 
     const filePath = resolveSafePath(attempt.audioFilePath!);
     await expect(access(filePath)).resolves.toBeUndefined();
+  });
+
+  it("validates and finalizes an already uploaded private recording", async () => {
+    const user = await createTestUser(
+      `speaking-direct-${Date.now()}@hango.dev`,
+    );
+    const session = await createSpeakingSession(
+      user.id,
+      "SHADOWING",
+      "你好",
+      {},
+    );
+    const key = buildSpeakingUploadKey(user.id, session.id, "audio/wav");
+    const storage = getStorageProvider();
+    await storage.upload(key, pcmWav(), "audio/wav");
+
+    const result = await submitUploadedRecordingAction(session.id, {
+      storageKey: key,
+      claimedMimeType: "audio/wav",
+      toneScore: 72,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.result.audioUrl).toBe(`/api/audio/${key}`);
+      expect(result.result.feedback.toneScore).toBe(72);
+    }
+    const attempt = await db.speakingAttempt.findFirstOrThrow({
+      where: { audioFilePath: key },
+    });
+    expect(attempt.sessionId).toBe(session.id);
+    await storage.delete(key);
+  });
+
+  it("deletes an invalid direct upload before it reaches STT", async () => {
+    const user = await createTestUser(
+      `speaking-direct-invalid-${Date.now()}@hango.dev`,
+    );
+    const session = await createSpeakingSession(
+      user.id,
+      "PRONUNCIATION",
+      "你好",
+      {},
+    );
+    const key = buildSpeakingUploadKey(user.id, session.id, "audio/webm");
+    const storage = getStorageProvider();
+    await storage.upload(key, Buffer.from("not audio"), "audio/webm");
+
+    const result = await submitUploadedRecordingAction(session.id, {
+      storageKey: key,
+      claimedMimeType: "audio/webm",
+      toneScore: null,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Unsupported recording format.",
+    });
+    expect(await storage.exists(key)).toBe(false);
+  });
+
+  it("cannot finalize or delete another learner's direct upload", async () => {
+    const owner = await createTestUser(
+      `speaking-direct-owner-${Date.now()}@hango.dev`,
+    );
+    const session = await createSpeakingSession(
+      owner.id,
+      "PRONUNCIATION",
+      "你好",
+      {},
+    );
+    const key = buildSpeakingUploadKey(owner.id, session.id, "audio/wav");
+    const storage = getStorageProvider();
+    await storage.upload(key, pcmWav(), "audio/wav");
+
+    await createTestUser(`speaking-direct-intruder-${Date.now()}@hango.dev`);
+    const result = await submitUploadedRecordingAction(session.id, {
+      storageKey: key,
+      claimedMimeType: "audio/wav",
+      toneScore: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(await storage.exists(key)).toBe(true);
+    await storage.delete(key);
   });
 
   it("processes but does not retain audio when the learner selected that privacy option", async () => {

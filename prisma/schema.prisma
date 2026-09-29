@@ -26,6 +26,12 @@ enum UserRole {
   ADMINISTRATOR
 }
 
+enum BetaInvitationStatus {
+  PENDING
+  ACTIVATED
+  REVOKED
+}
+
 model User {
   id             String    @id @default(cuid())
   name           String?
@@ -76,8 +82,37 @@ model User {
   announcementReceipts    AnnouncementReceipt[]
   adminCoinGrantsReceived AdminCoinGrant[]      @relation("AdminCoinGrantRecipient")
   adminCoinGrantsCreated  AdminCoinGrant[]      @relation("AdminCoinGrantCreator")
+  betaInvitationsCreated  BetaInvitation[]      @relation("BetaInvitationCreator")
+  activatedBetaInvitation BetaInvitation?       @relation("BetaInvitationActivatedUser")
+  betaFeedbackSubmitted   BetaFeedback[]        @relation("BetaFeedbackAuthor")
+  betaFeedbackReviewed    BetaFeedback[]        @relation("BetaFeedbackReviewer")
 
   @@index([createdAt])
+}
+
+/// Administrative allowlist for the closed beta. Emails are stored trimmed
+/// and lowercase by application code so the unique key is independent of the
+/// capitalization used by the invited learner.
+model BetaInvitation {
+  id              String               @id @default(cuid())
+  email           String               @unique
+  status          BetaInvitationStatus @default(PENDING)
+  cohort          String?
+  note            String?              @db.Text
+  expiresAt       DateTime?
+  invitedAt       DateTime             @default(now())
+  activatedAt     DateTime?
+  revokedAt       DateTime?
+  createdByUserId String?
+  activatedUserId String?              @unique
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  createdBy     User? @relation("BetaInvitationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  activatedUser User? @relation("BetaInvitationActivatedUser", fields: [activatedUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, invitedAt])
+  @@index([cohort, status])
 }
 
 enum PrivateObjectDeletionReason {
@@ -1766,6 +1801,67 @@ model AiOperationLog {
   @@index([userId, createdAt])
 }
 
+enum OperationalEventSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum OperationalEventSource {
+  SERVER
+  CLIENT
+  CRON
+  EMAIL
+  STORAGE
+  DATABASE
+}
+
+/// Privacy-minimized application telemetry. A row identifies only a normalized
+/// failure class and route; it never stores request bodies, headers, cookies,
+/// prompts, transcripts, audio, user identifiers, raw errors, or stack traces.
+/// Repeated occurrences share one fingerprint so the admin can spot escalation
+/// without retaining a copy of every failure.
+model OperationalEvent {
+  id              String                   @id @default(cuid())
+  fingerprint     String                   @unique
+  source          OperationalEventSource
+  severity        OperationalEventSeverity
+  code            String
+  route           String?
+  method          String?
+  digest          String?
+  occurrenceCount Int                      @default(1)
+  firstSeenAt     DateTime                 @default(now())
+  lastSeenAt      DateTime                 @default(now())
+  resolvedAt      DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([resolvedAt, severity, lastSeenAt])
+  @@index([source, lastSeenAt])
+}
+
+enum OperationalHeartbeatStatus {
+  RUNNING
+  HEALTHY
+  DEGRADED
+  FAILED
+}
+
+/// Last known result for a scheduled job or external service. Values are
+/// deliberately normalized; no provider payload or secret is persisted.
+model OperationalHeartbeat {
+  key             String                     @id
+  status          OperationalHeartbeatStatus
+  lastStartedAt   DateTime?
+  lastSucceededAt DateTime?
+  lastFailedAt    DateTime?
+  errorCode       String?
+  updatedAt       DateTime                   @updatedAt
+
+  @@index([status, updatedAt])
+}
+
 enum LearnerActivitySurface {
   GENERAL
   LEARNING_JOURNEY
@@ -1829,6 +1925,33 @@ model AiUsageUserCap {
   @@index([feature])
 }
 
+/// Product-wide safety policy for paid AI services. This is deliberately
+/// separate from AiUsageCap: feature and user caps limit one learner, while
+/// this singleton protects the total beta budget across every learner and
+/// application instance. Monetary values use integer micro-dollars so the
+/// conditional atomic increment cannot drift because of floating-point math.
+model AiBudgetPolicy {
+  id                 String   @id @default("global")
+  dailyLimitMicrousd Int      @default(5000000)
+  textEnabled        Boolean  @default(true)
+  sttEnabled         Boolean  @default(true)
+  ttsEnabled         Boolean  @default(true)
+  realtimeEnabled    Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+}
+
+/// Conservative authorizations issued before provider calls. The UTC day is
+/// the primary key, and ai-usage.ts increments authorizedMicrousd only when
+/// the resulting total remains below the current global limit. It represents
+/// maximum authorized exposure, not the provider's final invoice.
+model AiDailyBudgetCounter {
+  day                String   @id
+  authorizedMicrousd Int      @default(0)
+  authorizationCount Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
 enum AnnouncementType {
   INFO
   UPDATE
@@ -1853,6 +1976,21 @@ enum AnnouncementAudience {
   ALL_LEARNERS
 }
 
+enum BetaFeedbackCategory {
+  BUG
+  IDEA
+  CONFUSING
+  LESSON_CONTENT
+  HAN
+  OTHER
+}
+
+enum BetaFeedbackStatus {
+  NEW
+  REVIEWING
+  RESOLVED
+}
+
 /// Administrator-authored message shown to learners when they enter HanGo.
 /// Delivery is tracked per user so an announcement is never repeatedly forced
 /// after the learner acknowledges it.
@@ -1864,6 +2002,9 @@ model Announcement {
   status          AnnouncementStatus   @default(DRAFT)
   priority        AnnouncementPriority @default(NORMAL)
   audience        AnnouncementAudience @default(ALL_LEARNERS)
+  /// Null means every interface language. ES/EN announcements are delivered
+  /// only when the learner is browsing that locale.
+  locale          InterfaceLanguage?
   startsAt        DateTime
   endsAt          DateTime?
   ctaLabel        String?
@@ -1877,6 +2018,33 @@ model Announcement {
 
   @@index([status, startsAt, endsAt])
   @@index([createdAt])
+}
+
+/// Fast, attachment-free reports from the closed beta. Route and locale are
+/// captured automatically so the learner only chooses a category and writes
+/// what happened. Administrative replies remain visible to the author.
+model BetaFeedback {
+  id               String               @id @default(cuid())
+  userId           String
+  category         BetaFeedbackCategory
+  rating           Int?
+  message          String               @db.Text
+  path             String
+  locale           InterfaceLanguage
+  status           BetaFeedbackStatus   @default(NEW)
+  adminResponse    String?              @db.Text
+  internalNote     String?              @db.Text
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  resolvedAt       DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  user       User  @relation("BetaFeedbackAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("BetaFeedbackReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }
 
 model AnnouncementReceipt {

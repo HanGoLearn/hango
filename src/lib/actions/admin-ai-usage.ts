@@ -4,14 +4,37 @@ import { revalidatePath } from "next/cache";
 import { requireAdministrator } from "@/lib/admin-auth";
 import {
   setDailyUsageCap,
+  setGlobalAiBudgetPolicy,
   setUserAiUsageCap,
   InvalidDailyCapError,
+  InvalidGlobalAiBudgetPolicyError,
   InvalidUserAiUsageCapError,
   type UserAiUsageCapMode,
 } from "@/lib/admin-ai-usage";
 import { AI_USAGE_FEATURES, type AiUsageFeature } from "@/lib/ai-usage";
 
 export type UpdateDailyCapResult = { ok: true } | { ok: false; error: string };
+
+export async function updateGlobalAiBudgetPolicyAction(input: {
+  dailyLimitUsd: number;
+  textEnabled: boolean;
+  sttEnabled: boolean;
+  ttsEnabled: boolean;
+  realtimeEnabled: boolean;
+}): Promise<UpdateDailyCapResult> {
+  await requireAdministrator();
+
+  try {
+    await setGlobalAiBudgetPolicy(input);
+    revalidatePath("/admin/limits");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof InvalidGlobalAiBudgetPolicyError) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: "No se pudo guardar. Inténtalo nuevamente." };
+  }
+}
 
 /** Admin-only (2026-09-05 cost audit) - see app/(admin)/admin/limits/page.tsx. */
 export async function updateDailyUsageCapAction(

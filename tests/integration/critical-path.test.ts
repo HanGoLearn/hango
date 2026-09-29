@@ -55,6 +55,9 @@ afterEach(async () => {
   vi.clearAllMocks();
   if (testEmails.length > 0) {
     await db.user.deleteMany({ where: { email: { in: testEmails } } });
+    await db.betaInvitation.deleteMany({
+      where: { email: { in: testEmails } },
+    });
     testEmails.length = 0;
   }
 });
@@ -63,6 +66,10 @@ describe("critical end-to-end learner journey (integration, real database)", () 
   it("register -> onboarding -> lesson -> AI Teacher -> exercises -> speaking -> writing -> quiz -> mission -> progress", async () => {
     const email = `critical-path-${Date.now()}@hango.dev`;
     testEmails.push(email);
+
+    await db.betaInvitation.create({
+      data: { email, cohort: "integration-test" },
+    });
 
     // Register.
     const registration = await registerAction(

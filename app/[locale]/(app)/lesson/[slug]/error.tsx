@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { ErrorState } from "@/components/ui/states";
 import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { reportClientError } from "@/lib/client-error-reporting";
 
 export default function LessonError({
   error,
@@ -19,7 +20,7 @@ export default function LessonError({
   // random. Logging whatever reaches here from now on is what makes the
   // next unrelated cause diagnosable instead of another guessing round.
   useEffect(() => {
-    console.error("Lesson failed to load:", error);
+    reportClientError("react_boundary", error);
   }, [error]);
 
   return (

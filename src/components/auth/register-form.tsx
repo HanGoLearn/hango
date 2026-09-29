@@ -16,12 +16,14 @@ const initialState: RegisterFormState = { status: "idle" };
 
 export interface RegisterFormProps {
   googleEnabled: boolean;
+  inviteOnly: boolean;
   locale: AppLocale;
   messages: AuthMessages;
 }
 
 export function RegisterForm({
   googleEnabled,
+  inviteOnly,
   locale,
   messages,
 }: RegisterFormProps) {
@@ -58,6 +60,12 @@ export function RegisterForm({
 
       {state.status === "error" && state.message && (
         <InformationBanner variant="error">{state.message}</InformationBanner>
+      )}
+
+      {inviteOnly && (
+        <InformationBanner variant="info">
+          {messages.register.betaNotice}
+        </InformationBanner>
       )}
 
       <form action={formAction} className="flex flex-col gap-5">

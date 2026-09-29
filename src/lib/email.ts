@@ -2,6 +2,10 @@ import "server-only";
 
 import type { AppLocale } from "@/i18n/config";
 import { serverEnv } from "@/lib/env/server";
+import {
+  markOperationalHeartbeatBestEffort,
+  recordOperationalEventBestEffort,
+} from "@/lib/operational-events";
 
 export class EmailDeliveryConfigurationError extends Error {}
 export class EmailDeliveryError extends Error {}
@@ -17,6 +21,11 @@ async function sendTransactionalEmail(input: {
 }): Promise<void> {
   if (!isTransactionalEmailConfigured()) {
     if (serverEnv.NODE_ENV === "production") {
+      await recordOperationalEventBestEffort({
+        source: "EMAIL",
+        severity: "CRITICAL",
+        code: "email_not_configured",
+      });
       throw new EmailDeliveryConfigurationError(
         "Transactional email is not configured.",
       );
@@ -29,25 +38,52 @@ async function sendTransactionalEmail(input: {
     return;
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serverEnv.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: serverEnv.EMAIL_FROM,
-      to: [input.to],
-      subject: input.subject,
-      text: input.text,
-    }),
-    signal: AbortSignal.timeout(10_000),
+  await markOperationalHeartbeatBestEffort({
+    key: "email.transactional",
+    status: "RUNNING",
   });
 
-  if (!response.ok) {
-    throw new EmailDeliveryError(
-      `Transactional email provider returned HTTP ${response.status}.`,
-    );
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serverEnv.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: serverEnv.EMAIL_FROM,
+        to: [input.to],
+        subject: input.subject,
+        text: input.text,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new EmailDeliveryError(
+        `Transactional email provider returned HTTP ${response.status}.`,
+      );
+    }
+    await markOperationalHeartbeatBestEffort({
+      key: "email.transactional",
+      status: "HEALTHY",
+    });
+  } catch (error) {
+    const errorCode =
+      error instanceof EmailDeliveryError ? "provider_http_error" : "timeout";
+    await Promise.all([
+      markOperationalHeartbeatBestEffort({
+        key: "email.transactional",
+        status: "FAILED",
+        errorCode,
+      }),
+      recordOperationalEventBestEffort({
+        source: "EMAIL",
+        severity: "CRITICAL",
+        code: errorCode,
+      }),
+    ]);
+    throw error;
   }
 }
 
