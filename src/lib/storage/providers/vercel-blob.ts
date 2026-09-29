@@ -6,12 +6,19 @@ import { normalizeStorageKey } from "@/lib/storage/key";
 export class VercelBlobStorageProvider implements StorageProvider {
   readonly name = "vercel-blob";
 
-  constructor(private readonly token: string) {
-    if (!token) {
+  constructor(
+    private readonly token?: string,
+    private readonly storeId?: string,
+  ) {
+    if (!token && !storeId) {
       throw new Error(
-        "BLOB_READ_WRITE_TOKEN is required for the vercel-blob storage provider.",
+        "BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN is required for the vercel-blob storage provider.",
       );
     }
+  }
+
+  private authOptions(): { token?: string; storeId?: string } {
+    return this.token ? { token: this.token } : { storeId: this.storeId };
   }
 
   async upload(
@@ -26,7 +33,7 @@ export class VercelBlobStorageProvider implements StorageProvider {
       allowOverwrite: true,
       contentType,
       multipart: data.byteLength > 4 * 1024 * 1024,
-      token: this.token,
+      ...this.authOptions(),
     });
     return result.pathname;
   }
@@ -44,8 +51,8 @@ export class VercelBlobStorageProvider implements StorageProvider {
     const pathname = normalizeStorageKey(key);
     const result = await get(pathname, {
       access: "private",
-      token: this.token,
       useCache: false,
+      ...this.authOptions(),
     });
 
     if (!result || result.statusCode !== 200 || !result.stream) {
@@ -56,7 +63,7 @@ export class VercelBlobStorageProvider implements StorageProvider {
   }
 
   async delete(key: string): Promise<void> {
-    await del(normalizeStorageKey(key), { token: this.token });
+    await del(normalizeStorageKey(key), this.authOptions());
   }
 
   async list(prefix: string): Promise<string[]> {
@@ -68,7 +75,7 @@ export class VercelBlobStorageProvider implements StorageProvider {
       const page = await list({
         prefix: safePrefix,
         cursor,
-        token: this.token,
+        ...this.authOptions(),
       });
       keys.push(...page.blobs.map((blob) => blob.pathname));
       cursor = page.hasMore ? page.cursor : undefined;
@@ -79,7 +86,7 @@ export class VercelBlobStorageProvider implements StorageProvider {
 
   async exists(key: string): Promise<boolean> {
     try {
-      await head(normalizeStorageKey(key), { token: this.token });
+      await head(normalizeStorageKey(key), this.authOptions());
       return true;
     } catch (error) {
       if (error instanceof BlobNotFoundError) return false;

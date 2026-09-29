@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   submitLocal: vi.fn(),
   submitUploaded: vi.fn(),
-  upload: vi.fn(),
+  uploadPresigned: vi.fn(),
 }));
 
-vi.mock("@vercel/blob/client", () => ({ upload: mocks.upload }));
+vi.mock("@vercel/blob/client", () => ({
+  uploadPresigned: mocks.uploadPresigned,
+}));
 vi.mock("@/lib/actions/speaking", () => ({
   prepareSpeakingUploadAction: mocks.prepare,
   submitRecordingAction: mocks.submitLocal,
@@ -46,7 +48,7 @@ describe("submitSpeakingRecording", () => {
     ).resolves.toEqual({ ok: false, error: "local-result" });
     expect(mocks.submitLocal).toHaveBeenCalledWith("session-1", formData);
     expect(mocks.prepare).not.toHaveBeenCalled();
-    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.uploadPresigned).not.toHaveBeenCalled();
   });
 
   it("uses the private direct-upload path in production", async () => {
@@ -56,7 +58,7 @@ describe("submitSpeakingRecording", () => {
       pathname: "speaking/user-1/session-1-id-1790000000000.webm",
       mimeType: "audio/webm",
     });
-    mocks.upload.mockResolvedValue({
+    mocks.uploadPresigned.mockResolvedValue({
       pathname: "speaking/user-1/session-1-id-1790000000000.webm",
     });
     mocks.submitUploaded.mockResolvedValue({
@@ -67,7 +69,7 @@ describe("submitSpeakingRecording", () => {
     await expect(
       submitSpeakingRecording("session-1", recordingFormData()),
     ).resolves.toEqual({ ok: false, error: "final-result" });
-    expect(mocks.upload).toHaveBeenCalledWith(
+    expect(mocks.uploadPresigned).toHaveBeenCalledWith(
       "speaking/user-1/session-1-id-1790000000000.webm",
       expect.any(Blob),
       {
@@ -93,7 +95,9 @@ describe("submitSpeakingRecording", () => {
       pathname: "speaking/user-1/session-1-id-1790000000000.webm",
       mimeType: "audio/webm",
     });
-    mocks.upload.mockRejectedValue(new Error("secret provider detail"));
+    mocks.uploadPresigned.mockRejectedValue(
+      new Error("secret provider detail"),
+    );
 
     await expect(
       submitSpeakingRecording("session-1", recordingFormData()),

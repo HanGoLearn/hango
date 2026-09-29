@@ -16,12 +16,32 @@ vi.mock("@vercel/blob", async (importOriginal) => {
 });
 
 const provider = new VercelBlobStorageProvider("test-token");
+const oidcProvider = new VercelBlobStorageProvider(undefined, "store-1");
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe("VercelBlobStorageProvider", () => {
+  it("uses the connected store id so the SDK can authenticate with Vercel OIDC", async () => {
+    blobMocks.put.mockResolvedValue({
+      pathname: "speaking/user-1/oidc.webm",
+    });
+
+    await oidcProvider.upload(
+      "speaking/user-1/oidc.webm",
+      Buffer.from("audio"),
+      "audio/webm",
+    );
+
+    expect(blobMocks.put).toHaveBeenCalledWith(
+      "speaking/user-1/oidc.webm",
+      expect.any(Buffer),
+      expect.objectContaining({ storeId: "store-1" }),
+    );
+    expect(blobMocks.put.mock.calls[0]?.[2]).not.toHaveProperty("token");
+  });
+
   it("stores objects privately under the exact internal key", async () => {
     blobMocks.put.mockResolvedValue({
       pathname: "speaking/user-1/attempt.webm",

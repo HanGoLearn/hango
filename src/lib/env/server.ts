@@ -54,8 +54,11 @@ const serverSchema = z.object({
     .enum(["INVITE_ONLY", "OPEN"])
     .default("INVITE_ONLY"),
   // Local disk is development/test only. Production defaults to the private
-  // Vercel Blob provider in src/lib/storage and fails closed without a token.
+  // Vercel Blob provider in src/lib/storage. New Vercel projects use
+  // short-lived OIDC credentials plus BLOB_STORE_ID; BLOB_READ_WRITE_TOKEN is
+  // retained only for legacy or non-Vercel environments.
   HANGO_STORAGE_PROVIDER: z.enum(["local", "vercel-blob"]).optional(),
+  BLOB_STORE_ID: optionalNonEmptyString,
   BLOB_READ_WRITE_TOKEN: optionalNonEmptyString,
 });
 
@@ -74,6 +77,7 @@ const parsed = serverSchema.safeParse({
   HANGO_BETA_LEARNING_SCOPE: process.env.HANGO_BETA_LEARNING_SCOPE,
   HANGO_BETA_ACCESS_MODE: process.env.HANGO_BETA_ACCESS_MODE,
   HANGO_STORAGE_PROVIDER: process.env.HANGO_STORAGE_PROVIDER,
+  BLOB_STORE_ID: process.env.BLOB_STORE_ID,
   BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
 });
 
