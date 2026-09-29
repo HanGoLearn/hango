@@ -73,7 +73,8 @@ Configurar únicamente en el panel del proveedor, nunca en Git ni en variables
 | `HANGO_BETA_ACCESS_MODE`    | `INVITE_ONLY`                                                                |
 | `HANGO_BETA_LEARNING_SCOPE` | `FOUNDATIONS_ONLY`                                                           |
 | `HANGO_STORAGE_PROVIDER`    | `vercel-blob`                                                                |
-| `BLOB_READ_WRITE_TOKEN`     | secreto suministrado al conectar el store privado                            |
+| `BLOB_STORE_ID`             | identificador inyectado al conectar el store privado                         |
+| `VERCEL_OIDC_TOKEN`         | credencial temporal inyectada y rotada automáticamente por Vercel            |
 | `CRON_SECRET`               | secreto aleatorio exclusivo de cron                                          |
 | `RESEND_API_KEY`            | clave restringida del entorno beta                                           |
 | `EMAIL_FROM`                | remitente verificado, por ejemplo `HanGo <cuentas@dominio>`                  |
@@ -92,8 +93,9 @@ No copiar `.env.local` completo: se cargan las variables anteriores una por una.
    el enlace a participantes.
 3. Crear una base Prisma Postgres exclusiva. Guardar por separado la URL pooled
    y la URL directa; fijar `sslmode=verify-full` en ambas.
-4. Crear/conectar un store Vercel Blob **private**. Cargar su token solamente en
-   Vercel y establecer `HANGO_STORAGE_PROVIDER=vercel-blob`.
+4. Crear/conectar un store Vercel Blob **private**. Confirmar que Vercel inyecta
+   `BLOB_STORE_ID` y OIDC para el proyecto, y establecer
+   `HANGO_STORAGE_PROVIDER=vercel-blob`. No crear un token permanente.
 5. Verificar el dominio de envío en Resend y crear una clave exclusiva de beta.
 6. Crear o actualizar el cliente Google OAuth con:
    - origen JavaScript: `https://<dominio-beta>`;

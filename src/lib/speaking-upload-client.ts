@@ -1,6 +1,6 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import {
   prepareSpeakingUploadAction,
   submitRecordingAction,
@@ -32,7 +32,7 @@ export async function submitSpeakingRecording(
     const prepared = await prepareSpeakingUploadAction(sessionId, audio.type);
     if (!prepared.ok) return prepared;
 
-    const uploaded = await upload(prepared.pathname, audio, {
+    const uploaded = await uploadPresigned(prepared.pathname, audio, {
       access: "private",
       handleUploadUrl: "/api/speaking/upload",
       clientPayload: JSON.stringify({ sessionId }),

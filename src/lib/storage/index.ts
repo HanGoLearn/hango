@@ -28,7 +28,8 @@ export function getStorageProvider(): StorageProvider {
 
   if (providerName === "vercel-blob") {
     cached = new VercelBlobStorageProvider(
-      serverEnv.BLOB_READ_WRITE_TOKEN ?? "",
+      serverEnv.BLOB_READ_WRITE_TOKEN,
+      serverEnv.BLOB_STORE_ID,
     );
   } else {
     cached = new LocalStorageProvider();

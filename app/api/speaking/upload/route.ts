@@ -1,4 +1,8 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { issueSignedToken } from "@vercel/blob";
+import {
+  handleUploadPresigned,
+  type HandleUploadPresignedBody,
+} from "@vercel/blob/client";
 import { auth } from "@/lib/auth";
 import { serverEnv } from "@/lib/env/server";
 import {
@@ -49,31 +53,45 @@ export async function POST(request: Request) {
     (serverEnv.NODE_ENV === "production" ? "vercel-blob" : "local");
   if (
     storageProviderName !== "vercel-blob" ||
-    !serverEnv.BLOB_READ_WRITE_TOKEN
+    (!serverEnv.BLOB_STORE_ID && !serverEnv.BLOB_READ_WRITE_TOKEN)
   ) {
     return new Response("Private uploads are not configured", { status: 503 });
   }
 
   try {
-    const body = (await request.json()) as HandleUploadBody;
-    if (body.type !== "blob.generate-client-token") {
+    const body = (await request.json()) as HandleUploadPresignedBody;
+    if (body.type !== "blob.generate-presigned-url") {
       return new Response("Invalid upload request", { status: 400 });
     }
 
-    const result = await handleUpload({
+    const result = await handleUploadPresigned({
       request,
       body,
-      token: serverEnv.BLOB_READ_WRITE_TOKEN,
-      onBeforeGenerateToken: async (pathname, clientPayload) => {
+      getSignedToken: async (pathname, clientPayload) => {
         const { sessionId } = parseClientPayload(clientPayload);
         await authorizeSpeakingUploadToken({ userId, sessionId, pathname });
+        const validUntil = Date.now() + SPEAKING_UPLOAD_TOKEN_TTL_MS;
+        const authOptions = serverEnv.BLOB_READ_WRITE_TOKEN
+          ? { token: serverEnv.BLOB_READ_WRITE_TOKEN }
+          : { storeId: serverEnv.BLOB_STORE_ID };
+
         return {
-          allowedContentTypes: [...SPEAKING_UPLOAD_CONTENT_TYPES],
-          maximumSizeInBytes: MAX_SPEAKING_AUDIO_BYTES,
-          validUntil: Date.now() + SPEAKING_UPLOAD_TOKEN_TTL_MS,
-          addRandomSuffix: false,
-          allowOverwrite: false,
-          cacheControlMaxAge: 60,
+          token: await issueSignedToken({
+            pathname,
+            operations: ["put"],
+            allowedContentTypes: [...SPEAKING_UPLOAD_CONTENT_TYPES],
+            maximumSizeInBytes: MAX_SPEAKING_AUDIO_BYTES,
+            validUntil,
+            ...authOptions,
+          }),
+          urlOptions: {
+            allowedContentTypes: [...SPEAKING_UPLOAD_CONTENT_TYPES],
+            maximumSizeInBytes: MAX_SPEAKING_AUDIO_BYTES,
+            validUntil,
+            addRandomSuffix: false,
+            allowOverwrite: false,
+            cacheControlMaxAge: 60,
+          },
         };
       },
     });

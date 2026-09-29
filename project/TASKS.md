@@ -5908,6 +5908,12 @@ That document is the source of truth for pre-beta work; keep updates here terse.
   24/24, Speaking Lab passes 12/12 against ephemeral PostgreSQL, the static beta
   gate passes 246/246 and the production build is green. Real Blob, >4.5 MB
   mobile upload and redeploy persistence remain P1-03.
+  **OIDC deployment follow-up (2026-09-28):** adapted the provider and direct
+  client upload handshake to Vercel Blob's new short-lived OIDC default
+  (`BLOB_STORE_ID` + presigned URLs), retaining the legacy static token only as
+  a non-Vercel fallback. Focused tests pass 14/14, the static beta gate passes
+  247/247, typecheck/lint and the production build pass; no Han behavior
+  changed.
 - [ ] **Beta readiness:** real Android/iPhone QA, privacy/terms/AI disclosure,
   human linguistic review, performance/image optimization and a measured closed
   beta before deciding on PWA/APK.

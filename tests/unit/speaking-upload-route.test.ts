@@ -3,18 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   authorize: vi.fn(),
-  handleUpload: vi.fn(),
+  handleUploadPresigned: vi.fn(),
+  issueSignedToken: vi.fn(),
   serverEnv: {
     HANGO_STORAGE_PROVIDER: "vercel-blob" as
       "vercel-blob" | "local" | undefined,
-    BLOB_READ_WRITE_TOKEN: "blob-secret" as string | undefined,
+    BLOB_STORE_ID: "store-1" as string | undefined,
+    BLOB_READ_WRITE_TOKEN: undefined as string | undefined,
     NODE_ENV: "production" as "production" | "development" | "test",
   },
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/env/server", () => ({ serverEnv: mocks.serverEnv }));
-vi.mock("@vercel/blob/client", () => ({ handleUpload: mocks.handleUpload }));
+vi.mock("@vercel/blob", () => ({ issueSignedToken: mocks.issueSignedToken }));
+vi.mock("@vercel/blob/client", () => ({
+  handleUploadPresigned: mocks.handleUploadPresigned,
+}));
 vi.mock("@/lib/speaking-upload", () => ({
   authorizeSpeakingUploadToken: mocks.authorize,
   MAX_SPEAKING_AUDIO_BYTES: 15 * 1024 * 1024,
@@ -24,9 +29,9 @@ vi.mock("@/lib/speaking-upload", () => ({
 
 const { POST } = await import("../../app/api/speaking/upload/route");
 
-function tokenRequest(
+function presignedUrlRequest(
   body: unknown = {
-    type: "blob.generate-client-token",
+    type: "blob.generate-presigned-url",
     payload: {
       pathname: "speaking/user-1/session-1-id-1790000000000.webm",
       multipart: false,
@@ -47,69 +52,105 @@ function tokenRequest(
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.serverEnv.HANGO_STORAGE_PROVIDER = "vercel-blob";
-  mocks.serverEnv.BLOB_READ_WRITE_TOKEN = "blob-secret";
+  mocks.serverEnv.BLOB_STORE_ID = "store-1";
+  mocks.serverEnv.BLOB_READ_WRITE_TOKEN = undefined;
   mocks.serverEnv.NODE_ENV = "production";
+  mocks.issueSignedToken.mockResolvedValue({
+    delegationToken: "delegation-token",
+    clientSigningToken: "client-signing-token",
+    validUntil: Date.now() + 10 * 60 * 1000,
+  });
 });
 
 describe("POST /api/speaking/upload", () => {
   it("rejects requests that do not come from the HanGo origin", async () => {
-    const request = tokenRequest();
+    const request = presignedUrlRequest();
     request.headers.set("Origin", "https://attacker.example");
 
     await expect(POST(request)).resolves.toMatchObject({ status: 403 });
     expect(mocks.auth).not.toHaveBeenCalled();
-    expect(mocks.handleUpload).not.toHaveBeenCalled();
+    expect(mocks.handleUploadPresigned).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated and unconfigured requests", async () => {
     mocks.auth.mockResolvedValue(null);
-    await expect(POST(tokenRequest())).resolves.toMatchObject({ status: 401 });
+    await expect(POST(presignedUrlRequest())).resolves.toMatchObject({
+      status: 401,
+    });
 
     mocks.auth.mockResolvedValue({ user: { id: "user-1" } });
+    mocks.serverEnv.BLOB_STORE_ID = undefined;
     mocks.serverEnv.BLOB_READ_WRITE_TOKEN = undefined;
-    await expect(POST(tokenRequest())).resolves.toMatchObject({ status: 503 });
-    expect(mocks.handleUpload).not.toHaveBeenCalled();
+    await expect(POST(presignedUrlRequest())).resolves.toMatchObject({
+      status: 503,
+    });
+    expect(mocks.handleUploadPresigned).not.toHaveBeenCalled();
   });
 
-  it("issues only a short, private-size-constrained token for an owned session", async () => {
+  it("issues only a short, private-size-constrained presigned URL for an owned session", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "user-1" } });
-    let tokenOptions: Record<string, unknown> | undefined;
-    mocks.handleUpload.mockImplementation(async (options) => {
-      tokenOptions = await options.onBeforeGenerateToken(
+    let signedOptions:
+      | {
+          token: unknown;
+          urlOptions: Record<string, unknown> | undefined;
+        }
+      | undefined;
+    mocks.handleUploadPresigned.mockImplementation(async (options) => {
+      signedOptions = await options.getSignedToken(
         "speaking/user-1/session-1-id-1790000000000.webm",
         JSON.stringify({ sessionId: "session-1" }),
         false,
       );
-      return { type: "blob.generate-client-token", clientToken: "short-token" };
+      return {
+        type: "blob.generate-presigned-url",
+        presignedUrlPayload: {
+          delegationToken: "delegation-token",
+          signature: "signature",
+          params: {},
+        },
+      };
     });
 
     const before = Date.now();
-    const response = await POST(tokenRequest());
+    const response = await POST(presignedUrlRequest());
     const after = Date.now();
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
-      type: "blob.generate-client-token",
-      clientToken: "short-token",
+      type: "blob.generate-presigned-url",
+      presignedUrlPayload: {
+        delegationToken: "delegation-token",
+        signature: "signature",
+        params: {},
+      },
     });
     expect(mocks.authorize).toHaveBeenCalledWith({
       userId: "user-1",
       sessionId: "session-1",
       pathname: "speaking/user-1/session-1-id-1790000000000.webm",
     });
-    expect(tokenOptions).toMatchObject({
+    expect(mocks.issueSignedToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: "speaking/user-1/session-1-id-1790000000000.webm",
+        operations: ["put"],
+        allowedContentTypes: ["audio/webm", "audio/ogg"],
+        maximumSizeInBytes: 15 * 1024 * 1024,
+        storeId: "store-1",
+      }),
+    );
+    expect(signedOptions?.urlOptions).toMatchObject({
       allowedContentTypes: ["audio/webm", "audio/ogg"],
       maximumSizeInBytes: 15 * 1024 * 1024,
       addRandomSuffix: false,
       allowOverwrite: false,
       cacheControlMaxAge: 60,
     });
-    expect(tokenOptions?.validUntil).toEqual(expect.any(Number));
-    expect(tokenOptions!.validUntil as number).toBeGreaterThanOrEqual(
-      before + 10 * 60 * 1000,
-    );
-    expect(tokenOptions!.validUntil as number).toBeLessThanOrEqual(
+    expect(signedOptions?.urlOptions?.validUntil).toEqual(expect.any(Number));
+    expect(
+      signedOptions!.urlOptions!.validUntil as number,
+    ).toBeGreaterThanOrEqual(before + 10 * 60 * 1000);
+    expect(signedOptions!.urlOptions!.validUntil as number).toBeLessThanOrEqual(
       after + 10 * 60 * 1000,
     );
   });
@@ -117,24 +158,24 @@ describe("POST /api/speaking/upload", () => {
   it("does not issue a token when ownership validation fails", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "user-2" } });
     mocks.authorize.mockRejectedValue(new Error("Not authorized"));
-    mocks.handleUpload.mockImplementation(async (options) => {
-      await options.onBeforeGenerateToken(
+    mocks.handleUploadPresigned.mockImplementation(async (options) => {
+      await options.getSignedToken(
         "speaking/user-1/session-1-id-1790000000000.webm",
         JSON.stringify({ sessionId: "session-1" }),
         false,
       );
     });
 
-    const response = await POST(tokenRequest());
+    const response = await POST(presignedUrlRequest());
     expect(response.status).toBe(400);
   });
 
   it("rejects unexpected callback/event bodies", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "user-1" } });
     const response = await POST(
-      tokenRequest({ type: "blob.upload-completed", payload: {} }),
+      presignedUrlRequest({ type: "blob.upload-completed", payload: {} }),
     );
     expect(response.status).toBe(400);
-    expect(mocks.handleUpload).not.toHaveBeenCalled();
+    expect(mocks.handleUploadPresigned).not.toHaveBeenCalled();
   });
 });
