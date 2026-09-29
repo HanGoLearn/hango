@@ -29,7 +29,10 @@
     "test:a11y": "vitest run tests/component/a11y.test.tsx",
     "test:integration": "vitest run tests/integration --config vitest.integration.config.mts",
     "test:smoke": "vitest run tests/smoke",
-    "test:integration:local": "tsx scripts/test-integration-local.ts"
+    "test:integration:local": "tsx scripts/test-integration-local.ts",
+    "test:beta:static": "vitest run tests/unit/auth-credentials.test.ts tests/unit/login-action.test.ts tests/unit/auth-role.test.ts tests/unit/audio-route-authorization.test.ts tests/unit/learner-action-isolation.test.ts tests/unit/admin-ai-usage-action.test.ts tests/unit/admin-communications-actions.test.ts tests/unit/beta-access.test.ts tests/unit/beta-feedback-actions.test.ts tests/unit/beta-learning-scope.test.ts tests/unit/beta-speaking-stations.test.ts tests/unit/security-headers.test.ts tests/unit/operational-events.test.ts tests/unit/storage-local.test.ts tests/unit/storage-vercel-blob.test.ts tests/unit/speaking-upload.test.ts tests/unit/speaking-upload-route.test.ts tests/unit/speaking-upload-client.test.ts tests/unit/han-realtime.test.ts tests/unit/han-speech.test.ts tests/unit/realtime-turn-guard.test.ts tests/unit/stt-transcript-quality.test.ts tests/component/admin-shell.test.tsx tests/component/beta-learning-experience.test.tsx tests/component/feedback-widget.test.tsx tests/component/learning-journey-i18n.test.tsx tests/component/onboarding-i18n.test.tsx tests/component/placement-exam-i18n.test.tsx tests/component/writing-lab-i18n.test.tsx tests/component/user-ai-usage-limits.test.tsx tests/component/tour.test.tsx tests/component/a11y.test.tsx",
+    "test:beta:local": "tsx scripts/test-integration-local.ts tests/integration/beta-account-isolation.test.ts tests/integration/registration.test.ts tests/integration/email-verification.test.ts tests/integration/password-reset.test.ts tests/integration/auth-rate-limit.test.ts tests/integration/onboarding.test.ts tests/integration/placement-exam.test.ts tests/integration/placement-security.test.ts tests/integration/placement-speaking-security.test.ts tests/integration/lesson-progress.test.ts tests/integration/exercise-and-quiz-progress.test.ts tests/integration/ai-teacher.test.ts tests/integration/han-speech-route.test.ts tests/integration/free-topic-practice.test.ts tests/integration/speaking-prompts.test.ts tests/integration/speaking-lab.test.ts tests/integration/writing-lab.test.ts tests/integration/mission.test.ts tests/integration/vocabulary-lookup.test.ts tests/integration/reflection.test.ts tests/integration/scenario-completion.test.ts tests/integration/admin-backoffice.test.ts tests/integration/user-ai-usage-caps.test.ts tests/integration/private-object-retention.test.ts tests/integration/settings.test.ts tests/integration/critical-path.test.ts tests/integration/platform-operations.test.ts",
+    "test:beta": "npm run test:beta:static && npm run test:beta:local"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -43,6 +46,7 @@
     "@radix-ui/react-select": "^2.3.7",
     "@radix-ui/react-switch": "^1.3.7",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "lucide-react": "^1.28.0",

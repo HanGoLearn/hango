@@ -14,13 +14,17 @@ export interface LearnerAnnouncement {
 
 export async function getPendingAnnouncementsForUser(
   userId: string,
+  locale: "ES" | "EN",
 ): Promise<LearnerAnnouncement[]> {
   const now = new Date();
   const announcements = await db.announcement.findMany({
     where: {
       status: "PUBLISHED",
       startsAt: { lte: now },
-      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      AND: [
+        { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+        { OR: [{ locale: null }, { locale }] },
+      ],
       receipts: { none: { userId, acknowledgedAt: { not: null } } },
     },
     orderBy: [{ createdAt: "asc" }],

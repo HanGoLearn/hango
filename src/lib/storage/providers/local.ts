@@ -8,6 +8,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import type { StorageProvider } from "@/lib/storage/provider";
+import { normalizeStorageKey } from "@/lib/storage/key";
 
 const STORAGE_ROOT = process.env.HANGO_STORAGE_ROOT
   ? resolve(process.env.HANGO_STORAGE_ROOT)
@@ -97,7 +98,8 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 /** Rejects any key that would resolve outside STORAGE_ROOT (e.g. via `..`). */
 export function resolveSafePath(key: string): string {
-  const filePath = normalize(join(STORAGE_ROOT, key));
+  const safeKey = normalizeStorageKey(key);
+  const filePath = normalize(join(STORAGE_ROOT, safeKey));
   const rel = relative(STORAGE_ROOT, filePath);
   if (rel.startsWith("..") || rel === "") {
     throw new Error(`Unsafe storage key: ${key}`);

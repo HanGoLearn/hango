@@ -8,9 +8,11 @@ import {
   Coins,
   Gauge,
   Megaphone,
+  MessageSquareText,
   ShieldCheck,
   ShieldAlert,
   TrendingUp,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -19,15 +21,17 @@ const navigation = [
   { href: "/admin", label: "Resumen", icon: BarChart3, exact: true },
   { href: "/admin/analytics", label: "Analítica", icon: TrendingUp },
   { href: "/admin/users", label: "Usuarios", icon: Users },
+  { href: "/admin/invitations", label: "Invitaciones", icon: UserPlus },
   {
     href: "/admin/communications",
     label: "Comunicaciones",
     icon: Megaphone,
   },
+  { href: "/admin/feedback", label: "Feedback", icon: MessageSquareText },
   { href: "/admin/limits", label: "Límites de IA", icon: Gauge },
   {
     href: "/admin/operations",
-    label: "Operaciones IA",
+    label: "Operaciones",
     icon: ShieldAlert,
   },
 ];

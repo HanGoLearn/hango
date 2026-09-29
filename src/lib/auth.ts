@@ -9,6 +9,10 @@ import { verifyCredentials } from "@/lib/auth-credentials";
 import { ensureGoogleAccountLinked } from "@/lib/auth-google-link";
 import { authConfig } from "@/lib/auth.config";
 import { resolveAuthSessionState } from "@/lib/auth-session-state";
+import {
+  activateBetaInvitationForUser,
+  isBetaInviteOnly,
+} from "@/lib/beta-access";
 
 const googleProvider =
   serverEnv.GOOGLE_CLIENT_ID && serverEnv.GOOGLE_CLIENT_SECRET
@@ -81,6 +85,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
       }
       return session;
+    },
+  },
+  events: {
+    async createUser({ user }) {
+      if (user.id && user.email) {
+        const activated = await activateBetaInvitationForUser({
+          userId: user.id,
+          email: user.email,
+        });
+        if (!activated && isBetaInviteOnly()) {
+          // The invitation may have expired or been revoked in the brief gap
+          // between OAuth authorization and adapter persistence. Remove the
+          // still-unlinked user so that race cannot bypass the allowlist.
+          await db.user.deleteMany({
+            where: { id: user.id, accounts: { none: {} } },
+          });
+          throw new Error("Beta invitation is no longer available");
+        }
+      }
     },
   },
 });

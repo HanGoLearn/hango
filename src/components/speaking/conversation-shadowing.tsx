@@ -11,10 +11,10 @@ import { CharacterToneFeedback } from "@/components/speaking/character-tone-feed
 import { ConversationPlayer } from "@/components/lesson/dialogue-lines";
 import {
   createSpeakingSessionAction,
-  submitRecordingAction,
   submitTextFallbackAction,
   completeSpeakingSessionAction,
 } from "@/lib/actions/speaking";
+import { submitSpeakingRecording } from "@/lib/speaking-upload-client";
 import { getDialogueLineAudioAction } from "@/lib/actions/dialogue-audio";
 import type { SyllableScore } from "@/lib/tone-analysis";
 import type { ShadowingLine } from "@/lib/content/speaking-prompts";
@@ -108,11 +108,11 @@ export function ConversationShadowing({
   }
 
   async function handleSubmitRecording(formData: FormData) {
-    if (!sessionId || !currentLine) return;
-    const attemptResult = await submitRecordingAction(sessionId, formData);
+    if (!sessionId || !currentLine) return false;
+    const attemptResult = await submitSpeakingRecording(sessionId, formData);
     if (!attemptResult.ok) {
       setError(localizeSpeakingError(attemptResult.error, messages.errors));
-      return;
+      return false;
     }
     setError(null);
     setAttemptDone(true);
@@ -123,14 +123,15 @@ export function ConversationShadowing({
         syllableScores,
       },
     }));
+    return true;
   }
 
   async function handleSubmitText(text: string) {
-    if (!sessionId || !currentLine) return;
+    if (!sessionId || !currentLine) return false;
     const attemptResult = await submitTextFallbackAction(sessionId, text);
     if (!attemptResult.ok) {
       setError(localizeSpeakingError(attemptResult.error, messages.errors));
-      return;
+      return false;
     }
     setError(null);
     setAttemptDone(true);
@@ -138,6 +139,7 @@ export function ConversationShadowing({
       ...previous,
       [currentLine.id]: { overallScore: null, syllableScores: null },
     }));
+    return true;
   }
 
   function handleNext() {

@@ -571,8 +571,13 @@ Salida: cada cambio demuestra que funciona sobre una base vacía sin depender de
 - [ ] `OPS-04` HTTPS, dominio, OAuth callbacks y cron autenticado.
 - [ ] `OPS-05` Cabeceras y CSP sin romper voz, audio, fotos ni OAuth.
 - [ ] `OPS-06` Backups/PITR y simulacro de restauración.
-- [ ] `OPS-07` Observabilidad, alertas, runbooks, rollback y status operativo.
+- [x] `OPS-07` Observabilidad interna, alertas, runbook, rollback y status
+      operativo. Implementado el 2026-09-27 con eventos minimizados, health
+      check público sin detalles, heartbeats, cola de borrado y panel admin;
+      falta conectar un destino externo al elegir hosting/monitorización.
 - [ ] `OPS-08` Presupuesto global de IA, reservas atómicas y kill switches.
+      Control interno completado; falta configurar el tope independiente en la
+      cuenta del proveedor antes de abrir la cohorte.
 - [ ] `OPS-09` Política de despliegue de migraciones y seeds.
 
 Salida: staging y producción son privadas, repetibles, observables y recuperables.
@@ -591,9 +596,14 @@ Salida: experiencia mobile-first consistente, comprensible y jurídicamente pres
 
 ### Entrega 5 — beta cerrada medible
 
-- [ ] `LAUNCH-01` Invitación limitada y cohortes identificables.
+- [x] `LAUNCH-01` Invitación limitada y cohortes identificables. La allowlist
+      administrativa y su enforcement en credenciales/OAuth quedaron
+      implementados el 2026-09-27; falta validar el callback real en HTTPS.
 - [ ] `LAUNCH-02` Eventos de funnel y aprendizaje con minimización de datos.
-- [ ] `LAUNCH-03` Welcome announcement, feedback y soporte.
+- [ ] `LAUNCH-03` Welcome announcement, feedback y soporte. La infraestructura
+      bilingüe, el formulario sin adjuntos, el historial de respuesta, la
+      bandeja administrativa y el contacto con SLA inicial quedaron listos el
+      2026-09-27; falta publicar las dos bienvenidas al abrir la cohorte.
 - [ ] `LAUNCH-04` Smoke de producción y ejercicio de incidente antes de invitar.
 - [ ] `LAUNCH-05` Revisiones D1, D7, costo, errores, aprendizaje y entrevistas.
 - [ ] `LAUNCH-06` Criterio explícito para ampliar, pausar o corregir.

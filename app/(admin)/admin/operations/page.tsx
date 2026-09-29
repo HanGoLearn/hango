@@ -15,6 +15,8 @@ import {
   getAdminAiOperations,
   type AiOperationsPeriod,
 } from "@/lib/admin-ai-operations";
+import { getPlatformOperations } from "@/lib/platform-operations";
+import { resolveOperationalEventAction } from "@/lib/actions/admin-operations";
 
 type SearchParams = Promise<{ period?: string }>;
 
@@ -68,7 +70,10 @@ export default async function AdminOperationsPage({
   // getAdminAiOperations needing its own User-table join to exclude the
   // administrator's own AI usage from the report.
   const administrator = await requireAdministrator();
-  const operations = await getAdminAiOperations(period, administrator.id);
+  const [operations, platform] = await Promise.all([
+    getAdminAiOperations(period, administrator.id),
+    getPlatformOperations(),
+  ]);
   const maxTrendValue = Math.max(
     1,
     ...operations.trend.map(
@@ -87,16 +92,199 @@ export default async function AdminOperationsPage({
             Salud de la plataforma
           </p>
           <h1 className="mt-1 font-display text-page-title font-semibold">
-            Operaciones de IA
+            Operaciones y salud
           </h1>
           <p className="mt-1 max-w-3xl font-interface text-supporting text-text-secondary">
-            Detecta errores, lentitud y límites alcanzados en Han y las
-            experiencias de aprendizaje antes de que se conviertan en un
-            problema para más estudiantes.
+            Detecta fallos de la aplicación, tareas programadas, servicios,
+            lentitud y límites de IA antes de que afecten a más estudiantes.
           </p>
         </div>
         <PeriodSwitch active={period} />
       </div>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {platform.services.map((service) => (
+          <article
+            key={service.key}
+            className="rounded-panel border border-border bg-surface p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-interface text-supporting font-semibold">
+                {service.label}
+              </h2>
+              <HealthBadge status={service.status} />
+            </div>
+            <p className="mt-2 font-interface text-caption text-text-secondary">
+              {service.detail}
+            </p>
+          </article>
+        ))}
+      </section>
+
+      <section
+        className={`rounded-panel border p-5 ${
+          platform.alerts.length
+            ? "border-warning-500/40 bg-warning-500/10"
+            : "border-success-500/40 bg-success-500/10"
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          {platform.alerts.length ? (
+            <AlertTriangle
+              className="mt-0.5 size-5 shrink-0 text-warning-500"
+              aria-hidden="true"
+            />
+          ) : (
+            <ShieldCheck
+              className="mt-0.5 size-5 shrink-0 text-success-500"
+              aria-hidden="true"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <h2 className="font-interface text-body font-semibold">
+              {platform.alerts.length
+                ? `${platform.alerts.length} señal${platform.alerts.length === 1 ? " operativa" : "es operativas"}`
+                : "Sin alertas operativas activas"}
+            </h2>
+            {platform.alerts.length ? (
+              <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                {platform.alerts.map((alert, index) => {
+                  const content = (
+                    <>
+                      <p className="font-interface text-supporting font-semibold">
+                        {alert.title}
+                      </p>
+                      <p className="mt-0.5 font-interface text-caption text-text-secondary">
+                        {alert.detail}
+                      </p>
+                    </>
+                  );
+                  const className = `rounded-card border p-3 ${
+                    alert.severity === "critical"
+                      ? "border-error-500/30 bg-error-500/10"
+                      : "border-warning-500/30 bg-surface/60"
+                  }`;
+                  return alert.href ? (
+                    <Link
+                      key={`${alert.title}-${index}`}
+                      href={alert.href}
+                      className={className}
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <div key={`${alert.title}-${index}`} className={className}>
+                      {content}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-1 font-interface text-supporting text-text-secondary">
+                Los servicios comprobados, la cola privada y el presupuesto no
+                requieren intervención.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <AdminStatCard
+          label="Borrados pendientes"
+          value={number(platform.deletionQueue.pending)}
+          detail="Pendientes o en procesamiento"
+          icon={<Clock3 className="size-5" aria-hidden="true" />}
+        />
+        <AdminStatCard
+          label="Borrados fallidos"
+          value={number(platform.deletionQueue.failed)}
+          detail="Se reintentan de forma duradera"
+          icon={<CircleX className="size-5" aria-hidden="true" />}
+        />
+        <AdminStatCard
+          label="Borrados vencidos"
+          value={number(platform.deletionQueue.overdue)}
+          detail="Llevan más de una hora esperando"
+          icon={<AlertTriangle className="size-5" aria-hidden="true" />}
+        />
+      </section>
+
+      <section className="min-w-0 overflow-hidden rounded-panel border border-border bg-surface">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="font-display text-section-title font-semibold">
+            Incidentes de aplicación
+          </h2>
+          <p className="font-interface text-caption text-text-muted">
+            Errores agrupados sin mensajes, trazas, contenido del usuario ni
+            identificadores personales.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[780px] text-left font-interface text-supporting">
+            <thead className="bg-elevated text-caption uppercase tracking-wide text-text-muted">
+              <tr>
+                <th className="px-5 py-3">Última vez</th>
+                <th className="px-4 py-3">Origen</th>
+                <th className="px-4 py-3">Código seguro</th>
+                <th className="px-4 py-3">Ruta</th>
+                <th className="px-4 py-3 text-right">Veces</th>
+                <th className="px-5 py-3 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {platform.events.map((event) => (
+                <tr key={event.id} className="border-t border-border">
+                  <td className="whitespace-nowrap px-5 py-3 text-caption text-text-secondary">
+                    {dateTimeFormatter.format(event.lastSeenAt)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-caption font-semibold ${
+                        event.severity === "CRITICAL"
+                          ? "bg-error-500/15 text-error-500"
+                          : "bg-warning-500/15 text-warning-500"
+                      }`}
+                    >
+                      {event.source}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-semibold">
+                    {event.code.replaceAll("_", " ")}
+                  </td>
+                  <td className="px-4 py-3 text-text-secondary">
+                    {event.route ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold">
+                    {number(event.occurrenceCount)}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <form action={resolveOperationalEventAction}>
+                      <input type="hidden" name="eventId" value={event.id} />
+                      <button
+                        type="submit"
+                        className="rounded-control border border-border-strong px-3 py-1.5 text-caption font-semibold hover:bg-elevated"
+                      >
+                        Marcar resuelto
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+              {!platform.events.length && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-5 py-8 text-center text-text-muted"
+                  >
+                    No hay incidentes de aplicación abiertos.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AdminStatCard
@@ -521,6 +709,27 @@ function Legend({ color, label }: { color: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
       <span className={`size-2.5 rounded-sm ${color}`} /> {label}
+    </span>
+  );
+}
+
+function HealthBadge({
+  status,
+}: {
+  status: "HEALTHY" | "DEGRADED" | "DOWN" | "NOT_CONFIGURED" | "UNKNOWN";
+}) {
+  const presentation = {
+    HEALTHY: ["Correcto", "bg-success-500/15 text-success-500"],
+    DEGRADED: ["Revisar", "bg-warning-500/15 text-warning-500"],
+    DOWN: ["Caído", "bg-error-500/15 text-error-500"],
+    NOT_CONFIGURED: ["Sin configurar", "bg-elevated text-text-secondary"],
+    UNKNOWN: ["Sin datos", "bg-elevated text-text-secondary"],
+  }[status];
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-1 font-interface text-caption font-semibold ${presentation[1]}`}
+    >
+      {presentation[0]}
     </span>
   );
 }

@@ -1,5 +1,9 @@
 import "server-only";
 import { db } from "@/lib/db";
+import {
+  canCreateBetaAccount,
+  normalizeBetaInvitationEmail,
+} from "@/lib/beta-access";
 
 export interface GoogleAccountDetails {
   type: string;
@@ -34,10 +38,15 @@ export async function ensureGoogleAccountLinked(
     return false;
   }
 
-  const existingUser = await db.user.findUnique({ where: { email } });
+  const normalizedEmail = normalizeBetaInvitationEmail(email);
+  const existingUser = await db.user.findFirst({
+    where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+  });
   if (!existingUser) {
-    // No existing account — let the adapter create a brand-new User+Account.
-    return true;
+    // A new OAuth account follows the same closed-beta gate as credentials.
+    // The Auth.js createUser event records the activation after the adapter
+    // has persisted the new user.
+    return canCreateBetaAccount(normalizedEmail);
   }
 
   const alreadyLinked = await db.account.findUnique({

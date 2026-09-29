@@ -44,7 +44,12 @@ describe("LoginForm", () => {
 describe("RegisterForm", () => {
   it("does not nest the Google sign-in form inside the registration form", () => {
     const { container } = render(
-      <RegisterForm googleEnabled locale="en" messages={messages.auth} />,
+      <RegisterForm
+        googleEnabled
+        inviteOnly
+        locale="en"
+        messages={messages.auth}
+      />,
     );
     expectNoNestedForms(container);
   });

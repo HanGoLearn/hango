@@ -11,6 +11,7 @@ import {
 } from "@/lib/actions/learner-notices";
 import { Button } from "@/components/ui/button";
 import { localeAwareHref, type AppLocale } from "@/i18n/config";
+import type { ShellMessages } from "@/i18n/messages/types";
 import {
   Modal,
   ModalContent,
@@ -18,13 +19,19 @@ import {
   ModalTitle,
 } from "@/components/ui/modal";
 
-export function AnnouncementCenter({ locale }: { locale: AppLocale }) {
+export function AnnouncementCenter({
+  locale,
+  messages,
+}: {
+  locale: AppLocale;
+  messages: ShellMessages["announcements"];
+}) {
   const pathname = usePathname();
   const [queue, setQueue] = useState<LearnerAnnouncement[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    void getPendingAnnouncementsAction().then((items) => {
+    void getPendingAnnouncementsAction(locale).then((items) => {
       if (!cancelled)
         setQueue((current) => {
           const currentIds = new Set(current.map((item) => item.id));
@@ -37,7 +44,7 @@ export function AnnouncementCenter({ locale }: { locale: AppLocale }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [locale, pathname]);
 
   const current = queue[0] ?? null;
   const dismiss = useCallback(() => {
@@ -66,7 +73,7 @@ export function AnnouncementCenter({ locale }: { locale: AppLocale }) {
           <Icon className="size-6" aria-hidden="true" />
         </div>
         <p className="font-interface text-caption font-semibold uppercase tracking-[0.1em] text-primary-400">
-          Novedad en HanGo
+          {messages.eyebrow}
         </p>
         <ModalTitle className="mt-1">{current.title}</ModalTitle>
         <ModalDescription className="mt-3 whitespace-pre-wrap text-body">
@@ -74,7 +81,7 @@ export function AnnouncementCenter({ locale }: { locale: AppLocale }) {
         </ModalDescription>
         <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={dismiss}>
-            {queue.length > 1 ? "Siguiente" : "Entendido"}
+            {queue.length > 1 ? messages.next : messages.understood}
           </Button>
           {current.ctaHref && current.ctaLabel && (
             <Link

@@ -4,7 +4,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   createSpeakingSession,
+  discardUnclaimedSpeakingUpload,
   submitRecording,
+  submitUploadedRecording,
   submitTextFallback,
   completeSpeakingSession,
   deleteSpeakingAttempt,
@@ -20,10 +22,18 @@ import {
   LearnerAudioValidationError,
   validateLearnerAudio,
 } from "@/lib/media-validation";
+import {
+  assertOwnedSpeakingUploadKey,
+  MAX_SPEAKING_AUDIO_BYTES,
+  MAX_SPEAKING_AUDIO_DURATION_SECONDS,
+  prepareSpeakingUpload,
+  SpeakingUploadRateLimitError,
+} from "@/lib/speaking-upload";
 
 function speakingErrorMessage(error: unknown): string {
   if (error instanceof SpeakingInputError) return error.message;
   if (error instanceof SpeakingRateLimitError) return error.message;
+  if (error instanceof SpeakingUploadRateLimitError) return error.message;
   if (error instanceof SpeakingScenarioRateLimitError) return error.message;
   if (error instanceof LearnerAudioValidationError) return error.message;
   if (error instanceof Error && error.message === "Recording is too large.") {
@@ -43,9 +53,6 @@ async function requireUserId(): Promise<string> {
   if (!session?.user?.id) throw new Error("Not authenticated");
   return session.user.id;
 }
-
-const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
-const MAX_AUDIO_DURATION_SECONDS = 5 * 60;
 
 export async function createSpeakingSessionAction(
   activityType:
@@ -100,8 +107,8 @@ export async function submitRecordingAction(
 
     const buffer = Buffer.from(await audioFile.arrayBuffer());
     const audio = await validateLearnerAudio(buffer, audioFile.type, {
-      maxBytes: MAX_AUDIO_BYTES,
-      maxDurationSeconds: MAX_AUDIO_DURATION_SECONDS,
+      maxBytes: MAX_SPEAKING_AUDIO_BYTES,
+      maxDurationSeconds: MAX_SPEAKING_AUDIO_DURATION_SECONDS,
     });
     const attempt = await submitRecording(
       userId,
@@ -125,6 +132,95 @@ export async function submitRecordingAction(
       },
     };
   } catch (error) {
+    return { ok: false, error: speakingErrorMessage(error) };
+  }
+}
+
+export type PrepareSpeakingUploadResult =
+  | { ok: true; pathname: string; mimeType: string }
+  | { ok: false; error: string };
+
+export async function prepareSpeakingUploadAction(
+  sessionId: string,
+  claimedMimeType: string,
+): Promise<PrepareSpeakingUploadResult> {
+  const userId = await requireUserId();
+  try {
+    const target = await prepareSpeakingUpload(
+      userId,
+      sessionId,
+      claimedMimeType,
+    );
+    return { ok: true, ...target };
+  } catch (error) {
+    return { ok: false, error: speakingErrorMessage(error) };
+  }
+}
+
+export async function submitUploadedRecordingAction(
+  sessionId: string,
+  input: {
+    storageKey: string;
+    claimedMimeType: string;
+    toneScore: number | null;
+  },
+): Promise<SubmitSpeakingResult> {
+  const userId = await requireUserId();
+  let ownedStorageKey: string | null = null;
+
+  try {
+    ownedStorageKey = assertOwnedSpeakingUploadKey(
+      input.storageKey,
+      userId,
+      sessionId,
+      input.claimedMimeType,
+    );
+    const buffer = await getStorageProvider().download(ownedStorageKey);
+    const audio = await validateLearnerAudio(buffer, input.claimedMimeType, {
+      maxBytes: MAX_SPEAKING_AUDIO_BYTES,
+      maxDurationSeconds: MAX_SPEAKING_AUDIO_DURATION_SECONDS,
+    });
+    const toneScore =
+      typeof input.toneScore === "number" &&
+      Number.isFinite(input.toneScore) &&
+      input.toneScore >= 0 &&
+      input.toneScore <= 100
+        ? input.toneScore
+        : null;
+    const attempt = await submitUploadedRecording(
+      userId,
+      sessionId,
+      ownedStorageKey,
+      audio.buffer,
+      audio.mimeType,
+      audio.durationSeconds,
+      toneScore,
+    );
+    const audioUrl = attempt.audioFilePath
+      ? await getStorageProvider().getUrl(attempt.audioFilePath)
+      : null;
+
+    return {
+      ok: true,
+      result: {
+        transcript: attempt.transcript ?? "",
+        audioUrl,
+        feedback: attempt.feedback as unknown as SpeakingFeedback,
+      },
+    };
+  } catch (error) {
+    if (ownedStorageKey) {
+      try {
+        await discardUnclaimedSpeakingUpload(
+          userId,
+          sessionId,
+          ownedStorageKey,
+        );
+      } catch {
+        // The daily orphan scan is the final cleanup path when both direct
+        // deletion and its durable outbox are temporarily unavailable.
+      }
+    }
     return { ok: false, error: speakingErrorMessage(error) };
   }
 }

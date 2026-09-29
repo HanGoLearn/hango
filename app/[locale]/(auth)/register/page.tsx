@@ -25,6 +25,7 @@ export default async function RegisterPage({
   return (
     <RegisterForm
       googleEnabled={googleEnabled}
+      inviteOnly={serverEnv.HANGO_BETA_ACCESS_MODE === "INVITE_ONLY"}
       locale={locale}
       messages={authMessages}
     />

@@ -60,7 +60,7 @@ export function AnnouncementForm({
             error={state.fieldErrors?.message?.[0]}
             placeholder="Explica qué cambió y por qué le importa al estudiante."
           />
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <NativeSelect
               name="type"
               label="Tipo"
@@ -81,6 +81,16 @@ export function AnnouncementForm({
                 ["NORMAL", "Normal"],
                 ["IMPORTANT", "Importante"],
                 ["URGENT", "Urgente"],
+              ]}
+            />
+            <NativeSelect
+              name="locale"
+              label="Idioma"
+              defaultValue="ALL"
+              options={[
+                ["ALL", "Todos"],
+                ["ES", "Español"],
+                ["EN", "English"],
               ]}
             />
             <NativeSelect

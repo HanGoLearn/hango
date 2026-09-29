@@ -6,10 +6,15 @@ import {
   DailyUsageCapExceededError,
   DEFAULT_DAILY_CAP_USD,
   AI_USAGE_FEATURES,
+  AiFamilyDisabledError,
+  GlobalAiBudgetExceededError,
+  utcBudgetDay,
 } from "@/lib/ai-usage";
 import {
   getAiUsageSummary,
+  getGlobalAiBudgetSummary,
   setDailyUsageCap,
+  setGlobalAiBudgetPolicy,
   InvalidDailyCapError,
 } from "@/lib/admin-ai-usage";
 
@@ -21,6 +26,7 @@ const testEmails: string[] = [];
 const capFeaturesToReset: string[] = [];
 
 afterEach(async () => {
+  delete process.env.HANGO_ENFORCE_GLOBAL_AI_BUDGET_IN_TESTS;
   if (testEmails.length > 0) {
     // Cascades to AiUsageLog (onDelete: Cascade).
     await db.user.deleteMany({ where: { email: { in: testEmails } } });
@@ -32,6 +38,10 @@ afterEach(async () => {
     });
     capFeaturesToReset.length = 0;
   }
+  await db.aiDailyBudgetCounter.deleteMany({
+    where: { day: utcBudgetDay() },
+  });
+  await db.aiBudgetPolicy.deleteMany({ where: { id: "global" } });
 });
 
 async function createTestUser(email: string) {
@@ -246,5 +256,85 @@ describe("AI usage logging + daily caps (2026-09-05, integration, real database)
     expect(afterRow.todayCallCount).toBe(beforeRow.todayCallCount + 2);
     expect(afterRow.monthCostUsd).toBeCloseTo(beforeRow.monthCostUsd + 0.03, 8);
     expect(afterRow.monthCallCount).toBe(beforeRow.monthCallCount + 2);
+  });
+
+  it("can pause one AI family without disabling the others", async () => {
+    const user = await createTestUser(
+      `ai-budget-family-${Date.now()}@hango.dev`,
+    );
+    await setGlobalAiBudgetPolicy({
+      dailyLimitUsd: 5,
+      textEnabled: false,
+      sttEnabled: true,
+      ttsEnabled: true,
+      realtimeEnabled: true,
+    });
+
+    await expect(
+      checkDailyUsageCap(user.id, "mission-chat"),
+    ).rejects.toBeInstanceOf(AiFamilyDisabledError);
+    await expect(
+      checkDailyUsageCap(user.id, "speaking-transcribe"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("authorizes concurrent calls atomically without crossing the global budget", async () => {
+    process.env.HANGO_ENFORCE_GLOBAL_AI_BUDGET_IN_TESTS = "true";
+    const user = await createTestUser(
+      `ai-budget-atomic-${Date.now()}@hango.dev`,
+    );
+    await setGlobalAiBudgetPolicy({
+      dailyLimitUsd: 0.06,
+      textEnabled: true,
+      sttEnabled: true,
+      ttsEnabled: true,
+      realtimeEnabled: true,
+    });
+
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 10 }, () =>
+        checkDailyUsageCap(user.id, "mission-chat"),
+      ),
+    );
+    expect(
+      attempts.filter((attempt) => attempt.status === "fulfilled"),
+    ).toHaveLength(3);
+    expect(
+      attempts
+        .filter((attempt) => attempt.status === "rejected")
+        .every(
+          (attempt) => attempt.reason instanceof GlobalAiBudgetExceededError,
+        ),
+    ).toBe(true);
+
+    const counter = await db.aiDailyBudgetCounter.findUniqueOrThrow({
+      where: { day: utcBudgetDay() },
+    });
+    expect(counter.authorizedMicrousd).toBe(60_000);
+    expect(counter.authorizationCount).toBe(3);
+  });
+
+  it("reports the global 50 percent warning from authorized exposure", async () => {
+    process.env.HANGO_ENFORCE_GLOBAL_AI_BUDGET_IN_TESTS = "true";
+    const user = await createTestUser(
+      `ai-budget-summary-${Date.now()}@hango.dev`,
+    );
+    await setGlobalAiBudgetPolicy({
+      dailyLimitUsd: 0.1,
+      textEnabled: true,
+      sttEnabled: true,
+      ttsEnabled: true,
+      realtimeEnabled: true,
+    });
+    await Promise.all([
+      checkDailyUsageCap(user.id, "mission-chat"),
+      checkDailyUsageCap(user.id, "mission-report"),
+      checkDailyUsageCap(user.id, "writing-feedback"),
+    ]);
+
+    const summary = await getGlobalAiBudgetSummary();
+    expect(summary.authorizedUsd).toBeCloseTo(0.06, 8);
+    expect(summary.usagePercent).toBeCloseTo(60, 8);
+    expect(summary.alertLevel).toBe("NOTICE_50");
   });
 });

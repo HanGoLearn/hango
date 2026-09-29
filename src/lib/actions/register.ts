@@ -18,6 +18,11 @@ import {
   getAuthRequestIdentity,
 } from "@/lib/auth-rate-limit";
 import { isAuthHoneypotFilled } from "@/lib/auth-abuse";
+import {
+  isBetaInviteOnly,
+  isPendingBetaInvitation,
+  normalizeBetaInvitationEmail,
+} from "@/lib/beta-access";
 
 export interface RegisterFormState {
   status: "idle" | "error" | "success";
@@ -26,6 +31,8 @@ export interface RegisterFormState {
 }
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+class RegistrationUnavailableError extends Error {}
 
 export async function registerAction(
   _prevState: RegisterFormState,
@@ -80,56 +87,105 @@ export async function registerAction(
     return { status: "error", message: messages.actions.emailUnavailable };
   }
 
-  // Registration (unlike login/password recovery) may disclose an existing
-  // account — the learner needs to know to sign in instead (authentication.md
-  // only restricts this disclosure for login and password recovery).
-  const existing = await db.user.findFirst({
-    where: { email: { equals: email, mode: "insensitive" } },
-  });
-  if (existing) {
-    return {
-      status: "error",
-      message: messages.actions.accountExists,
-    };
-  }
-
   const passwordHash = await bcrypt.hash(password, 12);
   const { rawToken, tokenHash } = createOpaqueAuthToken();
+  const normalizedEmail = normalizeBetaInvitationEmail(email);
 
   let user: { id: string; email: string | null };
   try {
     user = await db.$transaction(async (tx) => {
+      // Return the same message for an existing account and an email that is
+      // not on the allowlist. This avoids turning the closed-beta form into an
+      // account/invitation enumeration endpoint.
+      const [existing, invitation] = await Promise.all([
+        tx.user.findFirst({
+          where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+          select: { id: true },
+        }),
+        isBetaInviteOnly()
+          ? tx.betaInvitation.findUnique({
+              where: { email: normalizedEmail },
+              select: { id: true, status: true, expiresAt: true },
+            })
+          : Promise.resolve(null),
+      ]);
+      if (
+        existing ||
+        (isBetaInviteOnly() && !isPendingBetaInvitation(invitation))
+      ) {
+        throw new RegistrationUnavailableError();
+      }
+
       const createdUser = await tx.user.create({
-        data: { name, email, passwordHash },
+        data: { name, email: normalizedEmail, passwordHash },
         select: { id: true, email: true },
       });
       await tx.verificationToken.create({
         data: {
-          identifier: email,
+          identifier: normalizedEmail,
           token: tokenHash,
           expires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
         },
       });
+
+      if (isBetaInviteOnly()) {
+        const activatedAt = new Date();
+        const claimed = await tx.betaInvitation.updateMany({
+          where: {
+            id: invitation!.id,
+            status: "PENDING",
+            activatedUserId: null,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: activatedAt } }],
+          },
+          data: {
+            status: "ACTIVATED",
+            activatedUserId: createdUser.id,
+            activatedAt,
+            revokedAt: null,
+          },
+        });
+        if (claimed.count !== 1) throw new RegistrationUnavailableError();
+      }
+
       return createdUser;
     });
   } catch (error) {
+    if (error instanceof RegistrationUnavailableError) {
+      return {
+        status: "error",
+        message: messages.actions.registrationUnavailable,
+      };
+    }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { status: "error", message: messages.actions.accountExists };
+      return {
+        status: "error",
+        message: messages.actions.registrationUnavailable,
+      };
     }
     throw error;
   }
 
-  const verificationUrl = `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${rawToken}&email=${encodeURIComponent(email)}&locale=${locale}`;
+  const verificationUrl = `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${rawToken}&email=${encodeURIComponent(normalizedEmail)}&locale=${locale}`;
   try {
-    await sendVerificationEmail(email, verificationUrl, locale);
+    await sendVerificationEmail(normalizedEmail, verificationUrl, locale);
   } catch {
     // Do not leave a newly-created, permanently unreachable account behind
     // when the provider rejects the first verification message.
     await db.$transaction([
-      db.verificationToken.deleteMany({ where: { identifier: email } }),
+      db.verificationToken.deleteMany({
+        where: { identifier: normalizedEmail },
+      }),
+      db.betaInvitation.updateMany({
+        where: { activatedUserId: user.id, status: "ACTIVATED" },
+        data: {
+          status: "PENDING",
+          activatedUserId: null,
+          activatedAt: null,
+        },
+      }),
       db.user.deleteMany({
         where: {
           id: user.id,

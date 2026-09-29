@@ -6,11 +6,19 @@ const optionalNonEmptyString = z.preprocess(
   z.string().min(1).optional(),
 );
 
+const optionalPoolSize = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.coerce.number().int().min(1).max(20).optional(),
+);
+
 const serverSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
   DATABASE_URL: z.url(),
+  // Keep serverless connection pools deliberately small. Local development
+  // retains its larger pool unless this is explicitly overridden.
+  DATABASE_POOL_MAX: optionalPoolSize,
   AUTH_SECRET: z.string().min(32),
   // Optional: Google Sign-In (FASE 2.5) is disabled when these are unset —
   // see src/lib/auth.ts. Get these from https://console.cloud.google.com/apis/credentials.
@@ -40,11 +48,21 @@ const serverSchema = z.object({
   HANGO_BETA_LEARNING_SCOPE: z
     .enum(["FOUNDATIONS_ONLY", "FULL"])
     .default("FOUNDATIONS_ONLY"),
+  // Closed-beta account creation. Existing accounts can always sign in;
+  // INVITE_ONLY only gates creation of new credential and OAuth accounts.
+  HANGO_BETA_ACCESS_MODE: z
+    .enum(["INVITE_ONLY", "OPEN"])
+    .default("INVITE_ONLY"),
+  // Local disk is development/test only. Production defaults to the private
+  // Vercel Blob provider in src/lib/storage and fails closed without a token.
+  HANGO_STORAGE_PROVIDER: z.enum(["local", "vercel-blob"]).optional(),
+  BLOB_READ_WRITE_TOKEN: optionalNonEmptyString,
 });
 
 const parsed = serverSchema.safeParse({
   NODE_ENV: process.env.NODE_ENV,
   DATABASE_URL: process.env.DATABASE_URL,
+  DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
   AUTH_SECRET: process.env.AUTH_SECRET,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
@@ -54,6 +72,9 @@ const parsed = serverSchema.safeParse({
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   CRON_SECRET: process.env.CRON_SECRET,
   HANGO_BETA_LEARNING_SCOPE: process.env.HANGO_BETA_LEARNING_SCOPE,
+  HANGO_BETA_ACCESS_MODE: process.env.HANGO_BETA_ACCESS_MODE,
+  HANGO_STORAGE_PROVIDER: process.env.HANGO_STORAGE_PROVIDER,
+  BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
 });
 
 if (!parsed.success) {

@@ -440,6 +440,49 @@ export const messages = {
       next: "Siguiente ({count} más)",
       nice: "¡Genial!",
     },
+    announcements: {
+      eyebrow: "Novedad en HanGo",
+      next: "Siguiente",
+      understood: "Entendido",
+    },
+    feedback: {
+      open: "Feedback",
+      title: "Ayúdanos a mejorar HanGo",
+      description:
+        "Cuéntanos qué pasó o qué haría mejor tu aprendizaje. Normalmente toma menos de un minuto.",
+      categoryLabel: "¿Qué tipo de comentario es?",
+      categories: {
+        bug: "Algo no funciona",
+        idea: "Tengo una idea",
+        confusing: "Algo fue confuso",
+        lessonContent: "Contenido de una lección",
+        han: "Han Tutor, Han Companion o Speaking Lab",
+        other: "Otro comentario",
+      },
+      ratingLabel: "¿Cómo va tu experiencia hasta ahora?",
+      optional: "Opcional",
+      ratingAria: "{rating} de 5",
+      messageLabel: "Cuéntanos más",
+      messagePlaceholder: "Describe lo que pasó o comparte tu idea…",
+      send: "Enviar feedback",
+      successTitle: "¡Gracias!",
+      successMessage: "Lo recibimos y lo revisaremos pronto.",
+      sendAnother: "Enviar otro comentario",
+      recentTitle: "Tus reportes recientes",
+      noRecent: "Todavía no has enviado feedback.",
+      responseLabel: "Respuesta de HanGo",
+      statuses: {
+        new: "Recibido",
+        reviewing: "En revisión",
+        resolved: "Resuelto",
+      },
+      errors: {
+        invalid: "Elige una categoría y cuéntanos un poco más.",
+        rateLimited: "Ya enviaste varios reportes hoy. Inténtalo mañana.",
+        unauthorized: "Vuelve a iniciar sesión antes de enviar feedback.",
+        generic: "No pudimos enviarlo ahora. Inténtalo nuevamente.",
+      },
+    },
     coinCelebration: {
       received: "¡Recibiste HanCoins!",
       continue: "Continuar",
@@ -1662,6 +1705,7 @@ export const messages = {
       han: "Han",
       appearance: "Apariencia",
       privacy: "Privacidad",
+      support: "Ayuda y soporte",
       account: "Cuenta",
     },
     displayName: {
@@ -1754,6 +1798,14 @@ export const messages = {
       year: "1 año",
       note: "Esto se aplica solo al audio de Speaking Lab. Las transcripciones y el feedback siguen disponibles después de eliminar una grabación.",
     },
+    support: {
+      title: "¿Necesitas ayuda o encontraste un problema?",
+      description:
+        "Usa el botón Feedback desde cualquier pantalla o escríbenos si algo te impide continuar por completo.",
+      emailLabel: "Escribir a soporte",
+      responseTime:
+        "Normalmente respondemos en un máximo de 2 días hábiles durante la beta cerrada.",
+    },
     deleteAccount: {
       open: "Eliminar cuenta",
       title: "¿Eliminar tu cuenta?",
@@ -1802,6 +1854,8 @@ export const messages = {
     register: {
       title: "Crea tu cuenta",
       subtitle: "Aprende chino a través de comunicación real.",
+      betaNotice:
+        "HanGo está en beta cerrada. Crea tu cuenta con el mismo correo que recibió la invitación.",
       name: "Nombre",
       email: "Correo electrónico",
       password: "Contraseña",
@@ -1847,6 +1901,8 @@ export const messages = {
         "Cuenta creada. Revisa tu correo y verifica la cuenta antes de iniciar sesión.",
       accountCreatedDevelopment:
         "Cuenta creada. El envío de correos está desactivado en este entorno de desarrollo, así que ya puedes iniciar sesión.",
+      registrationUnavailable:
+        "No pudimos habilitar este registro. Usa el correo invitado a la beta o inicia sesión si ya tienes una cuenta.",
       emailUnavailable:
         "No pudimos enviar el correo de verificación en este momento. Inténtalo más tarde.",
       tooManyAttempts:

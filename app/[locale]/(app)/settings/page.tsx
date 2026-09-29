@@ -1,4 +1,11 @@
-import { User, GraduationCap, Palette, Shield, UserCog } from "lucide-react";
+import {
+  User,
+  GraduationCap,
+  LifeBuoy,
+  Palette,
+  Shield,
+  UserCog,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
 import { getAvatarPageData } from "@/lib/avatar-data";
@@ -209,6 +216,36 @@ export default async function SettingsPage({
             initialDays={profile.recordingRetentionDays}
             messages={messages.privacy}
           />
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <SectionHeading
+          badgeClassName="bg-neutral-600"
+          icon={
+            <LifeBuoy className="size-4 text-neutral-50" aria-hidden="true" />
+          }
+        >
+          {messages.sections.support}
+        </SectionHeading>
+        <Card>
+          <div className="flex flex-col gap-2">
+            <p className="font-interface text-body font-semibold text-text-primary">
+              {messages.support.title}
+            </p>
+            <Caption className="text-text-secondary">
+              {messages.support.description}
+            </Caption>
+            <a
+              href="mailto:arean.mendoza@unmsm.edu.pe"
+              className="mt-1 w-fit rounded-control font-interface text-supporting font-semibold text-primary-400 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+            >
+              {messages.support.emailLabel}: arean.mendoza@unmsm.edu.pe
+            </a>
+            <Caption className="text-text-muted">
+              {messages.support.responseTime}
+            </Caption>
+          </div>
         </Card>
       </div>
 

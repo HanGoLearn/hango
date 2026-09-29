@@ -16,6 +16,7 @@ export async function getAdminCommunications() {
         type: true,
         status: true,
         priority: true,
+        locale: true,
         startsAt: true,
         endsAt: true,
         ctaLabel: true,

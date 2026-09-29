@@ -7,21 +7,18 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// max: 20, not the pg.Pool default of 10 (2026-08-30, Prisma audit) - a
-// single page load routinely bursts 10+ concurrent queries (AppShell's
-// daily-login check + profile + 5-query streak lookup + 4-query avatar
-// data), so the default pool was queuing requests for a free connection
-// mid-burst - confirmed live via server logs showing the same action
-// (saveAvatarAnimalAction) alternate between ~140ms and ~950ms+ across
-// consecutive calls in the same process, the signature of pool contention
-// rather than one-time cold-start cost.
+// Local development benefits from the larger pool established by the 2026-08-30
+// audit. Serverless instances must stay smaller so concurrent Vercel functions
+// do not multiply into an excessive number of database connections.
+const poolMax =
+  serverEnv.DATABASE_POOL_MAX ?? (serverEnv.NODE_ENV === "production" ? 5 : 20);
+
 const adapter = new PrismaPg({
   connectionString: serverEnv.DATABASE_URL,
-  max: 20,
+  max: poolMax,
 });
 
-export const db =
-  globalForPrisma.prisma ?? new PrismaClient({ adapter });
+export const db = globalForPrisma.prisma ?? new PrismaClient({ adapter });
 
 if (serverEnv.NODE_ENV !== "production") {
   globalForPrisma.prisma = db;

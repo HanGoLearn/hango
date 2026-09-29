@@ -3,6 +3,9 @@ import { db } from "@/lib/db";
 import {
   AI_USAGE_FEATURES,
   DEFAULT_DAILY_CAP_USD,
+  DEFAULT_GLOBAL_DAILY_BUDGET_USD,
+  microusdToUsd,
+  utcBudgetDay,
   type AiUsageFeature,
 } from "@/lib/ai-usage";
 
@@ -27,6 +30,7 @@ export const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   "han-speech": "Voz generada de Han",
   "han-teacher-transcribe": "Transcripción de Han Tutor y Companion",
   "speaking-transcribe": "Transcripción de Speaking Lab",
+  "han-realtime-session": "Conversación de voz en vivo con Han",
   "han-realtime-assessment": "Evaluación de conversación por voz",
 };
 
@@ -98,6 +102,105 @@ export async function getAiUsageSummary(): Promise<FeatureUsageSummary[]> {
 
 export class InvalidDailyCapError extends Error {}
 export class InvalidUserAiUsageCapError extends Error {}
+export class InvalidGlobalAiBudgetPolicyError extends Error {}
+
+export type GlobalAiBudgetAlertLevel =
+  "NORMAL" | "NOTICE_50" | "WARNING_75" | "CRITICAL_90" | "BLOCKED_100";
+
+export interface GlobalAiBudgetSummary {
+  dailyLimitUsd: number;
+  authorizedUsd: number;
+  authorizationCount: number;
+  actualCostUsd: number;
+  usagePercent: number;
+  alertLevel: GlobalAiBudgetAlertLevel;
+  textEnabled: boolean;
+  sttEnabled: boolean;
+  ttsEnabled: boolean;
+  realtimeEnabled: boolean;
+}
+
+export function globalAiBudgetAlertLevel(
+  usagePercent: number,
+): GlobalAiBudgetAlertLevel {
+  if (usagePercent >= 100) return "BLOCKED_100";
+  if (usagePercent >= 90) return "CRITICAL_90";
+  if (usagePercent >= 75) return "WARNING_75";
+  if (usagePercent >= 50) return "NOTICE_50";
+  return "NORMAL";
+}
+
+export async function getGlobalAiBudgetSummary(): Promise<GlobalAiBudgetSummary> {
+  const [policy, counter, actual] = await Promise.all([
+    db.aiBudgetPolicy.findUnique({ where: { id: "global" } }),
+    db.aiDailyBudgetCounter.findUnique({ where: { day: utcBudgetDay() } }),
+    db.aiUsageLog.aggregate({
+      where: { createdAt: { gte: startOfTodayUtc() } },
+      _sum: { estimatedCostUsd: true },
+    }),
+  ]);
+  const dailyLimitUsd = policy
+    ? microusdToUsd(policy.dailyLimitMicrousd)
+    : DEFAULT_GLOBAL_DAILY_BUDGET_USD;
+  const authorizedUsd = microusdToUsd(counter?.authorizedMicrousd ?? 0);
+  const usagePercent =
+    dailyLimitUsd <= 0
+      ? 100
+      : Math.min(100, (authorizedUsd / dailyLimitUsd) * 100);
+
+  return {
+    dailyLimitUsd,
+    authorizedUsd,
+    authorizationCount: counter?.authorizationCount ?? 0,
+    actualCostUsd: actual._sum.estimatedCostUsd ?? 0,
+    usagePercent,
+    alertLevel: globalAiBudgetAlertLevel(usagePercent),
+    textEnabled: policy?.textEnabled ?? true,
+    sttEnabled: policy?.sttEnabled ?? true,
+    ttsEnabled: policy?.ttsEnabled ?? true,
+    realtimeEnabled: policy?.realtimeEnabled ?? true,
+  };
+}
+
+export async function setGlobalAiBudgetPolicy(input: {
+  dailyLimitUsd: number;
+  textEnabled: boolean;
+  sttEnabled: boolean;
+  ttsEnabled: boolean;
+  realtimeEnabled: boolean;
+}): Promise<void> {
+  if (
+    !Number.isFinite(input.dailyLimitUsd) ||
+    input.dailyLimitUsd <= 0 ||
+    input.dailyLimitUsd > 2_000 ||
+    typeof input.textEnabled !== "boolean" ||
+    typeof input.sttEnabled !== "boolean" ||
+    typeof input.ttsEnabled !== "boolean" ||
+    typeof input.realtimeEnabled !== "boolean"
+  ) {
+    throw new InvalidGlobalAiBudgetPolicyError(
+      "Ingresa un presupuesto diario válido, mayor que cero.",
+    );
+  }
+  await db.aiBudgetPolicy.upsert({
+    where: { id: "global" },
+    create: {
+      id: "global",
+      dailyLimitMicrousd: Math.round(input.dailyLimitUsd * 1_000_000),
+      textEnabled: input.textEnabled,
+      sttEnabled: input.sttEnabled,
+      ttsEnabled: input.ttsEnabled,
+      realtimeEnabled: input.realtimeEnabled,
+    },
+    update: {
+      dailyLimitMicrousd: Math.round(input.dailyLimitUsd * 1_000_000),
+      textEnabled: input.textEnabled,
+      sttEnabled: input.sttEnabled,
+      ttsEnabled: input.ttsEnabled,
+      realtimeEnabled: input.realtimeEnabled,
+    },
+  });
+}
 
 export type UserAiUsageCapMode = "GENERAL" | "CUSTOM" | "BLOCKED";
 

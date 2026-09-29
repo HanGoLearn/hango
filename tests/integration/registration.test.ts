@@ -23,6 +23,20 @@ function formDataOf(fields: Record<string, string>): FormData {
 
 const testEmails: string[] = [];
 
+async function invite(
+  email: string,
+  status: "PENDING" | "REVOKED" = "PENDING",
+) {
+  await db.betaInvitation.create({
+    data: {
+      email: email.toLowerCase(),
+      status,
+      revokedAt: status === "REVOKED" ? new Date() : null,
+      cohort: "integration-test",
+    },
+  });
+}
+
 afterEach(async () => {
   await db.authRateLimitBucket.deleteMany();
   verificationUrls.length = 0;
@@ -31,6 +45,9 @@ afterEach(async () => {
       where: { identifier: { in: testEmails } },
     });
     await db.user.deleteMany({ where: { email: { in: testEmails } } });
+    await db.betaInvitation.deleteMany({
+      where: { email: { in: testEmails } },
+    });
     testEmails.length = 0;
   }
 });
@@ -51,6 +68,7 @@ describe("registerAction (integration, real database)", () => {
   it("creates a User with a hashed password and a verification token", async () => {
     const email = `registration-test-${Date.now()}@hango.dev`;
     testEmails.push(email);
+    await invite(email);
 
     const result = await registerAction(
       { status: "idle" },
@@ -83,6 +101,7 @@ describe("registerAction (integration, real database)", () => {
   it("prevents duplicate accounts for the same email", async () => {
     const email = `registration-dup-${Date.now()}@hango.dev`;
     testEmails.push(email);
+    await invite(email);
 
     const first = await registerAction(
       { status: "idle" },
@@ -95,9 +114,57 @@ describe("registerAction (integration, real database)", () => {
       formDataOf({ name: "Second", email, password: "different-password" }),
     );
     expect(second.status).toBe("error");
-    expect(second.message).toMatch(/already exists/i);
+    expect(second.message).toMatch(/invited|log in/i);
 
     const users = await db.user.findMany({ where: { email } });
     expect(users).toHaveLength(1);
+  });
+
+  it("rejects an email that was not invited without creating a user", async () => {
+    const email = `registration-uninvited-${Date.now()}@hango.dev`;
+    testEmails.push(email);
+
+    const result = await registerAction(
+      { status: "idle" },
+      formDataOf({ name: "Not Invited", email, password: "correct-horse" }),
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/invited|log in/i);
+    await expect(db.user.findUnique({ where: { email } })).resolves.toBeNull();
+  });
+
+  it("rejects a revoked invitation", async () => {
+    const email = `registration-revoked-${Date.now()}@hango.dev`;
+    testEmails.push(email);
+    await invite(email, "REVOKED");
+
+    const result = await registerAction(
+      { status: "idle" },
+      formDataOf({ name: "Revoked", email, password: "correct-horse" }),
+    );
+
+    expect(result.status).toBe("error");
+    await expect(db.user.findUnique({ where: { email } })).resolves.toBeNull();
+  });
+
+  it("normalizes the invited email before claiming it", async () => {
+    const email = `registration-case-${Date.now()}@hango.dev`;
+    testEmails.push(email);
+    await invite(email);
+
+    const result = await registerAction(
+      { status: "idle" },
+      formDataOf({
+        name: "Case Test",
+        email: email.toUpperCase(),
+        password: "correct-horse",
+      }),
+    );
+
+    expect(result.status).toBe("success");
+    const invitation = await db.betaInvitation.findUnique({ where: { email } });
+    expect(invitation?.status).toBe("ACTIVATED");
+    expect(invitation?.activatedUserId).toBeTruthy();
   });
 });
