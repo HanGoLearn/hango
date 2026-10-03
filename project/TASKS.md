@@ -5914,6 +5914,18 @@ That document is the source of truth for pre-beta work; keep updates here terse.
   a non-Vercel fallback. Focused tests pass 14/14, the static beta gate passes
   247/247, typecheck/lint and the production build pass; no Han behavior
   changed.
+- [x] **P1-03 initial HTTPS deployment foundation (2026-10-02):** Vercel now
+  generates Prisma Client during installation, production deploys as the
+  `HanGoLearn` repository owner, and `https://hango-three.vercel.app` plus
+  `/api/health` respond successfully with Prisma Postgres and private Vercel
+  Blob healthy. `NEXT_PUBLIC_APP_URL` and `HANGO_STORAGE_PROVIDER` are scoped
+  to Production. The curriculum importer can now re-key the 41 reviewed Spanish
+  packages onto a freshly seeded database only after an exact ordered match of
+  every authored source unit; any content drift or conflicting target
+  translation aborts before writes. Unit tests pass 8/8, with typecheck,
+  targeted lint and formatting green. Production migrations, one-time seed,
+  translation import, admin bootstrap, Resend, Google OAuth and the real-domain
+  manual gate remain open; Han was not changed.
 - [ ] **Beta readiness:** real Android/iPhone QA, privacy/terms/AI disclosure,
   human linguistic review, performance/image optimization and a measured closed
   beta before deciding on PWA/APK.

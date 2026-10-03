@@ -107,6 +107,16 @@ No copiar `.env.local` completo: se cargan las variables anteriores una por una.
    El `prisma/seed.ts` actual elimina y recrea escenarios; es aceptable únicamente
    en una base nueva y vacía. **No volver a ejecutarlo después de que existan
    progresos reales** hasta disponer de un publicador de contenido no destructivo.
+   Para una base nueva, el orden seguro es:
+   - ejecutar `npm run db:seed` una sola vez;
+   - validar en modo dry-run los 41 archivos de
+     `project/curriculum-translations/es/*.json` con el comando `import` sin
+     `--apply`;
+   - importar cada paquete con `import <archivo> --apply`. El importador solo
+     sustituye IDs generados por Prisma cuando el tipo, campo, contexto y texto
+     fuente de todas las unidades coinciden exactamente y en el mismo orden;
+   - ejecutar `npm run content:i18n:backfill -- --apply` para el contenido
+     independiente y confirmar `npm run content:i18n:coverage` al 100 %.
 10. Crear la cuenta administrativa y las invitaciones desde la administración.
 11. Desplegar y ejecutar el gate de la sección 5. Solo después compartir el URL.
 

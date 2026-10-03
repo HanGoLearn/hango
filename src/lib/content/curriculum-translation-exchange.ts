@@ -191,6 +191,104 @@ export function translationValueMap(
   );
 }
 
+type CurriculumTranslationPackageRebaseResult =
+  | {
+      valid: true;
+      rebased: boolean;
+      translationPackage: CurriculumTranslationPackage;
+      errors: [];
+    }
+  | {
+      valid: false;
+      rebased: false;
+      errors: string[];
+    };
+
+const portableUnitFields = [
+  "entityType",
+  "field",
+  "context",
+  "source",
+] as const satisfies readonly (keyof CurriculumTranslationUnit)[];
+
+/**
+ * Re-keys a reviewed translation package for an equivalent freshly seeded
+ * database. Prisma-assigned entity IDs may differ between databases, but the
+ * ordered authored source must remain byte-for-byte identical. Any real
+ * content or structural drift aborts the rebase before an import can write.
+ */
+export function rebaseCurriculumTranslationPackage(
+  currentPackage: CurriculumTranslationPackage,
+  incomingPackage: CurriculumTranslationPackage,
+): CurriculumTranslationPackageRebaseResult {
+  if (currentPackage.sourceHash === incomingPackage.sourceHash) {
+    return {
+      valid: true,
+      rebased: false,
+      translationPackage: incomingPackage,
+      errors: [],
+    };
+  }
+
+  const errors: string[] = [];
+  if (currentPackage.scenario.slug !== incomingPackage.scenario.slug) {
+    errors.push("El slug del escenario no coincide.");
+  }
+  if (
+    currentPackage.scenario.sourceName !== incomingPackage.scenario.sourceName
+  ) {
+    errors.push("El nombre fuente del escenario no coincide.");
+  }
+  if (currentPackage.units.length !== incomingPackage.units.length) {
+    errors.push(
+      `La cantidad de unidades cambió: ${incomingPackage.units.length} en el paquete y ${currentPackage.units.length} en la base actual.`,
+    );
+  }
+
+  const comparableLength = Math.min(
+    currentPackage.units.length,
+    incomingPackage.units.length,
+  );
+  for (let index = 0; index < comparableLength; index += 1) {
+    const currentUnit = currentPackage.units[index]!;
+    const incomingUnit = incomingPackage.units[index]!;
+    const changedFields = portableUnitFields.filter(
+      (field) => currentUnit[field] !== incomingUnit[field],
+    );
+    if (changedFields.length > 0) {
+      errors.push(
+        `La unidad ${index + 1} cambió en ${changedFields.join(", ")}.`,
+      );
+      if (errors.length >= 10) break;
+    }
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, rebased: false, errors };
+  }
+
+  const units = currentPackage.units.map((currentUnit, index) => ({
+    ...currentUnit,
+    translation: incomingPackage.units[index]!.translation,
+  }));
+
+  return {
+    valid: true,
+    rebased: true,
+    translationPackage: {
+      ...currentPackage,
+      generatedAt: incomingPackage.generatedAt,
+      instructions: incomingPackage.instructions,
+      units,
+      sourceHash: curriculumTranslationSourceHash(units),
+      // The current database state is now the baseline used for the conflict
+      // check immediately before the atomic import.
+      translationBaselineHash: currentPackage.translationBaselineHash,
+    },
+    errors: [],
+  };
+}
+
 /**
  * Finds translations already stored after an export that would be overwritten
  * with a different value. Matching shared rows (for example a domain or a

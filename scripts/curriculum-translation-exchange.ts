@@ -8,6 +8,7 @@ import {
   curriculumTranslationBaselineHash,
   curriculumTranslationSourceHash,
   conflictingCurrentTranslationKeys,
+  rebaseCurriculumTranslationPackage,
   translationValueMap,
   validateCurriculumTranslationPackage,
   type CurriculumTranslationPackage,
@@ -1196,44 +1197,40 @@ async function main() {
     if (!scenario) {
       throw new Error("The scenario no longer matches the exported package.");
     }
-    if (scenario.id !== translationPackage.scenario.id) {
-      // A different database (a fresh CI/local seed, a restored snapshot)
-      // assigns its own ids to the same authored content - the slug lookup
-      // above already anchors this package to the right scenario by its
-      // stable natural key, so requiring the export-time id to *also*
-      // match added no real safety beyond that, only a hard block on ever
-      // reusing a package across databases. Downgraded to informational
-      // (2026-09-16 CI investigation, QA-02).
-      //
-      // This alone does NOT make packages portable, though: sourceHash
-      // (checked right below) is computed over every unit's `key`/
-      // `entityId` (sourcePayload, above), which embed this same
-      // database-assigned id - so it still won't match a freshly-seeded
-      // database even when the English text is byte-identical. Real
-      // portability would mean re-keying units by something id-independent
-      // (e.g. a slug/order path) instead of `entityType:entityId:field`,
-      // which changes what every already-reviewed, already-imported
-      // package on the shared dev database means - out of scope for this
-      // pass. The actually-portable fix used for CI/local is
-      // scripts/seed-es-fixtures-for-tests.ts, which looks up its handful
-      // of target rows by slug at seed time instead of importing a package.
-      console.log(
-        "Note: scenario id differs from the exported package (importing into a different database instance than it was exported from). Proceeding on slug match; sourceHash below still gates on content.",
-      );
-    }
     const current = translationPackageFor(scenario);
-    if (current.sourceHash !== translationPackage.sourceHash) {
+    const rebaseResult = rebaseCurriculumTranslationPackage(
+      current,
+      translationPackage,
+    );
+    if (!rebaseResult.valid) {
       throw new Error(
-        "Curriculum source changed after export. Export a fresh package before importing.",
+        `Curriculum source changed after export. Export a fresh package before importing. ${rebaseResult.errors.join(" ")}`,
       );
     }
-    if (
+    const packageForImport = rebaseResult.translationPackage;
+    if (rebaseResult.rebased) {
+      console.log(
+        "Package source matched exactly after replacing database-assigned IDs; using current database keys.",
+      );
+    }
+
+    if (rebaseResult.rebased) {
+      const conflicts = conflictingCurrentTranslationKeys(
+        current,
+        packageForImport,
+      );
+      if (conflicts.length > 0) {
+        throw new Error(
+          `Spanish translations already differ in the target database. Conflicting keys: ${conflicts.slice(0, 5).join(", ")}.`,
+        );
+      }
+    } else if (
       current.translationBaselineHash !==
-      translationPackage.translationBaselineHash
+      packageForImport.translationBaselineHash
     ) {
       const conflicts = conflictingCurrentTranslationKeys(
         current,
-        translationPackage,
+        packageForImport,
       );
       if (conflicts.length > 0) {
         const conflictSummary = conflicts.length
@@ -1253,7 +1250,7 @@ async function main() {
       );
       return;
     }
-    await applyPackage(database, scenario, translationPackage);
+    await applyPackage(database, scenario, packageForImport);
     console.log("Spanish translations imported atomically.");
   } finally {
     await database.$disconnect();
