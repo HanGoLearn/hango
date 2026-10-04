@@ -2,10 +2,9 @@ import "server-only";
 
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { isAdministratorEmail } from "@/lib/admin-identity";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
 
 /**
  * Database-backed authorization for the private back-office. The exact
@@ -28,7 +27,7 @@ export const requireAdministrator = cache(async () => {
   if (
     !administrator ||
     administrator.role !== "ADMINISTRATOR" ||
-    administrator.email?.toLowerCase() !== ADMIN_EMAIL
+    !isAdministratorEmail(administrator.email)
   ) {
     redirect("/dashboard");
   }

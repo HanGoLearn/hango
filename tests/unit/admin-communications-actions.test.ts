@@ -33,8 +33,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireAdministrator.mockResolvedValue({
     id: "admin-1",
-    email: "arean.mendoza@unmsm.edu.pe",
-    name: "Arean",
+    email: "hango.learn@gmail.com",
+    name: "HanGo Learn",
     role: "ADMINISTRATOR",
   });
   mocks.transaction.mockImplementation(async (callback) =>

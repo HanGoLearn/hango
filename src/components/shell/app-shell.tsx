@@ -9,6 +9,7 @@ import { AiTeacherProvider } from "@/components/ai-teacher/ai-teacher-provider";
 import { AnnouncementCenter } from "@/components/announcements/announcement-center";
 import { FeedbackWidget } from "@/components/feedback/feedback-widget";
 import { ActivityTracker } from "@/components/analytics/activity-tracker";
+import { isAdministratorEmail } from "@/lib/admin-identity";
 import { auth } from "@/lib/auth";
 import { getStudyStreak } from "@/lib/dashboard-data";
 import { getOrCreateLearnerProfile } from "@/lib/learner-profile";
@@ -244,10 +245,7 @@ async function TopBarData({
       coinBalance={avatar.coinBalance}
       avatarAnimal={avatar.animal}
       avatarEquipped={avatar.equipped}
-      isAdministrator={
-        role === "ADMINISTRATOR" &&
-        email?.toLowerCase() === "arean.mendoza@unmsm.edu.pe"
-      }
+      isAdministrator={role === "ADMINISTRATOR" && isAdministratorEmail(email)}
       locale={locale}
       messages={messages}
     />

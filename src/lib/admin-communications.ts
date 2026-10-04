@@ -1,8 +1,7 @@
 import "server-only";
 
+import { ADMIN_EMAIL } from "@/lib/admin-identity";
 import { db } from "@/lib/db";
-
-const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
 
 export async function getAdminCommunications() {
   const [announcements, grants, users] = await Promise.all([

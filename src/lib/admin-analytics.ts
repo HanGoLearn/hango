@@ -1,10 +1,9 @@
 import "server-only";
 
+import { ADMIN_EMAIL } from "@/lib/admin-identity";
 import { db } from "@/lib/db";
 import { FEATURE_LABELS } from "@/lib/admin-ai-usage";
 import { DEFAULT_DAILY_CAP_USD } from "@/lib/ai-usage";
-
-const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
 const DAY_MS = 86_400_000;
 const BOGOTA_OFFSET_MS = 5 * 60 * 60 * 1000;
 

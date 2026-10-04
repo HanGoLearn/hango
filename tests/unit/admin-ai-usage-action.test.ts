@@ -70,14 +70,31 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
     expect(setDailyUsageCapMock).not.toHaveBeenCalled();
   });
 
+  it("rejects the previous administrator email even if its role is stale", async () => {
+    auth.mockResolvedValueOnce({
+      user: { id: "old-admin", role: "ADMINISTRATOR" },
+    });
+    findUser.mockResolvedValueOnce({
+      id: "old-admin",
+      email: "arean.mendoza@unmsm.edu.pe",
+      name: "Previous administrator",
+      role: "ADMINISTRATOR",
+    });
+
+    await expect(updateDailyUsageCapAction("welcome-audio", 1)).rejects.toThrow(
+      "REDIRECT:/dashboard",
+    );
+    expect(setDailyUsageCapMock).not.toHaveBeenCalled();
+  });
+
   it("rejects an unknown feature without calling setDailyUsageCap", async () => {
     auth.mockResolvedValueOnce({
       user: { id: "admin-1", role: "ADMINISTRATOR" },
     });
     findUser.mockResolvedValueOnce({
       id: "admin-1",
-      email: "arean.mendoza@unmsm.edu.pe",
-      name: "Arean",
+      email: "hango.learn@gmail.com",
+      name: "HanGo Learn",
       role: "ADMINISTRATOR",
     });
 
@@ -93,8 +110,8 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
     });
     findUser.mockResolvedValueOnce({
       id: "admin-1",
-      email: "arean.mendoza@unmsm.edu.pe",
-      name: "Arean",
+      email: "hango.learn@gmail.com",
+      name: "HanGo Learn",
       role: "ADMINISTRATOR",
     });
     setDailyUsageCapMock.mockResolvedValueOnce(undefined);
@@ -111,8 +128,8 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
     });
     findUser.mockResolvedValueOnce({
       id: "admin-1",
-      email: "arean.mendoza@unmsm.edu.pe",
-      name: "Arean",
+      email: "hango.learn@gmail.com",
+      name: "HanGo Learn",
       role: "ADMINISTRATOR",
     });
     setUserAiUsageCapMock.mockResolvedValueOnce(undefined);
@@ -139,8 +156,8 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
     });
     findUser.mockResolvedValueOnce({
       id: "admin-1",
-      email: "arean.mendoza@unmsm.edu.pe",
-      name: "Arean",
+      email: "hango.learn@gmail.com",
+      name: "HanGo Learn",
       role: "ADMINISTRATOR",
     });
     setGlobalAiBudgetPolicyMock.mockResolvedValueOnce(undefined);
@@ -164,8 +181,8 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
     });
     findUser.mockResolvedValueOnce({
       id: "admin-1",
-      email: "arean.mendoza@unmsm.edu.pe",
-      name: "Arean",
+      email: "hango.learn@gmail.com",
+      name: "HanGo Learn",
       role: "ADMINISTRATOR",
     });
 

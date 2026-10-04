@@ -1,12 +1,11 @@
 import "server-only";
 
 import { ACHIEVEMENTS_BY_KEY } from "@/lib/achievements-catalog";
+import { ADMIN_EMAIL } from "@/lib/admin-identity";
 import { FEATURE_LABELS } from "@/lib/admin-ai-usage";
 import { db } from "@/lib/db";
 import { hskLevelForPoints } from "@/lib/points-system";
 import { getStudyStreak } from "@/lib/dashboard-data";
-
-const ADMIN_EMAIL = "arean.mendoza@unmsm.edu.pe";
 export const ADMIN_PAGE_SIZE = 20;
 
 const ACTIVITY_SURFACES = [
