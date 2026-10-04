@@ -4,6 +4,7 @@ import {
   canCreateBetaAccount,
   normalizeBetaInvitationEmail,
 } from "@/lib/beta-access";
+import { isAdministratorEmail } from "@/lib/admin-identity";
 
 export interface GoogleAccountDetails {
   type: string;
@@ -23,6 +24,7 @@ type GoogleLinkDecision = {
   reason:
     | "missing_email"
     | "new_email_unverified"
+    | "new_administrator_allowed"
     | "new_beta_allowed"
     | "new_beta_rejected"
     | "linked_verified"
@@ -67,6 +69,13 @@ async function decideGoogleAccountLink(
   if (!existingUser) {
     if (!emailVerified) {
       return { allowed: false, reason: "new_email_unverified" };
+    }
+
+    // The configured administrator may bootstrap the production database
+    // through Google only after Google verifies ownership of the exact email.
+    // Every other new account remains behind the closed-beta invitation gate.
+    if (isAdministratorEmail(normalizedEmail)) {
+      return { allowed: true, reason: "new_administrator_allowed" };
     }
 
     const betaAllowed = await canCreateBetaAccount(normalizedEmail);

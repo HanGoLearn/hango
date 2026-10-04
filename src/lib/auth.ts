@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { serverEnv } from "@/lib/env/server";
 import { verifyCredentials } from "@/lib/auth-credentials";
 import { ensureGoogleAccountLinked } from "@/lib/auth-google-link";
+import { provisionAdministratorUser } from "@/lib/admin-provisioning";
 import { authConfig } from "@/lib/auth.config";
 import { resolveAuthSessionState } from "@/lib/auth-session-state";
 import {
@@ -90,6 +91,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async createUser({ user }) {
       if (user.id && user.email) {
+        const provisionedAdministrator = await provisionAdministratorUser({
+          userId: user.id,
+          email: user.email,
+        });
+        if (provisionedAdministrator) return;
+
         const activated = await activateBetaInvitationForUser({
           userId: user.id,
           email: user.email,

@@ -62,6 +62,33 @@ describe("ensureGoogleAccountLinked", () => {
     expect(createAccount).not.toHaveBeenCalled();
   });
 
+  it("allows the verified configured administrator to bootstrap through Google", async () => {
+    findFirstUser.mockResolvedValueOnce(null);
+
+    const result = await ensureGoogleAccountLinked(
+      " HANGO.LEARN@GMAIL.COM ",
+      true,
+      googleAccount,
+    );
+
+    expect(result).toBe(true);
+    expect(findUniqueInvitation).not.toHaveBeenCalled();
+    expect(createAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects administrator bootstrap when Google has not verified the email", async () => {
+    findFirstUser.mockResolvedValueOnce(null);
+
+    const result = await ensureGoogleAccountLinked(
+      "hango.learn@gmail.com",
+      false,
+      googleAccount,
+    );
+
+    expect(result).toBe(false);
+    expect(findUniqueInvitation).not.toHaveBeenCalled();
+  });
+
   it("allows a new Google account with a pending invitation", async () => {
     findFirstUser.mockResolvedValueOnce(null);
     findUniqueInvitation.mockResolvedValueOnce({
