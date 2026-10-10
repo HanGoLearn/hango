@@ -176,8 +176,8 @@ export async function updateDefaultAiModeAction(mode: string): Promise<void> {
 /**
  * Restricted to "cedar" only (2026-08-21, user request) - the other 12
  * voices are no longer selectable; this Set is the actual enforcement
- * point (the Select in han-audio-settings.tsx only offers "cedar" too, but
- * this is what a request can't bypass). Every existing profile was
+ * point. The current settings UI no longer exposes a voice selector, but
+ * this is what a request can't bypass. Every existing profile was
  * backfilled to "cedar" in migration 20260821223212_add_audio_only_han_response_mode.
  */
 const HAN_VOICES = new Set(["cedar"]);

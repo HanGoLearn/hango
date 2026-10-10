@@ -66,9 +66,10 @@ function trackedCacheKey(
   voice = "cedar",
   responseLanguage = "English",
   conversational = false,
+  speechStyle: "tutor" | "companion" = "tutor",
 ): string {
   const key = contentAudioKey(
-    `han-speech/${voice}/${responseLanguage}/${conversational ? "conversational" : "plain"}`,
+    `han-speech/${speechStyle}/${voice}/${responseLanguage}/${conversational ? "conversational" : "plain"}`,
     text,
   );
   usedKeys.push(key);
@@ -102,7 +103,9 @@ function mockTtsFetch(): ReturnType<typeof vi.fn> {
   const fetchMock = vi
     .fn()
     .mockImplementation(() =>
-      Promise.resolve(new Response(new Uint8Array(buildTestWav()), { status: 200 })),
+      Promise.resolve(
+        new Response(new Uint8Array(buildTestWav()), { status: 200 }),
+      ),
     );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -170,40 +173,36 @@ describe("Han speech route (2026-09-05, cost audit fix - content cache + rate li
     expect(secondAudio.equals(firstAudio)).toBe(true);
   });
 
-  it(
-    "rate-limits generation after 30 requests in the window",
-    async () => {
-      await authenticate(`han-speech-ratelimit-${Date.now()}@hango.dev`);
-      completeMock.mockResolvedValue({
-        content: "ok",
-        provider: "test-mock",
-        model: "test-model",
-        inputTokens: 10,
-        outputTokens: 10,
-      });
-      const fetchMock = mockTtsFetch();
+  it("rate-limits generation after 30 requests in the window", async () => {
+    await authenticate(`han-speech-ratelimit-${Date.now()}@hango.dev`);
+    completeMock.mockResolvedValue({
+      content: "ok",
+      provider: "test-mock",
+      model: "test-model",
+      inputTokens: 10,
+      outputTokens: 10,
+    });
+    const fetchMock = mockTtsFetch();
 
-      for (let i = 0; i < 30; i++) {
-        const text = `Rate limit filler phrase number ${i} ${Date.now()}`;
-        trackedCacheKey(text);
-        const response = await POST(speechRequest({ text }));
-        expect(response.status).toBe(200);
-      }
-      expect(fetchMock).toHaveBeenCalledTimes(30);
+    for (let i = 0; i < 30; i++) {
+      const text = `Rate limit filler phrase number ${i} ${Date.now()}`;
+      trackedCacheKey(text);
+      const response = await POST(speechRequest({ text }));
+      expect(response.status).toBe(200);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(30);
 
-      const oneTooMany = `One too many phrase ${Date.now()}`;
-      trackedCacheKey(oneTooMany);
-      const response = await POST(speechRequest({ text: oneTooMany }));
+    const oneTooMany = `One too many phrase ${Date.now()}`;
+    trackedCacheKey(oneTooMany);
+    const response = await POST(speechRequest({ text: oneTooMany }));
 
-      expect(response.status).toBe(429);
-      // The 31st request never reached the TTS provider.
-      expect(fetchMock).toHaveBeenCalledTimes(30);
-    },
-    // 30 iterations x 2 real DB round trips each (checkDailyUsageCap +
-    // recordAiUsage, added 2026-09-05) exceeds the default 15s budget under
-    // real Prisma Postgres network latency - same reasoning as this
-    // project's global timeout bump (vitest.config.mts), scoped locally
-    // instead of raising it for every test.
-    30_000,
-  );
+    expect(response.status).toBe(429);
+    // The 31st request never reached the TTS provider.
+    expect(fetchMock).toHaveBeenCalledTimes(30);
+  }, // 30 iterations x 2 real DB round trips each (checkDailyUsageCap +
+  // recordAiUsage, added 2026-09-05) exceeds the default 15s budget under
+  // real Prisma Postgres network latency - same reasoning as this
+  // project's global timeout bump (vitest.config.mts), scoped locally
+  // instead of raising it for every test.
+  30_000);
 });

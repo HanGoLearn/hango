@@ -9,12 +9,14 @@ export function HanSpeechButton({
   voice,
   autoPlay = false,
   responseLanguage,
+  speechStyle = "tutor",
   labels,
 }: {
   text: string;
   voice: string;
   autoPlay?: boolean;
   responseLanguage?: "English" | "Spanish" | "Chinese";
+  speechStyle?: "tutor" | "companion";
   labels?: {
     listen: string;
     pause: string;
@@ -37,7 +39,7 @@ export function HanSpeechButton({
       audioRef.current?.pause();
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     };
-  }, [responseLanguage, text, voice]);
+  }, [responseLanguage, speechStyle, text, voice]);
 
   const play = useCallback(async () => {
     setError(false);
@@ -51,7 +53,12 @@ export function HanSpeechButton({
       const response = await fetch("/api/han/speech", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, voice, responseLanguage }),
+        body: JSON.stringify({
+          text,
+          voice,
+          responseLanguage,
+          delivery: speechStyle,
+        }),
       });
       if (!response.ok) throw new Error("speech failed");
       const url = URL.createObjectURL(await response.blob());
@@ -70,7 +77,7 @@ export function HanSpeechButton({
       setState("idle");
       setError(true);
     }
-  }, [responseLanguage, text, voice]);
+  }, [responseLanguage, speechStyle, text, voice]);
 
   useEffect(() => {
     if (autoPlay && !autoPlayedRef.current) {

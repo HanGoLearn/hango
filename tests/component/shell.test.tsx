@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // usePathname is a vi.fn (not a fixed arrow) so a test can place the shell
@@ -78,6 +78,8 @@ function InjectSpeakingContext() {
 
 afterEach(() => {
   cleanup();
+  usePathnameMock.mockReset();
+  usePathnameMock.mockReturnValue("/en/dashboard");
 });
 
 describe("Sidebar", () => {
@@ -294,9 +296,13 @@ describe("AiTeacherBubble", () => {
       screen.getByRole("button", { name: "Close Han" }),
     ).toBeInTheDocument();
     // AiTeacherChat is lazy-loaded (2026-09-08 optimization pass) - its
-    // "Speak to Han" button isn't in the DOM until that chunk resolves.
+    // The hold-to-speak button isn't in the DOM until that chunk resolves.
     expect(
-      await screen.findByRole("button", { name: "Speak to Han" }),
+      await screen.findByRole(
+        "button",
+        { name: "Hold to speak to Han" },
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument();
   });
 
@@ -342,6 +348,34 @@ describe("AiTeacherBubble", () => {
     );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("closes a latent Tutor bubble on standalone Han routes and does not reopen it afterward", async () => {
+    const renderTree = () => (
+      <AiTeacherProvider initialMessages={[]}>
+        <AiTeacherBubble />
+      </AiTeacherProvider>
+    );
+    const view = render(renderTree());
+
+    await userEvent.click(screen.getByRole("button", { name: "Open Han" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    usePathnameMock.mockReturnValue("/en/han/companion");
+    view.rerender(renderTree());
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Open Han" }),
+    ).not.toBeInTheDocument();
+
+    usePathnameMock.mockReturnValue("/en/dashboard");
+    view.rerender(renderTree());
+    expect(
+      screen.getByRole("button", { name: "Open Han" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("shows lesson context once set", async () => {

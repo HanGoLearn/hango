@@ -985,10 +985,10 @@ export const messages = {
       yourAnswer: "Tu respuesta",
       submit: "Enviar",
       useMicrophone: "Usar el micrófono",
-      stopRecording: "Detener grabación",
-      startRecording: "Iniciar grabación",
+      stopRecording: "Suelta para detener la grabación",
+      startRecording: "Mantén presionado para grabar",
       requestingAccess: "Solicitando acceso al micrófono...",
-      recording: "Grabando — {time}",
+      recording: "Grabando — {time}. Suelta para terminar.",
       analyzingTones: "Analizando tus tonos…",
       insufficientAudio: "No hay suficiente voz para puntuar los tonos.",
       toneMatch: "Coincidencia de tonos: {score}%",
@@ -1765,6 +1765,9 @@ export const messages = {
     han: {
       saved: "Cambios guardados.",
       saveError: "No pudimos guardar la configuración. Inténtalo de nuevo.",
+      autoPlayVoiceReplies: "Reproducir la respuesta después de hablar",
+      autoPlayVoiceRepliesDescription:
+        "Al usar el micrófono de Han Tutor, reproduce su respuesta y también muestra el texto. No afecta las conversaciones de voz en vivo.",
       previewError: "La prueba de voz no está disponible temporalmente.",
       replies: "Respuestas de Han",
       textOnly: "Solo texto",

@@ -10,10 +10,12 @@ import {
   buildRealtimeClosingInstructions,
   buildRealtimeOpeningInstructions,
   buildRealtimeOpeningTurnGuard,
+  buildRealtimePushToTalkStartEvents,
   buildRealtimeSessionUpdateEvent,
   buildSessionPreservingRealtimeTurnEvents,
   buildRealtimeTurnInstructions,
   buildTextConversationAssessmentPrompt,
+  canBeginRealtimePushToTalk,
   ensurePendingLearnerQuestionIsAnswered,
   findAcceptedMandarinTarget,
   findConversationCompletionToolCall,
@@ -24,6 +26,8 @@ import {
   keepTimedSpeakingAssessmentOpen,
   nextHanExplanationLanguage,
   realtimeRolePlayOutputTokenLimit,
+  realtimeSessionStartErrorMessage,
+  realtimeTutorPronunciationOutputTokenLimit,
   resolveRealtimePracticeLevel,
   parseTextConversationAssessment,
   realtimeSpeechSpeed,
@@ -32,6 +36,31 @@ import {
   stabilizeConversationPracticeTargets,
   userFacingRealtimeVoiceError,
 } from "@/lib/han-realtime";
+
+describe("realtimeSessionStartErrorMessage", () => {
+  it("extracts a readable route error instead of showing raw JSON", () => {
+    expect(
+      realtimeSessionStartErrorMessage(
+        JSON.stringify({
+          error:
+            "You've reached today's usage limit for this feature. Please try again tomorrow.",
+        }),
+        429,
+      ),
+    ).toBe(
+      "You've reached today's live voice limit. An administrator can raise this account's Han Realtime limit, or you can try again tomorrow.",
+    );
+  });
+
+  it("preserves a plain-text provider error and handles an empty response", () => {
+    expect(
+      realtimeSessionStartErrorMessage("Temporary provider problem", 502),
+    ).toBe("Temporary provider problem");
+    expect(realtimeSessionStartErrorMessage("", 500)).toBe(
+      "Han couldn't start the live voice session.",
+    );
+  });
+});
 
 describe("nextHanExplanationLanguage", () => {
   it.each(["nihao", "nǐ hǎo", "你好"])(
@@ -51,13 +80,107 @@ describe("nextHanExplanationLanguage", () => {
   });
 
   it("treats a complete Mandarin question as Chinese conversation", () => {
-    expect(
-      nextHanExplanationLanguage("你好，你叫什么名字？", "English"),
-    ).toBe("Chinese");
+    expect(nextHanExplanationLanguage("你好，你叫什么名字？", "English")).toBe(
+      "Chinese",
+    );
     expect(nextHanExplanationLanguage("你是哪国人？", "Spanish")).toBe(
       "Chinese",
     );
     expect(nextHanExplanationLanguage("你好", "Spanish")).toBe("Spanish");
+  });
+});
+
+describe("Han Tutor realtime session contract", () => {
+  it("adds temporary preferences and intelligent correction only to free Tutor turns", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      undefined,
+      null,
+      "¿Qué significa 从来?",
+      null,
+      "TUTOR",
+      "direct",
+      [{ role: "user", content: "Corrige solo los errores importantes" }],
+    );
+
+    expect(instructions).toContain("HAN TUTOR CORRECTION POLICY");
+    expect(instructions).toContain("TEMPORARY HAN TUTOR SESSION PREFERENCES");
+    expect(instructions).toContain("Correction style is BALANCED");
+    expect(instructions).toContain("Use progressive disclosure");
+    expect(instructions).toContain("Only for an explicit broad request");
+  });
+
+  it("does not leak the Tutor session contract into Companion", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Chinese",
+      undefined,
+      null,
+      "你好",
+      null,
+      "PRACTICE",
+      "direct",
+      [{ role: "user", content: "你好" }],
+    );
+
+    expect(instructions).not.toContain("HAN TUTOR CORRECTION POLICY");
+    expect(instructions).not.toContain(
+      "TEMPORARY HAN TUTOR SESSION PREFERENCES",
+    );
+  });
+
+  it("preserves the learner's exact sentence-ordering tiles in live Tutor", () => {
+    const learnerTurn =
+      "La primera palabra es di, la segunda es xiaola y la tercera es gaoxingdi; tengo que ordenar la oración.";
+    const tutorInstructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      undefined,
+      null,
+      learnerTurn,
+      null,
+      "TUTOR",
+      "direct",
+      [{ role: "user", content: learnerTurn }],
+    );
+    const companionInstructions = buildRealtimeTurnInstructions(
+      "Chinese",
+      undefined,
+      null,
+      learnerTurn,
+      null,
+      "PRACTICE",
+      "direct",
+      [{ role: "user", content: learnerTurn }],
+    );
+
+    expect(tutorInstructions).toContain("fixed, CLOSED SET");
+    expect(tutorInstructions).toContain("弟弟高兴地笑了");
+    expect(tutorInstructions).toContain("never insert 很");
+    expect(companionInstructions).not.toContain(
+      "SENTENCE-ORDERING INTEGRITY RULE",
+    );
+  });
+
+  it("does not leak the Tutor session contract into a role-play", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole: "Waiter",
+        learnerRole: "Customer",
+        scenarioContext: "At a restaurant.",
+        objective: "Order a dish.",
+      },
+      null,
+      "我要这个菜",
+      null,
+      "TUTOR",
+      "direct",
+      [{ role: "user", content: "我要这个菜" }],
+    );
+
+    expect(instructions).not.toContain("HAN TUTOR CORRECTION POLICY");
+    expect(instructions).not.toContain(
+      "TEMPORARY HAN TUTOR SESSION PREFERENCES",
+    );
   });
 });
 
@@ -156,6 +279,26 @@ describe("buildRealtimeTurnInstructions", () => {
         "turn",
       ),
     ).toBe(260);
+  });
+
+  it("bounds only pronunciation coaching while leaving grammar turns broad", () => {
+    expect(
+      realtimeTutorPronunciationOutputTokenLimit("pronuncia 你好", null),
+    ).toBe(1000);
+    expect(
+      realtimeTutorPronunciationOutputTokenLimit("我想喝水", {
+        target: "我想喝水",
+        attempts: 3,
+        similarity: 1,
+        status: "accepted",
+      }),
+    ).toBe(600);
+    expect(
+      realtimeTutorPronunciationOutputTokenLimit(
+        "Explícame la diferencia entre 了 y 过",
+        null,
+      ),
+    ).toBeUndefined();
   });
 
   it("gives Pre-HSK free practice one tiny phrase per turn", () => {
@@ -395,9 +538,13 @@ describe("buildRealtimeTurnInstructions", () => {
 
     expect(instructions).toContain("learner: 我喜欢中文。");
     expect(instructions).toContain("preferences");
-    expect(instructions).toContain("Before asking any explicit question OR saying 你呢？");
+    expect(instructions).toContain(
+      "Before asking any explicit question OR saying 你呢？",
+    );
     expect(instructions).toContain("If known, that question is forbidden");
-    expect(instructions).toContain("This is not a ban on all character questions");
+    expect(instructions).toContain(
+      "This is not a ban on all character questions",
+    );
   });
 
   it("allows barge-in only for free-topic Practice with Han", () => {
@@ -406,13 +553,40 @@ describe("buildRealtimeTurnInstructions", () => {
     expect(allowsRealtimeBargeIn()).toBe(false);
   });
 
+  it("lets an explicit hold interrupt spoken output, but not race thinking", () => {
+    expect(canBeginRealtimePushToTalk("listening", false, false)).toBe(true);
+    expect(canBeginRealtimePushToTalk("speaking", true, true)).toBe(true);
+    expect(canBeginRealtimePushToTalk("speaking", false, true)).toBe(true);
+    expect(canBeginRealtimePushToTalk("speaking", false, false)).toBe(false);
+    expect(canBeginRealtimePushToTalk("thinking", true, true)).toBe(false);
+    expect(canBeginRealtimePushToTalk("connecting", false, false)).toBe(false);
+  });
+
+  it("cancels and clears WebRTC output in order when a hold interrupts Han", () => {
+    expect(buildRealtimePushToTalkStartEvents(false, false)).toEqual([
+      { type: "input_audio_buffer.clear" },
+    ]);
+    expect(buildRealtimePushToTalkStartEvents(true, true)).toEqual([
+      { type: "input_audio_buffer.clear" },
+      { type: "response.cancel" },
+      { type: "output_audio_buffer.clear" },
+    ]);
+    expect(buildRealtimePushToTalkStartEvents(false, true)).toEqual([
+      { type: "input_audio_buffer.clear" },
+      { type: "output_audio_buffer.clear" },
+    ]);
+  });
+
   it("reasserts Han's complete prompt after the live WebRTC channel opens", () => {
     expect(buildRealtimeSessionUpdateEvent("You are Han.")).toEqual({
       type: "session.update",
       session: {
         type: "realtime",
         instructions: "You are Han.",
-        audio: { output: { speed: 1 } },
+        audio: {
+          input: { turn_detection: null },
+          output: { speed: 1 },
+        },
       },
     });
   });
@@ -454,10 +628,16 @@ describe("buildRealtimeTurnInstructions", () => {
 
     expect(instructions).toContain("required explanation language is Chinese");
     expect(instructions).toContain("This is Han Practice");
-    expect(instructions).toContain("a real, warm conversation with Han as a companion");
-    expect(instructions).toContain("Infer intended meaning from audio plus topic");
+    expect(instructions).toContain(
+      "a real, warm conversation with Han as a companion",
+    );
+    expect(instructions).toContain(
+      "Infer intended meaning from audio plus topic",
+    );
     expect(instructions).not.toContain("Mandarin item 吧");
-    expect(instructions).not.toContain("complete vocabulary-or-grammar teaching structure");
+    expect(instructions).not.toContain(
+      "complete vocabulary-or-grammar teaching structure",
+    );
     expect(instructions).not.toContain(
       "Prioritize conversational meaning over perfect pronunciation",
     );
@@ -511,7 +691,7 @@ describe("buildRealtimeTurnInstructions", () => {
     expect(instructions).not.toContain("never jump to advanced Chinese");
   });
 
-  it("forces Han to move on after a recognized pronunciation", () => {
+  it("treats the recognition threshold as a pronunciation pass and moves on", () => {
     const instructions = buildRealtimeTurnInstructions("Spanish", undefined, {
       target: "爱情",
       attempts: 1,
@@ -519,20 +699,70 @@ describe("buildRealtimeTurnInstructions", () => {
       status: "accepted",
     });
 
-    expect(instructions).toContain(
-      "latest pronunciation of 爱情 was recognized",
-    );
-    expect(instructions).toContain("do not ask them to repeat it");
-    expect(instructions).toContain("introduce a different word");
+    expect(instructions).toContain("PRONUNCIATION PASS");
+    expect(instructions).toContain("matched at least 80%");
+    expect(instructions).toContain("NEVER ask for 爱情");
+    expect(instructions).toContain("ONE different, nearby Mandarin target");
+    expect(instructions).toContain("Do not explain meaning");
   });
 
-  it("caps an unclear pronunciation drill at two attempts", () => {
+  it("keeps a failed pronunciation attempt to one compact coaching move", () => {
+    const instructions = buildRealtimeTurnInstructions("Spanish", undefined, {
+      target: "我想喝水",
+      attempts: 2,
+      similarity: 0.5,
+      status: "retry",
+    });
+
+    expect(instructions).toContain("ACTIVE PRONUNCIATION DRILL");
+    expect(instructions).toContain("at most 25 spoken words");
+    expect(instructions).toContain("ONE high-confidence");
+    expect(instructions).toContain("ONE natural demonstration");
+    expect(instructions).toContain("ONE direct request to repeat");
+    expect(instructions).toContain("mismatched or missing portion first");
+    expect(instructions).toContain("already recognizes it");
+    expect(instructions).toContain("Do not explain meaning");
+    expect(instructions).toContain("ask a meta-question");
+  });
+
+  it("caps a guided pronunciation drill at four adaptive attempts", () => {
     const instructions = buildRealtimeTurnInstructions("Spanish");
 
-    expect(instructions).toContain(
-      "Never drill the same pronunciation for more than two learner attempts",
+    expect(instructions).toContain("after four attempts");
+    expect(instructions).toContain("ends immediately");
+  });
+
+  it("activates brief pronunciation coaching only after an explicit request", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      undefined,
+      null,
+      "¿Cómo se pronuncia 你好 con los tonos y el ritmo?",
     );
-    expect(instructions).toContain("do not chase perfect tones");
+
+    expect(instructions).toContain(
+      "explicitly requested pronunciation coaching",
+    );
+    expect(instructions).toContain("1 to 4 Mandarin syllables");
+    expect(instructions).toContain("one useful tone or rhythm cue");
+    expect(instructions).toContain("at most 22 spoken words");
+    expect(instructions).toContain("Do not explain meaning");
+    expect(instructions).toContain("speak pinyin aloud");
+  });
+
+  it("segments a long realtime pronunciation target before recombining it", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      undefined,
+      null,
+      "Ayúdame a pronunciar 我明天想和朋友一起去电影院看一部新的中文电影",
+    );
+
+    expect(instructions).toContain("more than 12 Mandarin syllables");
+    expect(instructions).toContain("FIRST 2-to-8-syllable group");
+    expect(instructions).toContain("preferring 2 to 6 syllables");
+    expect(instructions).toContain("recombine the whole phrase");
+    expect(instructions).toContain("Never assess the whole long phrase");
   });
 
   it("forces an implicit cómo digo request to target Mandarin", () => {
@@ -602,7 +832,9 @@ describe("buildRealtimeTurnInstructions", () => {
 
     expect(instructions).toContain("Answer it directly in-character first");
     expect(instructions).toContain("After the actual answer");
-    expect(instructions).toContain("at most one short, relevant reciprocal question");
+    expect(instructions).toContain(
+      "at most one short, relevant reciprocal question",
+    );
     expect(instructions).toContain("RECIPROCAL HANDOFF");
   });
 
@@ -1461,6 +1693,26 @@ describe("findAcceptedMandarinTarget", () => {
 });
 
 describe("advancePronunciationPractice", () => {
+  it("exits a pending drill for a new grammar question without clipping its reply", () => {
+    const result = advancePronunciationPractice(
+      "I think there is another way that I can use 把 when I wanna emphasize an action or an object.",
+      [{ role: "assistant", content: "Repeat: 我把书放在桌子上。" }],
+      { target: "我把书放在桌子上", attempts: 1, completed: false },
+    );
+    expect(result).toEqual({ state: null, progress: null });
+    expect(
+      realtimeTutorPronunciationOutputTokenLimit("Explain 把", result.progress),
+    ).toBeUndefined();
+  });
+
+  it("still accepts multi-syllable raw pinyin as practice material", () => {
+    const result = advancePronunciationPractice(
+      "wo xiang he shui",
+      [{ role: "assistant", content: "Repeat: 我想喝水" }],
+      null,
+    );
+    expect(result.progress?.target).toBe("我想喝水");
+  });
   const history = [
     {
       role: "assistant" as const,
@@ -1468,7 +1720,7 @@ describe("advancePronunciationPractice", () => {
     },
   ];
 
-  it("accepts a recognized target on the first attempt and moves on", () => {
+  it("closes the target as soon as recognition reaches the pass threshold", () => {
     const result = advancePronunciationPractice("爱情", history, null);
 
     expect(result.progress).toMatchObject({
@@ -1479,14 +1731,56 @@ describe("advancePronunciationPractice", () => {
     expect(result.state?.completed).toBe(true);
   });
 
-  it("allows one retry, then forces the exercise to move on", () => {
+  it("uses up to four attempts before forcing the exercise to move on", () => {
     const first = advancePronunciationPractice("爱", history, null);
     const second = advancePronunciationPractice("爱", history, first.state);
+    const third = advancePronunciationPractice("爱", history, second.state);
+    const fourth = advancePronunciationPractice("爱", history, third.state);
 
     expect(first.progress?.status).toBe("retry");
     expect(second.progress).toMatchObject({
       attempts: 2,
+      status: "retry",
+    });
+    expect(third.progress).toMatchObject({ attempts: 3, status: "retry" });
+    expect(fourth.progress).toMatchObject({
+      attempts: 4,
       status: "max_attempts",
+    });
+    expect(fourth.state?.completed).toBe(true);
+  });
+
+  it("does not reopen a completed target even if Han repeats the same cue", () => {
+    const accepted = advancePronunciationPractice("爱情", history, null);
+    const repeated = advancePronunciationPractice(
+      "爱情",
+      history,
+      accepted.state,
+    );
+
+    expect(repeated).toEqual({ state: accepted.state, progress: null });
+  });
+
+  it("moves past 我想喝水 immediately after an exact later attempt", () => {
+    const waterHistory = [
+      {
+        role: "assistant" as const,
+        content: "Escucha: 我想喝水. Repite: 我想喝水",
+      },
+    ];
+    const first = advancePronunciationPractice("共享喝水", waterHistory, null);
+    const second = advancePronunciationPractice(
+      "我想喝水",
+      waterHistory,
+      first.state,
+    );
+
+    expect(first.progress).toMatchObject({ status: "retry", similarity: 0.5 });
+    expect(second.progress).toMatchObject({
+      target: "我想喝水",
+      attempts: 2,
+      similarity: 1,
+      status: "accepted",
     });
     expect(second.state?.completed).toBe(true);
   });
@@ -1499,5 +1793,24 @@ describe("advancePronunciationPractice", () => {
         null,
       ),
     ).toEqual({ state: null, progress: null });
+  });
+
+  it("tracks the requested chunk instead of the displayed whole long phrase", () => {
+    const result = advancePronunciationPractice(
+      "我明天想",
+      [
+        {
+          role: "assistant",
+          content:
+            "完整句子：我明天想和朋友一起去电影院看一部新的中文电影。Primero practica este grupo. Repite: 我明天想",
+        },
+      ],
+      null,
+    );
+
+    expect(result.progress).toMatchObject({
+      target: "我明天想",
+      status: "accepted",
+    });
   });
 });

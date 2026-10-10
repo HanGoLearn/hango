@@ -20,10 +20,29 @@
  * learner's name unless the scene itself establishes it.
  */
 import { hskLevelForPoints, hskNumberForPoints } from "@/lib/points-system";
+import {
+  classifyHanPronunciationRequestLength,
+  isExplicitPronunciationRequest,
+  isPronunciationDetailRequest,
+  sanitizeHanPronunciationAttempt,
+  type HanPronunciationAttemptEvidence,
+} from "@/lib/speech/han-pronunciation";
+import {
+  buildHanTutorControlCommandInstruction,
+  buildHanTutorSessionInstruction,
+  buildHanTutorTaskGroundingInstruction,
+  deriveHanTutorSessionPreferences,
+  detectHanTutorResponseLanguage,
+  HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY,
+  resolveHanTutorConversationLanguage,
+  type HanTutorLanguage,
+  type HanTutorSessionPreferences,
+} from "@/lib/han-tutor-session";
 
 export type AiTeacherMode = "TUTOR" | "PRACTICE";
-export type HanResponseLanguage = "English" | "Spanish" | "Chinese";
+export type HanResponseLanguage = HanTutorLanguage;
 export type HskSessionLevel = `HSK ${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
+export type HanConversationSurface = "TUTOR" | "COMPANION";
 
 export interface LearnerAiContext {
   level: string | null;
@@ -115,6 +134,13 @@ export interface RolePlayContext {
 
 export interface AiTeacherContext {
   /**
+   * Persistence boundary for Han's two independent products. This is stored
+   * with conversation messages so Tutor history/reset can never consume or
+   * delete Companion turns (and vice versa). It is not a pedagogical prompt
+   * instruction. Legacy untagged, non-role-play messages belong to Tutor.
+   */
+  hanConversationSurface?: HanConversationSurface;
+  /**
    * Which top-level page the learner is on right now (2026-08-21), e.g.
    * "Dashboard", "Progress", "Settings" - resolveCurrentPageName in
    * lib/navigation.ts. Available to Han's own text and voice conversations
@@ -139,6 +165,11 @@ export interface AiTeacherContext {
   /** Grammar patterns available in the current lesson, used as an acoustic STT hint. */
   lessonGrammar?: GrammarPointContext[];
   recentLearnerAnswer?: RecentAnswerContext;
+  /**
+   * Ephemeral, ungraded evidence calculated from Han Tutor's small recorder.
+   * Never reused by Companion, role-play, Speaking Lab, or placement.
+   */
+  pronunciationAttempt?: HanPronunciationAttemptEvidence;
   rolePlay?: RolePlayContext;
 }
 
@@ -251,7 +282,7 @@ export function buildMandarinStudyItemInstruction(
   if (!message) return null;
 
   const asksToStudyUsage =
-    /(?:practic(?:ar|a|ando)|(?:el\s+)?uso|usar|se\s+usa|sirve|significa|expl[ií]ca|ense[nñ]a|practice|how\s+(?:do|does|is)|use|meaning|explain)/iu.test(
+    /(?:practic(?:ar|a|ando)|(?:el\s+)?uso|usar|se\s+(?:usa|utiliza)|estructura|gram[aá]tica|sirve|significa|expl[ií]ca|ense[nñ]a|practice|how\s+(?:do|does|is)|use|meaning|explain)/iu.test(
       message,
     );
   if (!asksToStudyUsage) return null;
@@ -306,6 +337,30 @@ export function buildMandarinStudyItemInstruction(
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * Sentence-ordering questions provide a closed set of learner-visible tiles.
+ * Han may interpret uncertain pinyin, but must never silently improve the
+ * exercise by inserting a plausible Chinese word that was not supplied.
+ */
+export function buildSentenceOrderingIntegrityInstruction(
+  latestMessage: string | undefined,
+): string | null {
+  const message = latestMessage?.trim();
+  if (!message) return null;
+  const asksAboutOrdering =
+    /(?:orden(?:a|ar|ando|e)|orden\s+de\s+(?:la\s+)?oraci[oó]n|primera\s+(?:palabra|pieza)|segunda\s+(?:palabra|pieza)|tercera\s+(?:palabra|pieza)|fichas?|piezas?|word\s+order|order(?:ing)?\s+(?:the|a)?\s*sentence|first\s+(?:word|tile)|second\s+(?:word|tile)|third\s+(?:word|tile)|tokens?)/iu.test(
+      message,
+    );
+  if (!asksAboutOrdering) return null;
+
+  return [
+    "HIGHEST-PRIORITY SENTENCE-ORDERING INTEGRITY RULE: the learner is describing a fixed, CLOSED SET of words or tiles. Use every supplied item exactly once and add, remove, duplicate, split, or merge none of them. Punctuation may be added only after the tile order is solved.",
+    "Ordinal phrases such as first, second, and third may describe the tiles as displayed, not their correct answer order. Reorder the supplied items according to Mandarin grammar, then explain the one rule that determines the placement.",
+    "Spoken untoned pinyin may be ambiguous. Converting a supplied sound to likely Chinese characters is an explicit assumption, never permission to add another syllable or word. If the exact tiles cannot be recovered confidently, say 'If the tiles are ...' and ask the learner to confirm the characters or send a screenshot instead of inventing missing material.",
+    "Measured regression: for the exact tiles 弟弟 / 笑了 / 高兴地, the answer is 弟弟高兴地笑了。 The 地 phrase modifies 笑 and therefore comes before the verb. Never change 高兴地 into 很高兴地, never insert 很, and never answer 弟弟笑了，很高兴地。",
+  ].join(" ");
 }
 
 export function detectExplicitHskSessionLevel(
@@ -364,6 +419,76 @@ const NO_LEVEL_FALLBACK = "beginner (unknown, assume beginner)";
 
 const HAN_NATURAL_RESPONSE_OPENING =
   "Never begin a reply with generic acknowledgements such as 'Entiendo', 'I understand', 'Claro', 'Perfecto', or their Chinese equivalents. These openings are prohibited, not merely discouraged. Begin directly with the useful answer, explanation, or a specific reaction to what the learner actually said. When acknowledgement adds warmth, make it content-specific and place it naturally inside the response rather than using a generic call-center opening.";
+
+const HAN_TUTOR_HUMAN_TEACHING_STYLE =
+  "Keep Han's one existing Tutor identity. Sound observant, spontaneous, and human: react to the learner's actual attempt, vary wording, and use occasional gentle wit or a vivid physical metaphor when it makes a sound easier to understand. Never mock the learner, their accent, or a mistake; never force a joke; never give generic praise that could fit any attempt. Praise must name the concrete improvement you heard or saw.";
+
+const HAN_TUTOR_EXPRESSIVE_VOICE_STYLE =
+  "VOICE PERSONALITY FOR HAN TUTOR: sound like a charismatic young-adult tutor speaking one-to-one: lively, curious, quick, warm, and genuinely present. Accent-neutral never means emotionally flat. Let the learner's moment shape audible delivery: use an easy smile and light playfulness when the exchange is fun, focused matter-of-fact clarity for a correction, softer reassurance after difficulty, and a brief lift of energy after concrete progress. Vary pitch, emphasis, cadence, and pause length naturally within a turn; do not keep one neutral melody. Stay grounded: never become childish, theatrical, slang-heavy, constantly excited, or a game-show host; do not force jokes or fake laughter. Mandarin demonstrations remain precise and native even when the surrounding delivery is playful.";
+
+function buildWrittenPronunciationRequestInstruction(
+  latestMessage: string | undefined,
+): string | null {
+  if (isPronunciationDetailRequest(latestMessage)) {
+    return [
+      "The learner accepted Han Tutor's conversational offer for the fuller pronunciation explanation. Infer the target from the immediately preceding exchange and remain the same Han Tutor.",
+      "Explain only why the practiced target changes: its citation tones, the exact connected-speech or sandhi change, and the resulting natural pronunciation. Use 3 to 5 short prose sentences, no headings or bullet lists, and at most 80 words.",
+      "For 你好 specifically, state accurately that 你 and 好 are citation tone 3; in the connected 3+3 pair the FIRST becomes surface tone 2 and the SECOND remains tone 3, so nǐ hǎo becomes ní hǎo. Do not discuss chains of three or more third tones, introduce another example, or generalize beyond this target.",
+      "Do not ask the learner to repeat, offer another exercise, or end with a question unless they explicitly request more practice. Do not add an unrelated example sentence, grammar exercise, cultural note, or new pronunciation target.",
+      "This optional pronunciation detail path has no effect on ordinary grammar, vocabulary, or usage teaching, which keeps Tutor mode's normal broad explanation when requested.",
+    ].join(" ");
+  }
+  if (!isExplicitPronunciationRequest(latestMessage)) return null;
+  const requestLength = classifyHanPronunciationRequestLength(latestMessage);
+  const adaptiveLengthInstruction =
+    requestLength === "long"
+      ? "This is a long target of more than 12 Mandarin syllables. Keep coaching prose at 80 words or fewer, excluding the target and pinyin. Show the complete phrase once with accurate pinyin divided by | into 2 to 4 natural prosodic groups. Then choose only the FIRST natural group of 2 to 8 syllables, preferring 2 to 6 when that does not cut a natural expression, write that chunk again as 汉字 (pinyin), give one useful rhythm or tone cue, and ask the learner to repeat only that chunk. Later turns should practice the next groups one at a time and finally recombine the whole phrase. Never pretend one whole-phrase contour score can diagnose every syllable."
+      : requestLength === "medium"
+        ? "This is a medium target of 5 to 12 Mandarin syllables. Keep coaching prose at 65 words or fewer, excluding the target and pinyin. Show the complete target as 汉字 (tone-mark pinyin), using | inside the pinyin to mark 2 or 3 natural rhythmic groups. Give one useful rhythm or tone cue and ask for one repetition of the complete phrase."
+        : "This is a short target of 1 to 4 Mandarin syllables, or its written length is unknown. Keep coaching prose at 45 words or fewer, excluding the target and pinyin. Show exactly one compact target line as 汉字 (tone-mark pinyin), give one useful cue, and ask for one repetition of the complete target.";
+  return [
+    "The learner explicitly requested pronunciation help from Han Tutor. Stay the same general Han tutor; this is a temporary teaching behavior, not a separate persona or product mode.",
+    "This first pronunciation-coaching reply is a progressive micro-lesson, not a full explanation. The length limit applies to Han's coaching prose, never to the Mandarin phrase the learner chose.",
+    adaptiveLengthInstruction,
+    "Keep parentheses around pinyin and one space between every pinyin syllable; | is only a visible boundary between rhythmic groups and is never spoken aloud.",
+    "Give only ONE immediately useful cue about the most important tone movement, syllable connection, or rhythm. Use plain learner-friendly language; do not front-load citation-tone theory, terminology, several rules, IPA, anatomy, or an example sentence before hearing the learner.",
+    "Keep every cue entirely in the response language. In Spanish, describe a third-tone movement naturally as 'baja y vuelve a subir'; never insert English fragments such as 'rise', 'then-rise', or 'low-rise'.",
+    "When tone sandhi changes the spoken tone, use the connected-pronunciation pinyin that the learner should actually say (for example, 你好 → ní hǎo). Never label a changed second tone while leaving a third-tone mark on that syllable.",
+    "Mandatory accuracy checkpoint for third-tone sandhi: in a two-syllable 3+3 sequence, the FIRST syllable changes to surface tone 2 and the SECOND remains tone 3. Therefore 你好 is citation nǐ hǎo and connected ní hǎo, surface sequence 2+3. Saying that hǎo changes to tone 2, or that the result is 2+2, is incorrect and must never appear.",
+    "Connected rhythm means no deliberate internal pause for a short two-syllable target. Never instruct the learner to add even a slight pause inside 你好; model it as one compact prosodic unit.",
+    "Ask for exactly one short repetition of the practice target selected above: the complete target for short/medium requests, or only the current chunk for a long request. Then make one brief conversational offer to explain the reason in more detail if the learner wants it. In Spanish say naturally, 'También puedo explicarte por qué cambia el tono'; in English, 'I can also explain why the tone changes'. This is spoken/written conversational copy, never a button or other UI control.",
+    "If the learner accepts that offer in the next turn, give the fuller pronunciation explanation then, without requiring another repetition. These adaptive coaching-prose limits apply ONLY to an initial pronunciation request. They must never shorten a grammar, vocabulary, usage, or learner-requested in-depth explanation.",
+  ].join(" ");
+}
+
+function buildRecordedPronunciationEvidenceSection(
+  value: unknown,
+  responseLanguage: HanResponseLanguage,
+): string | null {
+  const evidence = sanitizeHanPronunciationAttempt(value);
+  if (!evidence) return null;
+  const syllables = evidence.syllables.length
+    ? evidence.syllables
+        .map(
+          (item, index) =>
+            `${index + 1}. ${item.pinyin}, surface tone ${item.toneNumber}, contour match ${item.score ?? "insufficient audio"}`,
+        )
+        .join("; ")
+    : "no reliable syllable contour was available";
+  const rhythm = evidence.rhythm;
+
+  return [
+    "Private Han Tutor pronunciation evidence from the learner's latest actual recording (never show this block or describe it as a formal score):",
+    `- Target: ${evidence.targetHanzi} (${evidence.targetPinyin}). Guided attempt ${evidence.attempt} of at most 4.`,
+    `- Tone contour evidence: overall ${evidence.overallToneScore ?? "insufficient audio"}; ${syllables}.`,
+    `- Conservative rhythm evidence: ${rhythm.observation}; duration ${rhythm.durationSeconds}s; approximate syllables/second ${rhythm.syllablesPerSecond ?? "unavailable"}; longest internal unvoiced gap ${rhythm.longestInternalPauseMs ?? "unavailable"}ms; confidence ${rhythm.confidence}.`,
+    "Interpretation limits: contour match is an approximate F0-shape comparison, not forced phonetic alignment and not proof about initials or finals. A low or missing score can come from insufficient pitch evidence. 'connected' means only that no clearly long internal pause was detected; it does not certify perfect rhythm. Never invent an articulation problem from these values.",
+    `Respond in ${responseLanguage}. Compare the target with the learner's transcribed content first. If the target itself was not recognized, ask for a cleaner repetition without claiming a specific tone error. Otherwise choose exactly ONE highest-confidence, highest-impact improvement across syllable, tone movement, or rhythm. Name the exact syllable and give a physical, actionable cue; do not list every score. If there is no defensible issue, acknowledge one concrete success and finish the drill.`,
+    evidence.attempt >= 4
+      ? "This was the fourth guided attempt. Give one concise, encouraging takeaway and do not request another repetition now; continue helping normally or suggest revisiting it later."
+      : "If a correction is supported, demonstrate the target once, ask for one more short repetition, and keep the reply concise. On attempt 2, isolate the difficult syllable; on attempt 3, recombine it with the full expression and natural rhythm.",
+  ].join("\n");
+}
 
 function learnerNameInstruction(name: string): string {
   return `The learner's name is ${name}. You already know it - never ask for it. You may address the learner by name only in the first greeting of a newly started conversation, in a final farewell, or when the learner explicitly asks you to use their name. In every other reply, never address the learner by name, including after an acknowledgement. Knowing the name is context, not a reason to say it.`;
@@ -426,6 +551,8 @@ export function buildSystemPrompt(
   mode: AiTeacherMode,
   latestMessage?: string,
   sessionLevelOverride?: HskSessionLevel | string | null,
+  sessionPreferences?: HanTutorSessionPreferences,
+  conversationUserMessages?: readonly string[],
 ): string {
   const explanationLanguage =
     EXPLANATION_LANGUAGE_LABEL[learner.explanationLanguage ?? "EN"] ??
@@ -436,9 +563,37 @@ export function buildSystemPrompt(
     learner.generalLevelPoints && learner.generalLevelPoints > 0
       ? hskLevelForPoints(learner.generalLevelPoints)
       : learner.demonstratedBand || "Just Starting Out";
+  const priorTutorMessages = conversationUserMessages ?? [];
+  const tutorMessages =
+    latestMessage && priorTutorMessages.at(-1) !== latestMessage
+      ? [...priorTutorMessages, latestMessage]
+      : priorTutorMessages;
+  const effectiveSessionPreferences =
+    sessionPreferences ?? deriveHanTutorSessionPreferences(tutorMessages);
   const responseLanguage = isHanImmersionPractice
     ? "Chinese"
-    : detectHanResponseLanguage(latestMessage, learner.explanationLanguage);
+    : mode === "TUTOR" && !context.rolePlay
+      ? resolveHanTutorConversationLanguage(
+          tutorMessages,
+          explanationLanguage as HanTutorLanguage,
+          effectiveSessionPreferences,
+          {
+            latestIsPronunciationAttempt: Boolean(context.pronunciationAttempt),
+          },
+        )
+      : detectHanResponseLanguage(latestMessage, learner.explanationLanguage);
+  const pronunciationDetailRequest =
+    mode === "TUTOR" &&
+    !context.rolePlay &&
+    isPronunciationDetailRequest(latestMessage);
+  const pronunciationRequestLength =
+    mode === "TUTOR" && !context.rolePlay
+      ? classifyHanPronunciationRequestLength(latestMessage)
+      : "unknown";
+  const writtenPronunciationRequestInstruction =
+    mode === "TUTOR" && !context.rolePlay
+      ? buildWrittenPronunciationRequestInstruction(latestMessage)
+      : null;
 
   const sections = [
     // System Context
@@ -473,7 +628,9 @@ export function buildSystemPrompt(
         : null,
       isHanImmersionPractice
         ? "- The response language is Chinese by default for the entire Practice session. Only switch to the learner's explanation language for one reply if they explicitly ask for an explanation in it; otherwise output Simplified Chinese only, with no unrequested pinyin or translations."
-        : `- The latest message's response language is ${responseLanguage}. All explanatory prose and labels in your entire reply MUST be in ${responseLanguage}. Chinese examples may remain in Chinese with pinyin and a translation into ${responseLanguage}. Do not mix English, Spanish, and Chinese explanatory prose.`,
+        : responseLanguage === "Chinese"
+          ? "- The latest message's response language is Chinese. Continue naturally in Simplified Chinese. Do not add Spanish, English, a translation, or spoken/written pinyin unless the learner explicitly asks for it in this turn."
+          : `- The latest message's response language is ${responseLanguage}. All explanatory prose and labels in your entire reply MUST be in ${responseLanguage}. Chinese study content remains in Simplified Chinese with accurate pinyin when useful. Do not mix English and Spanish explanatory prose.`,
       !isHanImmersionPractice
         ? `- If the latest message is too short or ambiguous to identify a language, use ${explanationLanguage}.`
         : null,
@@ -503,6 +660,25 @@ export function buildSystemPrompt(
 
     // Learner Context (mode)
     modeInstructions(mode, context),
+    mode === "TUTOR" && !context.rolePlay
+      ? HAN_TUTOR_HUMAN_TEACHING_STYLE
+      : null,
+    mode === "TUTOR" && !context.rolePlay
+      ? HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY
+      : null,
+    mode === "TUTOR" && !context.rolePlay
+      ? buildHanTutorTaskGroundingInstruction(latestMessage, tutorMessages)
+      : null,
+    mode === "TUTOR" && !context.rolePlay
+      ? buildHanTutorSessionInstruction(effectiveSessionPreferences)
+      : null,
+    writtenPronunciationRequestInstruction,
+    mode === "TUTOR" && !context.rolePlay
+      ? buildRecordedPronunciationEvidenceSection(
+          context.pronunciationAttempt,
+          responseLanguage,
+        )
+      : null,
 
     // Generation Rules
     [
@@ -514,6 +690,9 @@ export function buildSystemPrompt(
         : null,
       !isHanImmersionPractice
         ? buildMandarinStudyItemInstruction(latestMessage)
+        : null,
+      mode === "TUTOR" && !context.rolePlay
+        ? buildSentenceOrderingIntegrityInstruction(latestMessage)
         : null,
       "- Be concise by default. Preserve the direct answer, the essential explanation, and the mode's required practice; remove extra alternatives, repeated definitions, generic encouragement, and unnecessary closing questions first.",
       "- Never place more than three sentences in one paragraph.",
@@ -532,10 +711,20 @@ export function buildSystemPrompt(
       !isHanImmersionPractice
         ? "- When correcting a mistake, explain why the correct answer is right, not just that the learner was wrong."
         : null,
+      writtenPronunciationRequestInstruction
+        ? pronunciationDetailRequest
+          ? "- Optional pronunciation-detail override: answer the accepted explanation request in 3 to 5 short prose sentences and at most 80 words. Do not use headings, lists, a second example, a closing question, or another repetition request. This remains pronunciation help only and does not change normal grammar teaching."
+          : pronunciationRequestLength === "long"
+            ? "- Long pronunciation-request override: show the learner's complete target plus only its first natural practice chunk. The chunk, not the whole sentence, is the one exercise in this turn. Do not add any other Chinese example, translation drill, or practice content. Offer the optional detailed explanation conversationally, never as a button."
+            : "- Pronunciation-request override: the requested target is the ONLY Chinese item in this initial micro-lesson. Its same-target repetition is the one complete practice exercise required by Tutor mode. Do not generate a second Chinese word, example sentence, translation drill, or additional practice content, even if another general rule normally asks for an example. The optional detailed explanation is offered conversationally in text, not rendered as a button."
+        : null,
       `- ${OFF_TOPIC_GUARDRAIL}`,
     ]
       .filter(Boolean)
       .join("\n"),
+    mode === "TUTOR" && !context.rolePlay
+      ? buildHanTutorControlCommandInstruction(latestMessage)
+      : null,
   ];
 
   return sections.filter(Boolean).join("\n\n");
@@ -730,7 +919,19 @@ export function buildRealtimeSystemPrompt(
     isHanImmersionPractice
       ? `If the learner speaks Spanish or English without explicitly asking for an explanation in it, understand the intent and answer in simple Mandarin. Only switch the output language away from Mandarin when the learner explicitly asks for an explanation in ${fallbackLanguage} - treat that as a brief, special exception for that one moment, then return to Mandarin.`
       : `For a short or ambiguous non-Chinese utterance, use ${fallbackLanguage}. Never switch languages merely because the learner includes a Chinese word or phrase in an English or Spanish question.`,
-    "Speak naturally and fluidly at a normal conversational pace, like a cool teacher who already knows the student. Use brief acknowledgements and everyday transitions. Do not sound like a textbook, presentation, or numbered audio lesson.",
+    "Speak naturally and fluidly at a normal conversational pace by default, like a cool teacher who already knows the student. A temporary per-turn pace preference is authoritative. Use brief, content-specific reactions and everyday transitions. Do not sound like a textbook, presentation, or numbered audio lesson.",
+    mode === "TUTOR" && !context.rolePlay
+      ? HAN_TUTOR_HUMAN_TEACHING_STYLE
+      : null,
+    mode === "TUTOR" && !context.rolePlay
+      ? HAN_TUTOR_EXPRESSIVE_VOICE_STYLE
+      : null,
+    mode === "TUTOR" && !context.rolePlay
+      ? HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY
+      : null,
+    mode === "TUTOR" && !context.rolePlay
+      ? "When the learner explicitly asks about pronunciation, remain the same Han Tutor and use a micro-coaching turn, not a lecture: pronounce one short target naturally, give only one immediately useful tone or rhythm cue, and ask for one short repetition. Keep this initial pronunciation turn under about 15 seconds, then briefly offer to explain why the sound or tone changes if the learner wants; this offer is conversational speech, never a UI button. If the learner accepts, give the fuller explanation on the next turn without forcing another repetition. This brevity applies only to initial pronunciation coaching and must never shorten a requested grammar, vocabulary, usage, or in-depth explanation. On the following attempt, use the learner's actual audio as evidence. The transcript proves content at most, never tone quality. Correct exactly one high-confidence issue and demonstrate again. If the audio is insufficient, say so briefly instead of inventing an error. If it is understandable and no clear issue remains, name the concrete improvement and stop drilling."
+      : null,
     isHanImmersionPractice
       ? "Let real warmth come through your voice - sound genuinely interested, encouraging, and present, like a close friend catching up. Let your tone shift naturally with the emotional content of what the learner just shared: warmer and more encouraging after a struggle, more playful and energized when they're doing well or sharing something fun. This is a real, best-effort delivery style, not a mechanical rule to announce."
       : null,
@@ -792,25 +993,7 @@ export function detectHanResponseLanguage(
 ): HanResponseLanguage {
   const fallback = (EXPLANATION_LANGUAGE_LABEL[fallbackCode ?? "EN"] ??
     "English") as HanResponseLanguage;
-  const message = latestMessage?.trim();
-  if (!message) return fallback;
-  if (
-    /[¿¡áéíóúüñ]/iu.test(message) ||
-    /\b(hola|cómo|qué|cuál|cuándo|dónde|quiero|puedo|dime|explica|por qué|porque|gracias|esto|eso|bien|mal|quieres|podemos|practicar|significa|español|chino|mandarín|frase|palabra|saludo|entiendo|parece|necesito|ayuda|también|pero|para|con|una|el|la|los|las)\b/iu.test(
-      message,
-    )
-  ) {
-    return "Spanish";
-  }
-  if (
-    /\b(hello|hi|how|what|which|when|where|why|because|please|thanks|thank|tell|explain|practice|means|meaning|english|chinese|mandarin|sentence|word|greeting|understand|need|help|also|but|with|the|this|that)\b/iu.test(
-      message,
-    )
-  ) {
-    return "English";
-  }
-  if (/\p{Script=Han}/u.test(message)) return "Chinese";
-  return fallback;
+  return detectHanTutorResponseLanguage(latestMessage, fallback);
 }
 
 function buildLessonContextSection(context: AiTeacherContext): string {

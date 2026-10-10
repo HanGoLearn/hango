@@ -13,9 +13,8 @@ vi.mock("@/lib/ai", async (importOriginal) => {
 const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
-const { sendAiTeacherMessage, resetConversation } = await import(
-  "@/lib/ai-teacher-data"
-);
+const { sendAiTeacherMessage, resetConversation } =
+  await import("@/lib/ai-teacher-data");
 
 const testEmails: string[] = [];
 
@@ -68,6 +67,7 @@ describe("Han Companion personal memory (2026-08-31, LearnerFact, integration, r
           create: Array.from({ length: 8 }, (_, index) => ({
             role: index % 2 === 0 ? "USER" : "ASSISTANT",
             content: `message ${index}`,
+            contextSnapshot: { hanConversationSurface: "COMPANION" },
           })),
         },
       },
@@ -100,8 +100,16 @@ describe("Han Companion personal memory (2026-08-31, LearnerFact, integration, r
         userId: user.id,
         messages: {
           create: [
-            { role: "USER", content: "hi" },
-            { role: "ASSISTANT", content: "hello" },
+            {
+              role: "USER",
+              content: "hi",
+              contextSnapshot: { hanConversationSurface: "COMPANION" },
+            },
+            {
+              role: "ASSISTANT",
+              content: "hello",
+              contextSnapshot: { hanConversationSurface: "COMPANION" },
+            },
           ],
         },
       },
@@ -218,9 +226,8 @@ describe("Han Companion personal memory (2026-08-31, LearnerFact, integration, r
     completeMock.mockResolvedValue(mockCompletion("好的！"));
 
     await sendAiTeacherMessage(user.id, "Hi Han", {}, "PRACTICE");
-    const companionPrompt = completeMock.mock.calls.at(-1)?.[0]?.systemPrompt as
-      | string
-      | undefined;
+    const companionPrompt = completeMock.mock.calls.at(-1)?.[0]
+      ?.systemPrompt as string | undefined;
     expect(companionPrompt).toContain("Enjoys rock climbing on weekends");
 
     completeMock.mockClear();
@@ -238,8 +245,7 @@ describe("Han Companion personal memory (2026-08-31, LearnerFact, integration, r
       "PRACTICE",
     );
     const rolePlayPrompt = completeMock.mock.calls.at(-1)?.[0]?.systemPrompt as
-      | string
-      | undefined;
+      string | undefined;
     expect(rolePlayPrompt).not.toContain("Enjoys rock climbing on weekends");
 
     // Real bug fix (2026-08-31): Han Tutor is also `!rolePlay`, exactly
@@ -248,8 +254,7 @@ describe("Han Companion personal memory (2026-08-31, LearnerFact, integration, r
     completeMock.mockClear();
     await sendAiTeacherMessage(user.id, "Hi Han", {}, "TUTOR");
     const tutorPrompt = completeMock.mock.calls.at(-1)?.[0]?.systemPrompt as
-      | string
-      | undefined;
+      string | undefined;
     expect(tutorPrompt).not.toContain("Enjoys rock climbing on weekends");
   });
 });

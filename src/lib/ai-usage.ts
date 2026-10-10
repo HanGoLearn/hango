@@ -97,6 +97,14 @@ export class DailyUsageCapExceededError extends Error {}
 export class AiFamilyDisabledError extends DailyUsageCapExceededError {}
 export class GlobalAiBudgetExceededError extends DailyUsageCapExceededError {}
 
+interface DailyUsageCapOptions {
+  /**
+   * Environment-specific fallback used only when neither an administrator nor
+   * the learner has configured a feature limit. Explicit caps always win.
+   */
+  fallbackDailyLimitUsd?: number;
+}
+
 export function utcBudgetDay(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
@@ -375,6 +383,7 @@ export async function checkDailyUsageCap(
   userId: string,
   feature: AiUsageFeature,
   identity: { provider?: string; model?: string } = {},
+  options: DailyUsageCapOptions = {},
 ): Promise<void> {
   const [userCap, cap, usage, policy] = await Promise.all([
     db.aiUsageUserCap.findUnique({
@@ -387,8 +396,14 @@ export async function checkDailyUsageCap(
     }),
     getGlobalBudgetPolicy(),
   ]);
+  const fallbackDailyLimitUsd =
+    options.fallbackDailyLimitUsd !== undefined &&
+    Number.isFinite(options.fallbackDailyLimitUsd) &&
+    options.fallbackDailyLimitUsd > 0
+      ? options.fallbackDailyLimitUsd
+      : DEFAULT_DAILY_CAP_USD;
   const limit =
-    userCap?.dailyLimitUsd ?? cap?.dailyLimitUsd ?? DEFAULT_DAILY_CAP_USD;
+    userCap?.dailyLimitUsd ?? cap?.dailyLimitUsd ?? fallbackDailyLimitUsd;
   const spentToday = usage._sum.estimatedCostUsd ?? 0;
   if (spentToday >= limit) {
     const errorCode = userCap

@@ -53,3 +53,7 @@ Thumbs.db
 .codex-tmp/
 .codex-work/
 outputs/
+
+.vercel
+.env*
+!.env.example

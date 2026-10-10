@@ -18,6 +18,7 @@ import type {
   AiTeacherContext as AiTeacherContextData,
   AiTeacherMode,
 } from "@/lib/ai-context";
+import type { HanPronunciationAttemptEvidence } from "@/lib/speech/han-pronunciation";
 
 export interface AiChatMessage {
   id: string;
@@ -26,7 +27,13 @@ export interface AiChatMessage {
   responseLanguage?: "English" | "Spanish" | "Chinese";
   /** The Realtime session already played this response as it was generated. */
   spokenLive?: boolean;
+  /** A recorded voice message should receive one spoken reply in text chat. */
+  autoPlayAudio?: boolean;
+  /** Local, audio-derived coaching evidence for this learner turn. */
+  pronunciationAttempt?: HanPronunciationAttemptEvidence;
 }
+
+export type AiTeacherInputModality = "text" | "voice";
 
 export interface InitialAiMessage {
   id: string;
@@ -43,7 +50,7 @@ interface AiTeacherState {
   /** A conversation-clear (server-side delete) is in flight - input should stay disabled so a message can't be sent with stale history still attached. */
   resetting: boolean;
   error: string | null;
-  responseMode: "TEXT_ONLY" | "TEXT_AND_AUDIO" | "AUDIO_ONLY";
+  autoPlayVoiceReplies: boolean;
   voice: string;
   explanationLanguage: string;
   setMode: (mode: AiTeacherMode) => void;
@@ -55,18 +62,16 @@ interface AiTeacherState {
   sendMessage: (
     text: string,
     contextOverride?: AiTeacherContextData,
+    inputModality?: AiTeacherInputModality,
+    pronunciationAttempt?: HanPronunciationAttemptEvidence | null,
   ) => Promise<AiChatMessage | null>;
   appendRealtimeMessage: (message: Omit<AiChatMessage, "id">) => void;
   /**
-   * `extractFacts` (2026-08-31 fix): only Han Companion should ever pass
-   * `true`. Personal-memory extraction is gated on the conversation being
-   * Companion's, not merely "not role-play" - Han Tutor is also
-   * `!rolePlay`, and the original `!context.rolePlay`-only gate let Tutor
-   * conversations get extracted and read back too (real user report:
-   * Tutor "remembered" a job-interview question across sessions, which it
-   * was always agreed *never* to do - Tutor resets every time, no memory).
+   * Clears only Han Tutor's client and persisted conversation. Companion is a
+   * separate voice surface and invokes its own server-side reset without ever
+   * passing through this provider's visible message state.
    */
-  resetConversation: (extractFacts?: boolean) => Promise<void>;
+  resetConversation: () => Promise<void>;
 }
 
 const AiTeacherStateContext = createContext<AiTeacherState | null>(null);
@@ -80,7 +85,7 @@ function nextMessageId(): string {
 export function AiTeacherProvider({
   initialMessages = [],
   initialMode = "TUTOR",
-  initialResponseMode = "TEXT_ONLY",
+  initialAutoPlayVoiceReplies = true,
   initialVoice = "cedar",
   initialExplanationLanguage = "EN",
   children,
@@ -96,7 +101,7 @@ export function AiTeacherProvider({
   initialMessages?: InitialAiMessage[];
   /** From LearnerProfile.defaultAiMode (14.4 "Edit default AI mode"). */
   initialMode?: AiTeacherMode;
-  initialResponseMode?: "TEXT_ONLY" | "TEXT_AND_AUDIO" | "AUDIO_ONLY";
+  initialAutoPlayVoiceReplies?: boolean;
   initialVoice?: string;
   initialExplanationLanguage?: string;
   children: ReactNode;
@@ -144,12 +149,12 @@ export function AiTeacherProvider({
     [contextState, pathname],
   );
 
-  const resetConversation = useCallback(async (extractFacts = false) => {
+  const resetConversation = useCallback(async () => {
     setMessages([]);
     setError(null);
     setResetting(true);
     try {
-      await resetAiTeacherConversationAction(extractFacts);
+      await resetAiTeacherConversationAction(false);
     } finally {
       setResetting(false);
     }
@@ -176,11 +181,17 @@ export function AiTeacherProvider({
   );
 
   const sendMessage = useCallback(
-    async (text: string, contextOverride?: AiTeacherContextData) => {
+    async (
+      text: string,
+      contextOverride?: AiTeacherContextData,
+      inputModality: AiTeacherInputModality = "text",
+      pronunciationAttempt: HanPronunciationAttemptEvidence | null = null,
+    ) => {
       const userMessage: AiChatMessage = {
         id: nextMessageId(),
         role: "user",
         content: text,
+        pronunciationAttempt: pronunciationAttempt ?? undefined,
       };
       setMessages((current) => [...current, userMessage]);
       setSending(true);
@@ -199,6 +210,7 @@ export function AiTeacherProvider({
           role: "assistant",
           content: result.reply,
           responseLanguage: result.responseLanguage,
+          autoPlayAudio: inputModality === "voice",
         };
         setMessages((current) => [...current, assistantMessage]);
         return assistantMessage;
@@ -229,7 +241,7 @@ export function AiTeacherProvider({
         sending,
         resetting,
         error,
-        responseMode: initialResponseMode,
+        autoPlayVoiceReplies: initialAutoPlayVoiceReplies,
         voice: initialVoice,
         explanationLanguage: initialExplanationLanguage,
         setMode,

@@ -116,13 +116,15 @@ export async function AppShell({
         // PRACTICE from before this change must never get stuck there with
         // no way back - the stored value is intentionally ignored here.
         mode: "TUTOR" as const,
-        responseMode: profile.hanResponseMode,
+        // The retired three-way response format is temporarily reused only
+        // as a backwards-compatible mute flag. Typed replies never autoplay.
+        autoPlayVoiceReplies: profile.hanResponseMode !== "TEXT_ONLY",
         voice: profile.hanVoice,
         explanationLanguage: profile.explanationLanguage ?? "EN",
       }
     : {
         mode: "TUTOR" as const,
-        responseMode: "TEXT_ONLY" as const,
+        autoPlayVoiceReplies: true,
         voice: "cedar",
         explanationLanguage: "EN",
       };
@@ -130,7 +132,7 @@ export async function AppShell({
   return (
     <AiTeacherProvider
       initialMode={hanPreferences.mode}
-      initialResponseMode={hanPreferences.responseMode}
+      initialAutoPlayVoiceReplies={hanPreferences.autoPlayVoiceReplies}
       initialVoice={hanPreferences.voice}
       initialExplanationLanguage={hanPreferences.explanationLanguage}
     >

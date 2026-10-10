@@ -10,11 +10,18 @@ import { Body, Caption, Supporting } from "@/components/ui/typography";
 import { InformationBanner } from "@/components/ui/banner";
 import { HanAvatar, type HanPose } from "@/components/ui/han-mascot";
 import { cn } from "@/lib/cn";
-import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
+import {
+  useAiTeacher,
+  type AiTeacherInputModality,
+} from "@/components/ai-teacher/ai-teacher-provider";
 import { HanVoiceInput } from "@/components/ai-teacher/han-voice-input";
 import { HanVoiceConversation } from "@/components/ai-teacher/han-voice-conversation";
 import { HanSpeechButton } from "@/components/ai-teacher/han-speech-button";
 import type { AiTeacherContext } from "@/lib/ai-context";
+import {
+  extractHanPronunciationTarget,
+  type HanPronunciationAttemptEvidence,
+} from "@/lib/speech/han-pronunciation";
 
 /**
  * Reactive avatar (2026-08-31, Han Companion) - a lightweight, always-
@@ -31,7 +38,11 @@ function inferHanPose(content: string): HanPose {
   ) {
     return "celebrating";
   }
-  if (/lo siento|perdón|抱歉|不好意思|\bsorry\b|my (?:mistake|bad)/iu.test(content)) {
+  if (
+    /lo siento|perdón|抱歉|不好意思|\bsorry\b|my (?:mistake|bad)/iu.test(
+      content,
+    )
+  ) {
     return "wrong";
   }
   if (/[?？]/u.test(content)) {
@@ -45,6 +56,7 @@ function suggestedPromptsFor(context: AiTeacherContext): string[] {
   if (context.selectedVocabulary) {
     prompts.push(
       `Explain "${context.selectedVocabulary.chineseForm}" in more detail`,
+      `Help me pronounce ${context.selectedVocabulary.chineseForm}`,
     );
   }
   if (context.selectedGrammarPoint) {
@@ -90,7 +102,7 @@ export function AiTeacherChat({
     sending,
     resetting,
     error,
-    responseMode,
+    autoPlayVoiceReplies,
     voice,
     explanationLanguage,
     open,
@@ -100,9 +112,11 @@ export function AiTeacherChat({
   } = useAiTeacher();
   const [draft, setDraft] = useState("");
   const [voiceConversationActive, setVoiceConversationActive] = useState(false);
-  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(
-    null,
-  );
+  const [lastFailedMessage, setLastFailedMessage] = useState<{
+    text: string;
+    modality: AiTeacherInputModality;
+    pronunciationAttempt: HanPronunciationAttemptEvidence | null;
+  } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const activeContext = useMemo(
     () =>
@@ -114,17 +128,63 @@ export function AiTeacherChat({
           },
     [context, rolePlayEnabled],
   );
+  const pronunciationTarget = useMemo(() => {
+    if (mode !== "TUTOR" || activeContext.rolePlay) return null;
+    const latestAssistant = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant");
+    return extractHanPronunciationTarget(latestAssistant?.content);
+  }, [activeContext.rolePlay, messages, mode]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, sending]);
 
-  async function handleSend(text: string) {
+  async function handleSend(
+    text: string,
+    modality: AiTeacherInputModality = "text",
+    pronunciationAttempt: HanPronunciationAttemptEvidence | null = null,
+    preserveAttemptNumber = false,
+  ) {
     const trimmed = text.trim();
     if (!trimmed || sending || resetting) return;
     setDraft("");
-    const reply = await sendMessage(trimmed, activeContext);
-    setLastFailedMessage(reply ? null : trimmed);
+    const numberedAttempt = pronunciationAttempt
+      ? {
+          ...pronunciationAttempt,
+          attempt: preserveAttemptNumber
+            ? pronunciationAttempt.attempt
+            : Math.min(
+                4,
+                1 +
+                  messages.filter(
+                    (message) =>
+                      message.role === "user" &&
+                      message.pronunciationAttempt?.targetHanzi ===
+                        pronunciationAttempt.targetHanzi,
+                  ).length,
+              ),
+        }
+      : null;
+    const turnContext: AiTeacherContext = {
+      ...activeContext,
+      pronunciationAttempt: numberedAttempt ?? undefined,
+    };
+    const reply = await sendMessage(
+      trimmed,
+      turnContext,
+      modality,
+      numberedAttempt,
+    );
+    setLastFailedMessage(
+      reply
+        ? null
+        : {
+            text: trimmed,
+            modality,
+            pronunciationAttempt: numberedAttempt,
+          },
+    );
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -137,8 +197,7 @@ export function AiTeacherChat({
   const contextLabel =
     [activeContext.lessonTitle, activeContext.lessonStepType]
       .filter(Boolean)
-      .join(" · ") ||
-    "No active lesson context";
+      .join(" · ") || "No active lesson context";
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -172,12 +231,11 @@ export function AiTeacherChat({
               />
             )}
             <div className="min-w-0">
-              {/* Han always writes a reply internally regardless of mode -
-                  AUDIO_ONLY just hides this bubble for assistant messages,
-                  it doesn't change what gets generated. The learner's own
-                  messages always stay visible (this setting is specifically
-                  "Han replies", not the whole conversation). */}
-              {!(message.role === "assistant" && responseMode === "AUDIO_ONLY") && (
+              {/* Every response remains visible. Input modality now decides
+                  only whether Han also speaks automatically: typed turns stay
+                  quiet; recorded/live voice turns play once and retain their
+                  transcript for accessibility and review. */}
+              {
                 <div
                   className={cn(
                     "whitespace-pre-wrap rounded-card px-3 py-2 font-interface text-body leading-relaxed",
@@ -188,15 +246,16 @@ export function AiTeacherChat({
                 >
                   {message.content}
                 </div>
-              )}
+              }
               {message.role === "assistant" && (
                 <HanSpeechButton
                   text={message.content}
                   voice={voice}
                   responseLanguage={message.responseLanguage}
+                  speechStyle={mode === "TUTOR" ? "tutor" : "companion"}
                   autoPlay={
-                    (responseMode === "TEXT_AND_AUDIO" ||
-                      responseMode === "AUDIO_ONLY") &&
+                    autoPlayVoiceReplies &&
+                    Boolean(message.autoPlayAudio) &&
                     !voiceConversationActive &&
                     !message.spokenLive &&
                     message.id.startsWith("local-")
@@ -226,7 +285,14 @@ export function AiTeacherChat({
                 type="button"
                 variant="tertiary"
                 className="px-0"
-                onClick={() => void handleSend(lastFailedMessage)}
+                onClick={() =>
+                  void handleSend(
+                    lastFailedMessage.text,
+                    lastFailedMessage.modality,
+                    lastFailedMessage.pronunciationAttempt,
+                    true,
+                  )
+                }
               >
                 Retry
               </Button>
@@ -275,7 +341,10 @@ export function AiTeacherChat({
         <HanVoiceInput
           disabled={sending || resetting || voiceConversationActive}
           context={activeContext}
-          onTranscript={(transcript) => setDraft(transcript)}
+          pronunciationTarget={pronunciationTarget}
+          onTranscript={(transcript, pronunciationAttempt) =>
+            void handleSend(transcript, "voice", pronunciationAttempt)
+          }
         />
         <IconButton
           icon={<Send className="size-4" aria-hidden="true" />}

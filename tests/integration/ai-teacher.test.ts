@@ -190,7 +190,9 @@ describe("AI Teacher conversation (integration, real database, mock provider)", 
     expect(afterReset).toHaveLength(2);
     expect(
       afterReset.every((message) => {
-        const snapshot = message.contextSnapshot as { rolePlay?: unknown } | null;
+        const snapshot = message.contextSnapshot as {
+          rolePlay?: unknown;
+        } | null;
         return Boolean(snapshot?.rolePlay);
       }),
     ).toBe(true);
@@ -225,9 +227,81 @@ describe("AI Teacher conversation (integration, real database, mock provider)", 
 
     const history = await getConversationHistory(user.id);
     expect(history).toHaveLength(2);
-    expect(history.every((message) => message.content !== "你好，我想点菜")).toBe(
-      true,
+    expect(
+      history.every((message) => message.content !== "你好，我想点菜"),
+    ).toBe(true);
+  });
+
+  it("keeps Tutor, Companion, and Speaking histories independent", async () => {
+    const user = await createTestUser(
+      `ai-teacher-separated-surfaces-${Date.now()}@hango.dev`,
     );
+    await db.aiConversation.create({
+      data: {
+        userId: user.id,
+        messages: {
+          create: [
+            {
+              role: "USER",
+              content: "Tutor question",
+              contextSnapshot: { hanConversationSurface: "TUTOR" },
+            },
+            {
+              role: "ASSISTANT",
+              content: "Tutor answer",
+              contextSnapshot: { hanConversationSurface: "TUTOR" },
+            },
+            {
+              role: "USER",
+              content: "Companion conversation",
+              contextSnapshot: { hanConversationSurface: "COMPANION" },
+            },
+            {
+              role: "ASSISTANT",
+              content: "Companion answer",
+              contextSnapshot: { hanConversationSurface: "COMPANION" },
+            },
+            {
+              role: "USER",
+              content: "Speaking scene",
+              contextSnapshot: {
+                rolePlay: { aiRole: "Waiter", learnerRole: "Customer" },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      (await getConversationHistory(user.id)).map((message) => message.content),
+    ).toEqual(["Tutor question", "Tutor answer"]);
+    expect(
+      (await getConversationHistory(user.id, "COMPANION")).map(
+        (message) => message.content,
+      ),
+    ).toEqual(["Companion conversation", "Companion answer"]);
+
+    await resetConversation(user.id, true);
+    expect(
+      (await getConversationHistory(user.id)).map((message) => message.content),
+    ).toEqual(["Tutor question", "Tutor answer"]);
+    expect(await getConversationHistory(user.id, "COMPANION")).toHaveLength(0);
+
+    const afterCompanionReset = await db.aiMessage.findMany({
+      where: { conversation: { userId: user.id } },
+      select: { content: true },
+    });
+    expect(
+      afterCompanionReset.map((message) => message.content).sort(),
+    ).toEqual(["Speaking scene", "Tutor answer", "Tutor question"].sort());
+
+    await resetConversation(user.id);
+    const finalMessages = await db.aiMessage.findMany({
+      where: { conversation: { userId: user.id } },
+      select: { content: true },
+    });
+    expect(finalMessages).toEqual([{ content: "Speaking scene" }]);
   });
 
   it("the Server Action never throws for AI/validation failures - it returns ok: false", async () => {

@@ -66,7 +66,7 @@ describe("OpenAiProvider", () => {
       "gpt-5-mini",
     );
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body).reasoning_effort).toBe(
-      "low",
+      "minimal",
     );
   });
 
@@ -89,7 +89,7 @@ describe("OpenAiProvider", () => {
 
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toMatchObject({
       max_completion_tokens: 1_600,
-      reasoning_effort: "low",
+      reasoning_effort: "minimal",
     });
   });
 

@@ -29,6 +29,7 @@ import {
   sanitizeSpeakingTurnEvidence,
   type SpeakingTurnEvidence,
 } from "@/lib/speech/speaking-pronunciation-evidence";
+import { sanitizeHanPronunciationAttempt } from "@/lib/speech/han-pronunciation";
 
 const MAX_HAN_AUDIO_BYTES = 10 * 1024 * 1024;
 
@@ -56,10 +57,17 @@ export async function sendAiTeacherMessageAction(
   if (!session?.user?.id) throw new Error("Not authenticated");
 
   try {
+    const pronunciationAttempt = sanitizeHanPronunciationAttempt(
+      context.pronunciationAttempt,
+    );
+    const safeContext: AiTeacherContext = {
+      ...context,
+      pronunciationAttempt: pronunciationAttempt ?? undefined,
+    };
     const { reply, responseLanguage } = await sendAiTeacherMessage(
       session.user.id,
       message,
-      context,
+      safeContext,
       mode,
     );
     return { ok: true, reply, responseLanguage };
@@ -124,13 +132,20 @@ export async function saveRealtimeConversationTurnAction(
   userText: string,
   assistantText: string,
   context: AiTeacherContext,
+  mode: AiTeacherMode = "TUTOR",
 ): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
   const user = userText.trim().slice(0, 1000);
   const assistant = assistantText.trim().slice(0, 4000);
   if (!user || !assistant) return;
-  await saveRealtimeConversationTurn(session.user.id, user, assistant, context);
+  await saveRealtimeConversationTurn(
+    session.user.id,
+    user,
+    assistant,
+    context,
+    mode,
+  );
 }
 
 export async function saveRealtimeConversationMessageAction(

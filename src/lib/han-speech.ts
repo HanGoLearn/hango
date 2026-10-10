@@ -8,6 +8,8 @@ export interface HanSpeechSegment {
   text: string;
 }
 
+export type HanSpeechStyle = "tutor" | "companion";
+
 export function splitSpeechByLanguage(
   text: string,
   responseLanguage: HanResponseLanguage,
@@ -35,14 +37,25 @@ export function splitSpeechByLanguage(
 
 export function segmentSpeechInstructions(
   language: HanResponseLanguage,
+  style: HanSpeechStyle = "tutor",
 ): string {
+  if (style === "companion") {
+    if (language === "Chinese") {
+      return "Speak only the supplied Mandarin Chinese text. Use natural native Mandarin pronunciation, slightly slower than normal conversation, with clear tones. Do not add, translate, or explain anything.";
+    }
+    if (language === "Spanish") {
+      return "Speak only the supplied Spanish text as a native speaker of neutral Latin American Spanish at a normal conversational pace. Use completely natural Latin American rhythm, connected speech, vowels, and varied intonation. Sound confident, spontaneous, warm, and conversational, never like a formal presentation. Start speaking promptly and finish without a long trailing pause. Do not use any foreign accent and do not add anything.";
+    }
+    return "Speak only the supplied English text as a native speaker of neutral English at a normal conversational pace. Use completely natural English rhythm, connected speech, vowels, and varied intonation. Sound confident, spontaneous, warm, and conversational, never like a formal presentation. Start speaking promptly and finish without a long trailing pause. Do not use any foreign accent and do not add anything.";
+  }
+
   if (language === "Chinese") {
-    return "Speak only the supplied Mandarin Chinese text. Use natural native Mandarin pronunciation, slightly slower than normal conversation, with clear tones. Do not add, translate, or explain anything.";
+    return "Speak only the supplied Mandarin Chinese text as a charismatic young-adult tutor speaking one-to-one. Use natural native Mandarin pronunciation and clear tones. Sound lively, curious, and human, with expressive but controlled pitch, emphasis, timing, and an audible smile when the meaning is light. Slow down only enough to make a teaching example clear; never stretch every syllable or sound like an announcer, actor, or children's presenter. Do not add, translate, or explain anything.";
   }
   if (language === "Spanish") {
-    return "Speak only the supplied Spanish text as a native speaker of neutral Latin American Spanish at a normal conversational pace. Use completely natural Latin American rhythm, connected speech, vowels, and varied intonation. Sound confident, spontaneous, warm, and conversational, never like a formal presentation. Start speaking promptly and finish without a long trailing pause. Do not use any foreign accent and do not add anything.";
+    return "Speak only the supplied Spanish text as a native speaker of accent-neutral Latin American Spanish. Accent-neutral does NOT mean emotionally neutral. Sound like a charismatic young-adult tutor speaking one-to-one: lively, quick, curious, warm, and genuinely engaged. Let the meaning shape the delivery: an audible smile in light moments, focused clarity for a correction, gentle warmth after difficulty, and a small lift of energy after real progress. Vary pitch, emphasis, tempo, and pauses naturally within the sentence. Never sound like an announcer, call-center agent, formal presentation, children's host, or exaggerated actor. Avoid forced jokes, fake laughter, and slang. Start promptly, finish cleanly, keep a natural conversational pace, use no foreign accent, and add no words.";
   }
-  return "Speak only the supplied English text as a native speaker of neutral English at a normal conversational pace. Use completely natural English rhythm, connected speech, vowels, and varied intonation. Sound confident, spontaneous, warm, and conversational, never like a formal presentation. Start speaking promptly and finish without a long trailing pause. Do not use any foreign accent and do not add anything.";
+  return "Speak only the supplied English text as a native speaker with an accent-neutral delivery. Accent-neutral does NOT mean emotionally neutral. Sound like a charismatic young-adult tutor speaking one-to-one: lively, quick, curious, warm, and genuinely engaged. Let the meaning shape the delivery: an audible smile in light moments, focused clarity for a correction, gentle warmth after difficulty, and a small lift of energy after real progress. Vary pitch, emphasis, tempo, and pauses naturally within the sentence. Never sound like an announcer, call-center agent, formal presentation, children's host, or exaggerated actor. Avoid forced jokes, fake laughter, and slang. Start promptly, finish cleanly, keep a natural conversational pace, use no foreign accent, and add no words.";
 }
 
 export function fluidConversationSpeechInstructions(
@@ -248,6 +261,7 @@ export function selectUsefulOralScript(
 export function oralScriptPrompt(
   responseLanguage: HanResponseLanguage,
   conversational = false,
+  style: HanSpeechStyle = "tutor",
 ): string {
   const language =
     responseLanguage === "Spanish"
@@ -256,11 +270,16 @@ export function oralScriptPrompt(
         ? "natural, neutral English"
         : "natural native Mandarin Chinese";
 
+  const personalityInstruction =
+    style === "tutor"
+      ? "- Give Han the voice of a charismatic young-adult tutor: alert, playful when the moment allows it, curious, and emotionally responsive without becoming childish, theatrical, slang-heavy, or constantly excited. Build natural contrast into the sentence shape so the delivery can breathe: short reactions, emphasis on the useful word, and a calmer beat for the correction. Never insert fake laughter or a joke that was not already supported by the response."
+      : "- Sound like a friendly, confident, modern teacher having a real conversation: warm and relaxed, but not childish or full of slang.";
+
   return `Turn Han's written teaching response into a separate script meant to be heard aloud.
 - Return only the words Han should say. No commentary about your work.
 - Speak in ${language}.
 - The speaker must sound native in the main response language. Teaching Mandarin must never give the Spanish or English narration a Chinese accent.
-- Sound like a friendly, confident, modern teacher having a real conversation: warm and relaxed, but not childish or full of slang.
+${personalityInstruction}
 ${conversational ? '- This is a live voice conversation. React naturally before teaching: acknowledge what the learner asked, mention context or nuance when it matters, and connect ideas with everyday phrases instead of sounding like a prepared lesson. Never begin with a textbook formula such as "Para saludar en persona, di..." when a more human opening is possible.\n- Prefer a flow such as: natural reaction; key nuance; first/common option; useful alternative; brief invitation to try it. Do not announce numbered sections.' : ""}
 - Make the answer comfortable to hear, but never reduce it to just the Chinese words or a list of examples. Preserve the main answer, the meaning of every distinct Chinese example, the important difference in when each example is used, and the final practice question when present. Trim formatting, repeated pinyin, repeated translations, and secondary detail first.
 - NEVER say or include pinyin or any romanized Chinese pronunciation. If the written response shows Chinese characters followed by pinyin, say the Chinese characters once and completely omit the pinyin.
@@ -276,12 +295,12 @@ export function speechInstructions(
   responseLanguage: HanResponseLanguage,
 ): string {
   if (responseLanguage === "Chinese") {
-    return "Speak as Han, a friendly, confident, modern Mandarin teacher. Sound relaxed and conversational, not like you are reading a document. Use natural native Mandarin pronunciation at a deliberately slow, clear teaching pace, with short pauses between examples. Do not read pinyin or romanized pronunciation aloud.";
+    return "Speak as Han, a charismatic young-adult Mandarin tutor talking one-to-one. Sound lively, curious, warm, and emotionally responsive, not like you are reading a document. Use natural native Mandarin pronunciation at a clear teaching pace, with meaningful emphasis and short pauses between examples. Keep the expressiveness controlled: never sound childish, theatrical, or like an announcer. Do not read pinyin or romanized pronunciation aloud.";
   }
 
   const proseInstruction =
     responseLanguage === "Spanish"
       ? "Your base voice is a native speaker of neutral Latin American Spanish. Every Spanish word must have completely natural Latin American rhythm, vowels, and intonation, with absolutely no Chinese or foreign accent."
       : "Your base voice is a native speaker of neutral English. Every English word must have completely natural English rhythm, vowels, and intonation, with absolutely no Chinese or foreign accent.";
-  return `Speak as Han, a friendly, confident, modern teacher. Sound relaxed and conversational, as if you are talking directly to one student rather than reading a document. ${proseInstruction} Do not imitate the accent of a native Chinese person speaking ${responseLanguage}; Han is fully native in the main language. Only while saying Chinese characters, briefly switch pronunciation to natural Mandarin and use a slightly slower teaching pace. Then return immediately to the native ${responseLanguage} voice. Do not let the Mandarin pronunciation affect the sentence before or after it. Do not read pinyin or romanized pronunciation aloud.`;
+  return `Speak as Han, a charismatic young-adult tutor talking directly to one student. Accent-neutral does not mean emotionally neutral: sound lively, curious, warm, and genuinely engaged; use an audible smile in light moments, focused clarity for corrections, and a small lift of energy after real progress. Vary pitch, emphasis, tempo, and pauses naturally, without becoming childish, theatrical, slang-heavy, or constantly excited. ${proseInstruction} Do not imitate the accent of a native Chinese person speaking ${responseLanguage}; Han is fully native in the main language. Only while saying Chinese characters, briefly switch pronunciation to natural Mandarin and use a slightly slower teaching pace. Then return immediately to the native ${responseLanguage} voice. Do not let the Mandarin pronunciation affect the sentence before or after it. Do not read pinyin or romanized pronunciation aloud.`;
 }

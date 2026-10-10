@@ -1,11 +1,24 @@
 import {
   buildMandarinStudyItemInstruction,
+  buildSentenceOrderingIntegrityInstruction,
   buildSessionLevelInstruction,
   buildTranslationTargetInstruction,
   describeSpeakingDifficulty,
   type AiTeacherMode,
 } from "@/lib/ai-context";
 import { hskNumberForPoints } from "@/lib/points-system";
+import {
+  classifyHanPronunciationRequestLength,
+  isExplicitPronunciationRequest,
+} from "@/lib/speech/han-pronunciation";
+import {
+  buildHanTutorControlCommandInstruction,
+  buildHanTutorSessionInstruction,
+  buildHanTutorTaskGroundingInstruction,
+  deriveHanTutorSessionPreferences,
+  detectHanTutorResponseLanguage,
+  HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY,
+} from "@/lib/han-tutor-session";
 
 export type HanExplanationLanguage = "English" | "Spanish" | "Chinese";
 
@@ -33,7 +46,9 @@ export function isNonSpeechNoiseTranscript(transcript: string): boolean {
 
 export function userFacingRealtimeVoiceError(message?: string): string {
   if (!message?.trim()) return "The live voice session had a problem.";
-  if (/conversation already has an active response in progress/iu.test(message)) {
+  if (
+    /conversation already has an active response in progress/iu.test(message)
+  ) {
     return "Han received two voice turns at once. Please continue speaking.";
   }
   if (
@@ -41,6 +56,26 @@ export function userFacingRealtimeVoiceError(message?: string): string {
     /\b(?:audio|buffer|duration|speech)\b/iu.test(message)
   ) {
     return "That audio turn could not be processed cleanly. Please try again.";
+  }
+  return message;
+}
+
+export function realtimeSessionStartErrorMessage(
+  responseBody: string,
+  status: number,
+): string {
+  let message = responseBody.trim();
+  try {
+    const parsed = JSON.parse(message) as { error?: unknown };
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
+      message = parsed.error.trim();
+    }
+  } catch {
+    // Plain-text route and provider errors are already suitable fallbacks.
+  }
+  if (!message) return "Han couldn't start the live voice session.";
+  if (status === 429 && /today's usage limit/iu.test(message)) {
+    return "You've reached today's live voice limit. An administrator can raise this account's Han Realtime limit, or you can try again tomorrow.";
   }
   return message;
 }
@@ -191,6 +226,23 @@ export function realtimeRolePlayOutputTokenLimit(
   return REALTIME_ROLE_PLAY_OUTPUT_TOKEN_LIMIT[phase];
 }
 
+/**
+ * Pronunciation practice should feel like a rapid coach exchange, not a
+ * lecture. Audio tokens are denser than text tokens, so these limits leave
+ * enough room for one cue and one demonstration while bounding digressions.
+ */
+export function realtimeTutorPronunciationOutputTokenLimit(
+  learnerTranscript: string,
+  progress?: PronunciationPracticeProgress | null,
+): number | undefined {
+  // Brevity belongs in the coaching instructions. Audio also consumes this
+  // budget; a text-sized ceiling can cut off an otherwise short spoken reply.
+  if (progress?.status === "accepted") return 600;
+  if (progress || isExplicitPronunciationRequest(learnerTranscript))
+    return 1000;
+  return undefined;
+}
+
 function realtimeRolePlayCharacterLimit(rolePlay: RealtimeRolePlay): number {
   if (rolePlay.level === "Pre-HSK") return 8;
   const explicitLevel = rolePlay.level?.match(/HSK\s*([1-9])/iu)?.[1];
@@ -225,6 +277,43 @@ export function allowsRealtimeBargeIn(
   rolePlay?: Pick<RealtimeRolePlay, "isFreeTopic">,
 ): boolean {
   return rolePlay?.isFreeTopic === true;
+}
+
+export type RealtimePushToTalkState =
+  "idle" | "connecting" | "listening" | "thinking" | "speaking";
+
+/**
+ * A physical hold gesture is explicit learner intent, so it may start while
+ * the session is waiting or while the current answer is still being spoken.
+ * Thinking stays gated because there may not yet be cancellable output and a
+ * second committed turn could race the first one.
+ */
+export function canBeginRealtimePushToTalk(
+  state: RealtimePushToTalkState,
+  hasActiveResponse: boolean,
+  hasOngoingPlayback: boolean,
+): boolean {
+  return (
+    state === "listening" ||
+    (state === "speaking" && (hasActiveResponse || hasOngoingPlayback))
+  );
+}
+
+/**
+ * WebRTC push-to-talk control sequence from the Realtime API guide. Clearing
+ * input first gives the new press a clean recording boundary. If Han is
+ * answering, cancellation must precede clearing queued output audio.
+ */
+export function buildRealtimePushToTalkStartEvents(
+  hasActiveResponse: boolean,
+  hasOngoingPlayback: boolean,
+) {
+  const events: Array<{ type: string }> = [
+    { type: "input_audio_buffer.clear" },
+  ];
+  if (hasActiveResponse) events.push({ type: "response.cancel" });
+  if (hasOngoingPlayback) events.push({ type: "output_audio_buffer.clear" });
+  return events;
 }
 
 /**
@@ -1090,11 +1179,24 @@ export function buildRealtimeTurnInstructions(
 ): string {
   const pronunciationProgress = progress
     ? progress.status === "accepted"
-      ? `The learner's latest pronunciation of ${progress.target} was recognized at or above the communication threshold. Confirm it briefly, do not ask them to repeat it, and immediately continue the scene or introduce a different word.`
+      ? `PRONUNCIATION PASS: the learner's transcript matched at least ${Math.round(PRONUNCIATION_ACCEPTANCE_THRESHOLD * 100)}% of ${progress.target}. This threshold is authoritative for exercise flow: accept the attempt and NEVER ask for ${progress.target} or one of its syllables again, even if you hear a minor imperfection. In at most 18 spoken words, name one concrete success and immediately give ONE different, nearby Mandarin target to repeat; if no useful next target exists, end the drill. Do not explain meaning, translate, speak pinyin, restate a tone lesson, or add any example beyond that single next target.`
       : progress.status === "max_attempts"
-        ? `The learner has already attempted ${progress.target} twice. Do not ask for another repetition even if it was imperfect. Give brief encouragement and immediately continue the conversation or introduce a different word.`
-        : `This was attempt 1 of 2 for ${progress.target}. If useful, allow only one final short repetition; otherwise continue naturally. Do not chase perfect tones.`
-    : "Never drill the same pronunciation for more than two learner attempts. As soon as it is understandable, accept it and move to a different word or continue the conversation; do not chase perfect tones.";
+        ? `PRONUNCIATION STOP: after four guided attempts, ${progress.target} still did not reach the recognition threshold. End this target now. In at most 18 spoken words, give one kind reset cue and move to a different target or normal conversation. Do not request another repetition, translate, speak pinyin, or add examples.`
+        : `ACTIVE PRONUNCIATION DRILL: attempt ${progress.attempts} of at most 4 for ${progress.target} did not reach the recognition threshold. This instruction overrides Tutor's normal broad teaching structure. Respond with at most 25 spoken words and exactly this pattern: ONE high-confidence sound/tone/rhythm cue, ONE natural demonstration of ${progress.target}, then ONE direct request to repeat. Choose a mismatched or missing portion first; a syllable already recognized in its correct position is not the default correction target. Never repeat the previous turn's syllable correction when the current transcript already recognizes it. Do not explain meaning, translate, speak pinyin, give another Mandarin example, ask a meta-question, or praise at length. If the audio does not support a specific acoustic diagnosis, briefly contrast what the transcript captured with the target instead of inventing an error. On attempt 3 you may demonstrate once slowly and once naturally, still within the same short reply.`
+    : "A pronunciation drill happens only after the learner explicitly requests it or accepts Han's invitation to repeat a specific target. Keep normal conversation flowing and never turn an ordinary Mandarin reply into an unsolicited pronunciation test. During an active drill, use microcoaching rather than a lesson: one cue, one demonstration, one learner action. A guided target ends immediately when its transcript similarity reaches 80%, or after four attempts.";
+  const explicitPronunciationRequest =
+    mode === "TUTOR" &&
+    !rolePlay &&
+    isExplicitPronunciationRequest(learnerTranscript)
+      ? `The learner explicitly requested pronunciation coaching. Remain the same general Han Tutor and use progressive, listen-first microcoaching rather than a lecture. This instruction overrides Tutor's normal request to teach meaning, usage, examples, and cultural context for this turn. ${
+          classifyHanPronunciationRequestLength(learnerTranscript) === "long"
+            ? "This target has more than 12 Mandarin syllables. Use at most 40 spoken words: pronounce the complete phrase naturally once, divide it into 2 to 4 natural prosodic groups, then choose only the FIRST 2-to-8-syllable group for this turn, preferring 2 to 6 syllables when that does not cut a natural expression. Demonstrate that group once slightly slower and ask the learner to repeat only that group. Practice later groups on later turns and recombine the whole phrase only after the chunks are comfortable. Never assess the whole long phrase as one undifferentiated contour."
+            : classifyHanPronunciationRequestLength(learnerTranscript) ===
+                "medium"
+              ? "This target has 5 to 12 Mandarin syllables. Use at most 30 spoken words: pronounce the complete phrase naturally, group it into 2 or 3 audible rhythm units, give one useful tone or connection cue, and ask for one repetition of the complete phrase."
+              : "This target has 1 to 4 Mandarin syllables, or its written length is unknown. Use at most 22 spoken words: pronounce the complete target naturally, give one useful tone or rhythm cue, and ask for one repetition of the complete target."
+        } Do not explain meaning, translate, speak pinyin aloud, introduce another Mandarin example, or ask whether the learner wants to try; give the practice action directly. You may offer to explain the reason only after the drill has ended.`
+      : null;
 
   if (rolePlay) {
     const effectiveRolePlay = sessionLevelOverride
@@ -1146,7 +1248,8 @@ export function buildRealtimeTurnInstructions(
       learnerTranscript && isLikelyRealtimeLearnerQuestion(learnerTranscript)
         ? effectiveRolePlay.isFreeTopic
           ? `The learner just asked this question: ${JSON.stringify(learnerTranscript)}. Answer it directly in-character now. Give the actual answer before any other scene move; do not replace the answer with a question back.`
-          : learnerNameEvidence && /(?:名字|叫什么|怎么称呼)/u.test(learnerTranscript)
+          : learnerNameEvidence &&
+              /(?:名字|叫什么|怎么称呼)/u.test(learnerTranscript)
             ? `The learner just asked your name: ${JSON.stringify(learnerTranscript)}. Answer with your character's name directly. Their name is already known, so your complete answer MUST NOT contain 你呢？ or any request for their name. To keep the conversation alive, you may then ask at most one different, previously unasked introduction question whose answer is not in memory and whose language was studied; otherwise finish with one brief natural statement.`
             : `The learner just asked this question: ${JSON.stringify(learnerTranscript)}. Answer it directly in-character first. After the actual answer, add at most one short, relevant reciprocal question only if it continues the same thread without repeating known information or stealing the learner-owned objective action.`
         : null,
@@ -1178,6 +1281,15 @@ export function buildRealtimeTurnInstructions(
 
   const effectiveRequiredLanguage =
     mode === "PRACTICE" ? "Chinese" : requiredLanguage;
+  const transcriptUserMessages = conversationTranscript
+    .filter((message) => message.role === "user")
+    .map((message) => message.content);
+  const tutorUserMessages =
+    learnerTranscript && transcriptUserMessages.at(-1) !== learnerTranscript
+      ? [...transcriptUserMessages, learnerTranscript]
+      : transcriptUserMessages;
+  const tutorSessionPreferences =
+    deriveHanTutorSessionPreferences(tutorUserMessages);
 
   return [
     `For this turn, the required explanation language is ${effectiveRequiredLanguage}${mode === "PRACTICE" ? " by default" : ""}.`,
@@ -1191,16 +1303,32 @@ export function buildRealtimeTurnInstructions(
     mode !== "PRACTICE"
       ? buildMandarinStudyItemInstruction(learnerTranscript)
       : null,
+    mode === "TUTOR" && !rolePlay
+      ? buildSentenceOrderingIntegrityInstruction(learnerTranscript)
+      : null,
     mode === "TUTOR"
-      ? "This is Tutor mode. If the learner asks to learn or practice a Mandarin word, grammar pattern, or expression, teach meaning and context, the simplest usage pattern, two natural examples, and one accurate China or native-usage note. Do not answer with pronunciation alone and do not turn it into a repetition drill unless pronunciation was explicitly requested."
+      ? "This is Tutor mode. Use progressive disclosure: answer the learner's exact need first and give only the minimum explanation that resolves this turn. A quick meaning or narrow usage question gets the direct answer, one useful boundary if needed, and at most one natural example. Only for an explicit broad request, teach meaning and context plus the simplest usage pattern; use two natural examples or a native-usage note only when each adds material value. Do not answer with pronunciation alone when the learner requested vocabulary or grammar, and never start a repetition drill unless pronunciation was explicitly requested."
       : "This is Han Practice: a real, warm conversation with Han as a companion, not a lesson, test, or drill. Output Simplified Chinese only by default. Talk like a real friend - react genuinely to what the learner shares, and offer warmth, encouragement, or a piece of advice when it's genuinely called for, proactively bringing up something from their real recent performance when relevant. Correct mistakes gently, mostly by modeling the correct form inside your own next line (a recast) instead of stopping to explain - give a short, explicit correction, in the learner's language if needed, only if the same kind of mistake clearly keeps repeating. Infer intended meaning from audio plus topic, prior turns, and learned language; when imperfect pronunciation is contextually understandable, respond to that meaning and continue naturally. Ask one short Mandarin clarification only when materially different meanings remain plausible.",
-    "This is free conversation: never reproduce the lesson's reference dialogue.",
-    "Allow a short detour, then naturally guide the learner back to the role-play objective.",
+    "This is a free Han Tutor conversation: never reproduce a lesson's reference dialogue or invent a role-play objective.",
     sessionLevelOverride
       ? `Keep this turn genuinely at ${sessionLevelOverride}. Do not fall back to beginner material merely because the learner answered with a short acknowledgement.`
       : "Keep this turn appropriate for the learner level in the session instructions: use common vocabulary, one short idea, and one clear response opportunity. Simplify after hesitation; never jump to advanced Chinese.",
     "Treat short Mandarin or pinyin as practice, keep understandable attempts moving, and write Mandarin with Chinese characters, never pinyin.",
+    mode === "TUTOR" ? HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY : null,
+    mode === "TUTOR"
+      ? buildHanTutorTaskGroundingInstruction(
+          learnerTranscript,
+          tutorUserMessages,
+        )
+      : null,
+    mode === "TUTOR"
+      ? buildHanTutorSessionInstruction(tutorSessionPreferences)
+      : null,
+    explicitPronunciationRequest,
     pronunciationProgress,
+    mode === "TUTOR"
+      ? buildHanTutorControlCommandInstruction(learnerTranscript)
+      : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -1267,6 +1395,12 @@ export function buildRealtimeSessionUpdateEvent(
       type: "realtime",
       instructions,
       audio: {
+        input: {
+          // HanGo uses an explicit push-to-talk turn boundary. Keeping server
+          // VAD disabled prevents room noise from creating learner turns while
+          // the red talk button is not being held.
+          turn_detection: null,
+        },
         output: {
           speed: speechSpeed,
         },
@@ -1305,28 +1439,34 @@ export function advancePronunciationPractice(
   state: PronunciationPracticeState;
   progress: PronunciationPracticeProgress | null;
 } {
+  // A substantive carrier-language turn or a question starts a new request,
+  // even if Han's preceding reply happened to contain a repetition cue.
+  // Pure Mandarin/pinyin attempts and short acknowledgements remain eligible.
+  const isNewStudyRequest =
+    /\b(?:explain|meaning|means|structure|grammar|use|using|think|understand|difference|explica|explícame|significa|estructura|gramática|utiliza|utilizar|quiero|quisiera|entiendo|diferencia)\b|(?:什么意思|语法|结构|怎么用|如何用)/iu.test(
+      learnerTranscript,
+    );
+  if (isNewStudyRequest || isLikelyRealtimeLearnerQuestion(learnerTranscript))
+    return { state: null, progress: null };
   const target = findPromptedMandarinTarget(history);
   if (!target) return { state: null, progress: null };
 
   if (previousState?.target === target && previousState.completed) {
-    return {
-      state: previousState,
-      progress: {
-        target,
-        attempts: previousState.attempts,
-        similarity: mandarinTargetSimilarity(learnerTranscript, target),
-        status: previousState.attempts >= 2 ? "max_attempts" : "accepted",
-      },
-    };
+    // Once a target passes (or reaches the attempt cap), it is closed. Even if
+    // a generated reply accidentally repeats its cue, do not reopen the same
+    // drill and create the frustrating single-syllable loop.
+    return { state: previousState, progress: null };
   }
 
   const attempts =
-    previousState?.target === target ? previousState.attempts + 1 : 1;
+    previousState?.target === target
+      ? Math.min(4, previousState.attempts + 1)
+      : 1;
   const similarity = mandarinTargetSimilarity(learnerTranscript, target);
   const status =
     similarity >= PRONUNCIATION_ACCEPTANCE_THRESHOLD
       ? "accepted"
-      : attempts >= 2
+      : attempts >= 4
         ? "max_attempts"
         : "retry";
   const completed = status !== "retry";
@@ -1354,11 +1494,15 @@ function findPromptedMandarinTarget(
   )
     return null;
 
-  return (
-    [
-      ...new Set(previousAssistant.content.match(/\p{Script=Han}+/gu) ?? []),
-    ].sort((left, right) => right.length - left.length)[0] ?? null
-  );
+  const promptedAfterCue = previousAssistant.content.match(
+    /(?:repeat|try|say|pronounce|repite|intenta|inténtalo|di|pronuncia|再说|再试|跟我|试着说|读一遍)[^\p{Script=Han}]{0,80}(\p{Script=Han}{1,12})/iu,
+  )?.[1];
+  if (promptedAfterCue) return promptedAfterCue;
+
+  const safeCandidates = [
+    ...new Set(previousAssistant.content.match(/\p{Script=Han}+/gu) ?? []),
+  ].filter((candidate) => candidate.length <= 12);
+  return safeCandidates.at(-1) ?? null;
 }
 
 function mandarinTargetSimilarity(
@@ -1506,29 +1650,5 @@ export function nextHanExplanationLanguage(
   transcript: string,
   current: HanExplanationLanguage,
 ): HanExplanationLanguage {
-  if (
-    /[¿¡áéíóúüñ]/iu.test(transcript) ||
-    /\b(hola|cómo|qué|quiero|puedo|dime|gracias|bien|pero|para|vamos|otra|vez|español|chino|mandarín)\b/iu.test(
-      transcript,
-    )
-  )
-    return "Spanish";
-  if (
-    /\b(hello|how|what|want|wanna|think|good|idea|please|thanks|learn|again|english|chinese|mandarin|let|let's)\b/iu.test(
-      transcript,
-    )
-  )
-    return "English";
-  const isMandarinQuestion =
-    /\p{Script=Han}/u.test(transcript) &&
-    (/[？?]/u.test(transcript) ||
-      /(?:什么|谁|哪(?:里|儿|个|些)?|怎么|为什么|几|多少|吗|呢|是不是|有没有)/u.test(
-        transcript,
-      ));
-  if (isMandarinQuestion) return "Chinese";
-  // Mandarin practice attempts, pinyin, greetings and unclear short audio do
-  // not change the language used for teaching explanations. A complete
-  // Mandarin question does: it is a conversational turn, not a pronunciation
-  // sample, and establishes Chinese for the following turns too.
-  return current;
+  return detectHanTutorResponseLanguage(transcript, current);
 }

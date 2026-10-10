@@ -114,7 +114,9 @@ No copiar `.env.local` completo: se cargan las variables anteriores una por una.
      `--apply`;
    - importar cada paquete con `import <archivo> --apply`. El importador solo
      sustituye IDs generados por Prisma cuando el tipo, campo, contexto y texto
-     fuente de todas las unidades coinciden exactamente y en el mismo orden;
+     fuente coinciden exactamente como conjunto completo. Prefiere IDs estables,
+     tolera únicamente el reordenamiento de filas equivalentes y aborta si una
+     traducción duplicada no puede reasignarse de forma inequívoca;
    - ejecutar `npm run content:i18n:backfill -- --apply` para el contenido
      independiente y confirmar `npm run content:i18n:coverage` al 100 %.
 10. Crear la cuenta administrativa y las invitaciones desde la administración.

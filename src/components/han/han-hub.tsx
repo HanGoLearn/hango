@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Lock, Loader2 } from "lucide-react";
 import {
@@ -23,6 +23,7 @@ import type { VocabularyLookupResult } from "@/lib/vocabulary-lookup-prompt";
 import type { HanVocabularyMessages } from "@/i18n/messages/types";
 import { localePath, type AppLocale } from "@/i18n/config";
 import { localizeVocabularyError } from "@/i18n/vocabulary";
+import { resetAiTeacherConversationAction } from "@/lib/actions/ai-teacher";
 
 type View = "hub" | "tutor" | "companion" | "vocabulary";
 
@@ -92,37 +93,32 @@ function BenefitList({
  * an open-ended spoken conversation with Han, not another Speaking exercise.
  */
 function HanCompanionView() {
-  const {
-    voice,
-    explanationLanguage,
-    context,
-    setContext,
-    appendRealtimeMessage,
-    resetConversation,
-  } = useAiTeacher();
+  const { voice, explanationLanguage, context, setOpen } = useAiTeacher();
   const didInit = useRef(false);
+  const companionContext = useMemo(
+    () => ({
+      currentPageName: context.currentPageName,
+      hanConversationSurface: "COMPANION" as const,
+    }),
+    [context.currentPageName],
+  );
+  const discardCompanionCaption = useCallback(() => undefined, []);
 
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
-    // Defense-in-depth against a stale rolePlay left over from Speaking Lab
-    // (see the module doc comment on the "Han" nav bug fix). `resetConversation(true)`
-    // is what actually turns on personal-memory extraction (2026-08-31 fix) -
-    // Han Tutor's own reset (openTeacher(), ai-teacher-provider.tsx) passes
-    // no argument and defaults to `false`, so only Companion ever extracts.
-    setContext({ rolePlay: undefined });
-    void resetConversation(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Companion is a standalone voice product. Close any latent Tutor bubble
+    // and reset only Companion's persisted thread; never clear or populate the
+    // Tutor provider's visible messages/context.
+    setOpen(false);
+    void resetAiTeacherConversationAction(true);
+  }, [setOpen]);
 
   const handleActiveChange = useCallback(
     (active: boolean) => {
-      if (!active) {
-        // Companion must never inherit a role-play from another app area.
-        setContext({ rolePlay: undefined });
-      }
+      if (!active) setOpen(false);
     },
-    [setContext],
+    [setOpen],
   );
 
   return (
@@ -132,11 +128,11 @@ function HanCompanionView() {
         voice={voice}
         explanationLanguage={explanationLanguage}
         mode="PRACTICE"
-        context={context}
+        context={companionContext}
         open
         variant="orb"
         roleLabel="Han"
-        appendMessage={appendRealtimeMessage}
+        appendMessage={discardCompanionCaption}
         onActiveChange={handleActiveChange}
       />
     </div>
@@ -240,10 +236,10 @@ const VIEW_TITLE: Record<Exclude<View, "hub">, string> = {
  * Picking any of the 4 swaps the whole page into a full-page view ("like a
  * new tab"): Tutor reuses the same text+voice `AiTeacherChat` the floating
  * bubble uses elsewhere; Companion is its own voice-only view; Vocabulary
- * is its own lookup view (see above). The floating bubble hides itself on
- * this route (ai-teacher-bubble.tsx) since both would otherwise fight over
- * the same shared `open`/`mode`/`context` state. Han Class is an inert
- * teaser - explicitly out of scope for this build (user's own call,
+ * is its own lookup view (see above). The floating Tutor bubble closes and
+ * hides on these routes. Companion deliberately uses neither Tutor's visible
+ * message state nor Tutor's persisted history/reset boundary. Han Class is an
+ * inert teaser - explicitly out of scope for this build (user's own call,
  * 2026-08-31).
  */
 export function HanHub({

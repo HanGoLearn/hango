@@ -21,7 +21,7 @@ import { AvatarSection } from "@/components/settings/avatar-section";
 import { LearningPreferencesSection } from "@/components/settings/learning-preferences-section";
 import { RecordingRetentionSelect } from "@/components/settings/recording-retention-select";
 import { DeleteAccountButton } from "@/components/settings/delete-account-button";
-import { HanAudioSettings } from "@/components/settings/han-audio-settings";
+import { HanVoiceReplyToggle } from "@/components/settings/han-audio-settings";
 import { TourSection } from "@/components/settings/tour-section";
 import { interfaceLanguageFromLocale, isAppLocale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
@@ -151,17 +151,16 @@ export default async function SettingsPage({
         {/* HanAvatar is already a circular badge on its own (Phase 6) — the
             square color-badge wrapper other sections use would just sit
             fully hidden behind it, so this row skips SectionHeading.
-            Consolidated (2026-08-21): default mode, voice, and the
-            conversation-memory toggle were three unrelated-looking
-            sections before - all three are "how Han behaves," together. */}
+             Response format no longer belongs in Settings: Han replies in
+             the same modality the learner used (typed or spoken). The Han
+             section remains the home of conversation-memory privacy. */}
         <div className="flex items-center gap-2">
           <HanAvatar pose="idle" size={28} />
           <SectionTitle>{messages.sections.han}</SectionTitle>
         </div>
         <Card className="flex flex-col gap-6">
-          <HanAudioSettings
-            initialResponseMode={profile.hanResponseMode}
-            initialVoice={profile.hanVoice}
+          <HanVoiceReplyToggle
+            initialEnabled={profile.hanResponseMode !== "TEXT_ONLY"}
             messages={messages.han}
           />
           <AiConversationStorageToggle

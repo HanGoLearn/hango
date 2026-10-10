@@ -19,6 +19,7 @@ import {
   segmentSpeechInstructions,
   selectUsefulOralScript,
   splitSpeechByLanguage,
+  type HanSpeechStyle,
 } from "@/lib/han-speech";
 
 const OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech";
@@ -87,6 +88,8 @@ export async function POST(request: Request): Promise<Response> {
     body?.responseLanguage === "Chinese"
       ? body.responseLanguage
       : "English";
+  const speechStyle: HanSpeechStyle =
+    body?.delivery === "companion" ? "companion" : "tutor";
   const conversational = body?.delivery === "conversation";
 
   if (!text || text.length > MAX_SPEECH_CHARACTERS || !HAN_VOICES.has(voice)) {
@@ -105,7 +108,7 @@ export async function POST(request: Request): Promise<Response> {
   // already-generated clip instead of paying for both a fresh oral-script
   // rewrite and a fresh TTS render every single time.
   const cacheKey = contentAudioKey(
-    `han-speech/${voice}/${responseLanguage}/${conversational ? "conversational" : "plain"}`,
+    `han-speech/${speechStyle}/${voice}/${responseLanguage}/${conversational ? "conversational" : "plain"}`,
     text,
   );
   if (await storage.exists(cacheKey)) {
@@ -145,7 +148,11 @@ export async function POST(request: Request): Promise<Response> {
       },
       () =>
         provider.complete({
-          systemPrompt: oralScriptPrompt(responseLanguage, conversational),
+          systemPrompt: oralScriptPrompt(
+            responseLanguage,
+            conversational,
+            speechStyle,
+          ),
           messages: [{ role: "user", content: text }],
           maxOutputTokens: 260,
         }),
@@ -193,7 +200,10 @@ export async function POST(request: Request): Promise<Response> {
                 voice,
                 input: segment.text,
                 response_format: "wav",
-                instructions: segmentSpeechInstructions(segment.language),
+                instructions: segmentSpeechInstructions(
+                  segment.language,
+                  speechStyle,
+                ),
               }),
             }),
           ),

@@ -973,10 +973,10 @@ export const messages = {
       yourAnswer: "Your answer",
       submit: "Submit",
       useMicrophone: "Use microphone instead",
-      stopRecording: "Stop recording",
-      startRecording: "Start recording",
+      stopRecording: "Release to stop recording",
+      startRecording: "Hold to record",
       requestingAccess: "Requesting microphone access...",
-      recording: "Recording — {time}",
+      recording: "Recording — {time}. Release to finish.",
       analyzingTones: "Analyzing your tones…",
       insufficientAudio: "Not enough voiced audio to score tones.",
       toneMatch: "Tone match: {score}%",
@@ -1742,6 +1742,9 @@ export const messages = {
     han: {
       saved: "Saved.",
       saveError: "The settings couldn't be saved. Please try again.",
+      autoPlayVoiceReplies: "Play the reply after I speak",
+      autoPlayVoiceRepliesDescription:
+        "When you use Han Tutor's microphone, play the reply and also show its text. This doesn't affect live voice conversations.",
       previewError: "The voice preview is temporarily unavailable.",
       replies: "Han replies",
       textOnly: "Text only",

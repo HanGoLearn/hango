@@ -46,27 +46,46 @@ const VOICES = new Set([
 ]);
 const MODES = new Set<AiTeacherMode>(["TUTOR", "PRACTICE"]);
 const CONNECTION_WINDOW_MS = 10 * 60 * 1000;
-const MAX_CONNECTIONS_PER_WINDOW = 6;
+const MAX_CONNECTIONS_PER_WINDOW = serverEnv.NODE_ENV === "production" ? 6 : 30;
+const LOCAL_REALTIME_DAILY_FALLBACK_USD = 5;
 const connectionTimestamps = new Map<string, number[]>();
 
-function allowConnection(userId: string): boolean {
+function connectionAllowance(userId: string): {
+  allowed: boolean;
+  retryAfterSeconds: number;
+} {
   const now = Date.now();
   const recent = (connectionTimestamps.get(userId) ?? []).filter(
     (timestamp) => now - timestamp < CONNECTION_WINDOW_MS,
   );
-  if (recent.length >= MAX_CONNECTIONS_PER_WINDOW) return false;
+  if (recent.length >= MAX_CONNECTIONS_PER_WINDOW) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((CONNECTION_WINDOW_MS - (now - recent[0]!)) / 1000),
+      ),
+    };
+  }
   recent.push(now);
   connectionTimestamps.set(userId, recent);
-  return true;
+  return { allowed: true, retryAfterSeconds: 0 };
 }
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
-  if (!allowConnection(session.user.id)) {
-    return new Response(
-      "Too many live voice sessions. Please wait a few minutes.",
-      { status: 429 },
+  const allowance = connectionAllowance(session.user.id);
+  if (!allowance.allowed) {
+    return Response.json(
+      {
+        error: "Too many live voice sessions. Please wait a few minutes.",
+        retryAfterSeconds: allowance.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { "retry-after": String(allowance.retryAfterSeconds) },
+      },
     );
   }
   if (!serverEnv.OPENAI_API_KEY) {
@@ -93,11 +112,28 @@ export async function POST(request: Request) {
   // Ephemeral app context is server-owned. Never let a browser-provided
   // x-han-context value inject persistent Realtime session instructions.
   delete context.onDemandAppContext;
+  // Local small-recorder evidence belongs only to Han Tutor's text request.
+  // A live Realtime session hears its own audio and must not inherit stale or
+  // browser-supplied pronunciation scores from another surface.
+  delete context.pronunciationAttempt;
   try {
-    await checkDailyUsageCap(session.user.id, "han-realtime-session", {
-      provider: "openai",
-      model: "gpt-realtime-mini",
-    });
+    await checkDailyUsageCap(
+      session.user.id,
+      "han-realtime-session",
+      {
+        provider: "openai",
+        model: "gpt-realtime-mini",
+      },
+      {
+        // Hot reloads and repeated device checks create many short sessions in
+        // localhost. Keep production's conservative default unchanged while
+        // still respecting every explicit global, feature, and per-user policy.
+        fallbackDailyLimitUsd:
+          serverEnv.NODE_ENV === "production"
+            ? undefined
+            : LOCAL_REALTIME_DAILY_FALLBACK_USD,
+      },
+    );
   } catch (error) {
     if (error instanceof DailyUsageCapExceededError) {
       return Response.json({ error: error.message }, { status: 429 });

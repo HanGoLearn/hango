@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, RotateCcw, Send, Keyboard, Waves } from "lucide-react";
+import {
+  Loader2,
+  Mic,
+  Square,
+  RotateCcw,
+  Send,
+  Keyboard,
+  Waves,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Caption } from "@/components/ui/typography";
@@ -102,11 +110,13 @@ export function AudioRecorder({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordedBlobRef = useRef<Blob | null>(null);
+  const holdActiveRef = useRef(false);
 
   useEffect(() => {
     return () => {
       timerRef.current && clearInterval(timerRef.current);
       stopTimeoutRef.current && clearTimeout(stopTimeoutRef.current);
+      holdActiveRef.current = false;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       audioUrl && URL.revokeObjectURL(audioUrl);
     };
@@ -117,6 +127,12 @@ export function AudioRecorder({
     setState("requesting-permission");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!holdActiveRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        setState("idle");
+        return;
+      }
+
       streamRef.current = stream;
       chunksRef.current = [];
 
@@ -143,6 +159,7 @@ export function AudioRecorder({
   }
 
   function stopRecording() {
+    holdActiveRef.current = false;
     const recorder = mediaRecorderRef.current;
     if (!recorder) return;
 
@@ -165,6 +182,18 @@ export function AudioRecorder({
     streamRef.current?.getTracks().forEach((track) => track.stop());
     if (timerRef.current) clearInterval(timerRef.current);
     if (stopTimeoutRef.current) clearTimeout(stopTimeoutRef.current);
+  }
+
+  function beginHold() {
+    if (state !== "idle" || holdActiveRef.current) return;
+    holdActiveRef.current = true;
+    void startRecording();
+  }
+
+  function endHold() {
+    if (!holdActiveRef.current) return;
+    holdActiveRef.current = false;
+    stopRecording();
   }
 
   function handleRetry() {
@@ -258,31 +287,70 @@ export function AudioRecorder({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col items-center gap-3">
-        {(state === "idle" || state === "recording") && (
+        {(state === "idle" ||
+          state === "requesting-permission" ||
+          state === "recording") && (
           <button
             type="button"
             aria-label={
-              state === "recording"
+              state === "recording" || state === "requesting-permission"
                 ? messages.stopRecording
                 : messages.startRecording
             }
-            onClick={() =>
-              void (state === "recording" ? stopRecording() : startRecording())
+            aria-pressed={
+              state === "recording" || state === "requesting-permission"
             }
+            title={
+              state === "recording" || state === "requesting-permission"
+                ? messages.stopRecording
+                : messages.startRecording
+            }
+            onClick={(event) => event.preventDefault()}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={(event) => {
+              if (event.pointerType === "mouse" && event.button !== 0) return;
+              event.preventDefault();
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+              beginHold();
+            }}
+            onPointerUp={(event) => {
+              event.preventDefault();
+              endHold();
+            }}
+            onPointerCancel={endHold}
+            onLostPointerCapture={endHold}
+            onKeyDown={(event) => {
+              if (
+                (event.key === " " || event.key === "Enter") &&
+                !event.repeat
+              ) {
+                event.preventDefault();
+                beginHold();
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === " " || event.key === "Enter") {
+                event.preventDefault();
+                endHold();
+              }
+            }}
             className={cn(
-              "flex size-19 items-center justify-center rounded-full bg-primary-500 text-on-color-light transition-transform duration-fast ease-standard hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500",
+              "flex size-19 touch-none select-none items-center justify-center rounded-full bg-primary-500 text-on-color-light transition-transform duration-fast ease-standard hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500",
               state === "recording"
                 ? "animate-pulse shadow-[0_0_0_6px_rgba(192,32,61,0.18),0_0_0_12px_rgba(192,32,61,0.09)]"
                 : "shadow-lg shadow-primary-500/30",
             )}
           >
-            {state === "recording" ? (
+            {state === "requesting-permission" ? (
+              <Loader2 className="size-7 animate-spin" aria-hidden="true" />
+            ) : state === "recording" ? (
               <Square className="size-7" aria-hidden="true" />
             ) : (
               <Mic className="size-7" aria-hidden="true" />
             )}
           </button>
         )}
+        {state === "idle" && <Caption>{messages.startRecording}</Caption>}
         {state === "requesting-permission" && (
           <Caption>{messages.requestingAccess}</Caption>
         )}

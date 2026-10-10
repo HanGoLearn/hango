@@ -2,6 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import dynamic from "next/dynamic";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
@@ -41,12 +42,22 @@ const AiTeacherChat = dynamic(
 export function AiTeacherBubble() {
   const { open, setOpen, openTeacher } = useAiTeacher();
   const pathname = usePathname();
+  const hiddenForHanRoute = Boolean(
+    pathname && pathWithoutLocale(pathname).startsWith("/han"),
+  );
+
+  useEffect(() => {
+    // Do not merely hide an open Tutor dialog while a standalone Han product
+    // owns the screen. Close it so it cannot reappear with stale/shared state
+    // as soon as the learner leaves Companion, Tutor page, or Vocabulary.
+    if (hiddenForHanRoute) setOpen(false);
+  }, [hiddenForHanRoute, setOpen]);
 
   // The /han page (2026-08-31) already gives Han Tutor and Han Companion
   // their own full-page surfaces, both driven by this same shared
   // `open`/`mode`/`context` state - showing the floating trigger there too
   // would pop a second, redundant Han panel over the first.
-  if (pathname && pathWithoutLocale(pathname).startsWith("/han")) return null;
+  if (hiddenForHanRoute) return null;
 
   return (
     <DialogPrimitive.Root

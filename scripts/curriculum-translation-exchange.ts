@@ -24,79 +24,89 @@ const scenarioInclude = {
   translations: { where: { locale: ES } },
   domain: { include: { translations: { where: { locale: ES } } } },
   learningObjectives: {
-    orderBy: { order: "asc" as const },
+    orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
     include: { translations: { where: { locale: ES } } },
   },
   missions: {
     where: { status: "PUBLISHED" as const },
+    orderBy: { id: "asc" as const },
     include: {
       translations: { where: { locale: ES } },
       successConditions: {
-        orderBy: { order: "asc" as const },
+        orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
         include: { translations: { where: { locale: ES } } },
       },
       evaluationCriteria: {
-        orderBy: { order: "asc" as const },
+        orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
         include: { translations: { where: { locale: ES } } },
       },
     },
   },
   writingTasks: {
     where: { status: "PUBLISHED" as const },
+    orderBy: { id: "asc" as const },
     include: { translations: { where: { locale: ES } } },
   },
   levels: {
-    orderBy: { order: "asc" as const },
+    orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
     include: {
       lessons: {
         where: { status: "PUBLISHED" as const },
-        orderBy: { order: "asc" as const },
+        orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
         include: {
           translations: { where: { locale: ES } },
           steps: {
-            orderBy: { order: "asc" as const },
+            orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
             include: { translations: { where: { locale: ES } } },
           },
           learningObjectives: {
-            orderBy: { order: "asc" as const },
+            orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
             include: { translations: { where: { locale: ES } } },
           },
           missions: {
             where: { status: "PUBLISHED" as const },
+            orderBy: { id: "asc" as const },
             include: {
               translations: { where: { locale: ES } },
               successConditions: {
-                orderBy: { order: "asc" as const },
+                orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
                 include: { translations: { where: { locale: ES } } },
               },
               evaluationCriteria: {
-                orderBy: { order: "asc" as const },
+                orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
                 include: { translations: { where: { locale: ES } } },
               },
             },
           },
           dialogues: {
             where: { status: "PUBLISHED" as const },
+            orderBy: { id: "asc" as const },
             include: {
               translations: { where: { locale: ES } },
               speakers: {
-                orderBy: { order: "asc" as const },
+                orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
                 include: { translations: { where: { locale: ES } } },
               },
               lines: {
-                orderBy: { order: "asc" as const },
+                orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
                 include: { translations: { where: { locale: ES } } },
               },
             },
           },
           vocabulary: {
-            orderBy: { order: "asc" as const },
+            orderBy: [
+              { order: "asc" as const },
+              { vocabularyItemId: "asc" as const },
+            ],
             include: {
               vocabularyItem: {
                 include: {
                   translations: { where: { locale: ES } },
                   examples: {
-                    orderBy: { order: "asc" as const },
+                    orderBy: [
+                      { order: "asc" as const },
+                      { id: "asc" as const },
+                    ],
                     include: { translations: { where: { locale: ES } } },
                   },
                 },
@@ -104,13 +114,19 @@ const scenarioInclude = {
             },
           },
           grammarPoints: {
-            orderBy: { order: "asc" as const },
+            orderBy: [
+              { order: "asc" as const },
+              { grammarPointId: "asc" as const },
+            ],
             include: {
               grammarPoint: {
                 include: {
                   translations: { where: { locale: ES } },
                   examples: {
-                    orderBy: { order: "asc" as const },
+                    orderBy: [
+                      { order: "asc" as const },
+                      { id: "asc" as const },
+                    ],
                     include: { translations: { where: { locale: ES } } },
                   },
                 },
@@ -119,29 +135,33 @@ const scenarioInclude = {
           },
           exercises: {
             where: { status: "PUBLISHED" as const },
-            orderBy: { order: "asc" as const },
+            orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
             include: {
               translations: { where: { locale: ES } },
               options: {
-                orderBy: { order: "asc" as const },
+                orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
                 include: { translations: { where: { locale: ES } } },
               },
               hints: {
-                orderBy: { level: "asc" as const },
+                orderBy: [{ level: "asc" as const }, { id: "asc" as const }],
                 include: { translations: { where: { locale: ES } } },
               },
             },
           },
           quizzes: {
             where: { status: "PUBLISHED" as const },
+            orderBy: { id: "asc" as const },
             include: {
               translations: { where: { locale: ES } },
               questions: {
-                orderBy: { order: "asc" as const },
+                orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
                 include: {
                   translations: { where: { locale: ES } },
                   options: {
-                    orderBy: { order: "asc" as const },
+                    orderBy: [
+                      { order: "asc" as const },
+                      { id: "asc" as const },
+                    ],
                     include: { translations: { where: { locale: ES } } },
                   },
                 },
@@ -150,6 +170,7 @@ const scenarioInclude = {
           },
           writingTasks: {
             where: { status: "PUBLISHED" as const },
+            orderBy: { id: "asc" as const },
             include: { translations: { where: { locale: ES } } },
           },
         },

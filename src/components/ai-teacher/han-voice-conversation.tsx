@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Loader2,
-  Mic,
-  MicOff,
-  PhoneOff,
-  Square,
-  UserRound,
-  Volume2,
-} from "lucide-react";
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { Loader2, Mic, Square, UserRound, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InformationBanner } from "@/components/ui/banner";
 import { Caption } from "@/components/ui/typography";
@@ -27,8 +26,14 @@ import {
   type RolePlayContext,
 } from "@/lib/ai-context";
 import {
+  buildHanTutorControlCommandInstruction,
+  deriveHanTutorSessionPreferences,
+  resolveHanTutorConversationLanguage,
+} from "@/lib/han-tutor-session";
+import {
   advancePronunciationPractice,
   allowsRealtimeBargeIn,
+  buildRealtimePushToTalkStartEvents,
   buildRealtimeAssessmentFallbackGuard,
   buildRealtimeAssessmentTurnGuard,
   buildRealtimeClosingInstructions,
@@ -37,9 +42,12 @@ import {
   buildRealtimeSessionUpdateEvent,
   buildSessionPreservingRealtimeTurnEvents,
   buildRealtimeTurnInstructions,
+  canBeginRealtimePushToTalk,
   isNonSpeechNoiseTranscript,
   nextHanExplanationLanguage,
   realtimeRolePlayOutputTokenLimit,
+  realtimeSessionStartErrorMessage,
+  realtimeTutorPronunciationOutputTokenLimit,
   shouldHoldRealtimeLearnerAction,
   shouldBlockForRolePlayAssessment,
   userFacingRealtimeVoiceError,
@@ -94,7 +102,11 @@ type RealtimeEvent = {
   delta?: string;
   logprobs?: TranscriptLogprob[];
   session?: { instructions?: string };
-  response?: { output?: unknown[] };
+  response?: {
+    output?: unknown[];
+    status?: "completed" | "cancelled" | "failed" | "incomplete";
+    status_details?: { reason?: string; error?: { message?: string } } | null;
+  };
   error?: { message?: string };
 };
 
@@ -169,8 +181,8 @@ export function HanVoiceConversation({
 }) {
   const [state, setState] = useState<RealtimeConversationState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [muted, setMuted] = useState(false);
-  const mutedRef = useRef(false);
+  const [pushToTalkActive, setPushToTalkActive] = useState(false);
+  const pushToTalkActiveRef = useRef(false);
   const [latestCaption, setLatestCaption] = useState(
     "Start when you're ready.",
   );
@@ -189,6 +201,8 @@ export function HanVoiceConversation({
   const remoteAudioAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteAudioGainRef = useRef<GainNode | null>(null);
   const remoteAudioAnalysisFrameRef = useRef<number | null>(null);
+  const remoteAudioAudibleRef = useRef(false);
+  const remotePlaybackSuppressedRef = useRef(false);
   const orbRef = useRef<HTMLButtonElement | null>(null);
   const ambientNoiseFloorRef = useRef(INITIAL_AMBIENT_NOISE_FLOOR_RMS);
   const activeVoiceTurnRef = useRef<{
@@ -223,6 +237,11 @@ export function HanVoiceConversation({
   const closeRequestedRef = useRef(false);
   const closeAfterReplyRef = useRef(false);
   const activeResponseRef = useRef(false);
+  const lastTutorTurnInstructionsRef = useRef("");
+  const tutorContinuationCountRef = useRef(0);
+  const outputPlaybackActiveRef = useRef(false);
+  const pushToTalkInterruptedResponseRef = useRef(false);
+  const pushToTalkInterruptedPlaybackRef = useRef(false);
   const bargeInConfirmationTimerRef = useRef<number | null>(null);
   const unclosedTurnTimerRef = useRef<number | null>(null);
   const audioInputResetTimerRef = useRef<number | null>(null);
@@ -399,6 +418,7 @@ export function HanVoiceConversation({
     if (remoteAudioContextRef.current)
       void remoteAudioContextRef.current.close();
     remoteAudioContextRef.current = null;
+    remoteAudioAudibleRef.current = false;
     orbRef.current?.style.removeProperty("--han-level");
     orbRef.current?.style.removeProperty("--han-scale");
     orbRef.current?.style.removeProperty("--han-glow");
@@ -440,6 +460,7 @@ export function HanVoiceConversation({
           if (!currentAnalyser) return;
           currentAnalyser.getFloatTimeDomainData(samples);
           const rms = rmsFromTimeDomainSamples(samples);
+          remoteAudioAudibleRef.current = rms >= CLOSING_AUDIO_RMS_THRESHOLD;
           // The orb consumes Han's already-measured output signal directly.
           // CSS variables keep the 60fps visual path outside React's render
           // cycle; the conversation state machine and audio pipeline remain
@@ -538,11 +559,160 @@ export function HanVoiceConversation({
     return signal;
   }
 
+  function setMicrophoneInputEnabled(enabled: boolean) {
+    streamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  }
+
+  function silenceRemotePlaybackImmediately() {
+    remotePlaybackSuppressedRef.current = true;
+    remoteAudioAudibleRef.current = false;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = true;
+  }
+
+  function resumeRemotePlaybackForNextResponse() {
+    if (!remotePlaybackSuppressedRef.current) return;
+    remotePlaybackSuppressedRef.current = false;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = false;
+  }
+
+  function beginPushToTalk() {
+    const channel = dataChannelRef.current;
+    const isInterruptingResponse = activeResponseRef.current;
+    const isInterruptingPlayback =
+      outputPlaybackActiveRef.current ||
+      remoteAudioAudibleRef.current ||
+      state === "speaking";
+    if (
+      !canBeginRealtimePushToTalk(
+        state,
+        isInterruptingResponse,
+        isInterruptingPlayback,
+      ) ||
+      pushToTalkActiveRef.current ||
+      channel?.readyState !== "open" ||
+      finishStartedRef.current ||
+      closingTurnRef.current ||
+      closeRequestedRef.current
+    )
+      return;
+
+    // A fresh buffer for every physical press is the key noise boundary:
+    // audio from before this moment can never become part of the learner turn.
+    if (isInterruptingResponse || isInterruptingPlayback) {
+      // This is a deliberate press, not an inferred noise/VAD interruption.
+      // Remember it until the cancelled response emits response.done so that
+      // its cleanup cannot mute the learner's new turn.
+      pushToTalkInterruptedResponseRef.current = isInterruptingResponse;
+      pushToTalkInterruptedPlaybackRef.current = isInterruptingPlayback;
+      confirmedBargeInRef.current = true;
+      turnPlaybackStoppedRef.current = true;
+      silenceRemotePlaybackImmediately();
+    }
+    for (const event of buildRealtimePushToTalkStartEvents(
+      isInterruptingResponse,
+      isInterruptingPlayback,
+    ))
+      channel.send(JSON.stringify(event));
+    if (isInterruptingPlayback) outputPlaybackActiveRef.current = false;
+    completedVoiceTurnSignalsRef.current = [];
+    const now = performance.now();
+    activeVoiceTurnRef.current = {
+      startedAt: now,
+      lastSampleAt: now,
+      voicedMs: 0,
+      peakRms: 0,
+      noiseFloorRms: ambientNoiseFloorRef.current,
+      sampleCount: 0,
+      rmsSum: 0,
+      rmsSquareSum: 0,
+    };
+    activeVoiceTurnItemIdRef.current = null;
+    pushToTalkActiveRef.current = true;
+    setPushToTalkActive(true);
+    setError(null);
+    setLatestCaption("Listening… release to send.");
+    setState("listening");
+    setMicrophoneInputEnabled(true);
+  }
+
+  function endPushToTalk() {
+    if (!pushToTalkActiveRef.current) return;
+
+    // Disable the physical input first. Analysis and network work happen only
+    // after the microphone has stopped accepting room audio.
+    pushToTalkActiveRef.current = false;
+    setPushToTalkActive(false);
+    setMicrophoneInputEnabled(false);
+
+    const channel = dataChannelRef.current;
+    const signal = snapshotActiveVoiceTurn();
+    if (channel?.readyState !== "open") {
+      activeVoiceTurnRef.current = null;
+      activeVoiceTurnItemIdRef.current = null;
+      return;
+    }
+
+    // OpenAI requires a real audio buffer before commit. Treat a tap as a UI
+    // gesture, not a learner utterance, so it cannot generate a noise reply.
+    if (!signal || signal.durationMs < 180) {
+      activeVoiceTurnRef.current = null;
+      activeVoiceTurnItemIdRef.current = null;
+      channel.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+      setLatestCaption("Hold the red button while you speak.");
+      setState("listening");
+      return;
+    }
+
+    completeActiveVoiceTurn();
+    channel.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+    setLatestCaption("Analyzing what you said…");
+    setState("thinking");
+  }
+
+  function handlePushToTalkPointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    beginPushToTalk();
+  }
+
+  function handlePushToTalkPointerEnd(
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    endPushToTalk();
+  }
+
+  function handlePushToTalkKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) {
+    if ((event.key !== " " && event.key !== "Enter") || event.repeat) return;
+    event.preventDefault();
+    beginPushToTalk();
+  }
+
+  function handlePushToTalkKeyUp(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    endPushToTalk();
+  }
+
   function interruptActiveRealtimeResponse() {
     const channel = dataChannelRef.current;
     if (channel?.readyState !== "open" || !activeResponseRef.current) return;
     confirmedBargeInRef.current = true;
     turnPlaybackStoppedRef.current = true;
+    silenceRemotePlaybackImmediately();
     channel.send(JSON.stringify({ type: "response.cancel" }));
     channel.send(JSON.stringify({ type: "output_audio_buffer.clear" }));
   }
@@ -565,7 +735,7 @@ export function HanVoiceConversation({
         finishStartedRef.current ||
         closingTurnRef.current ||
         closeRequestedRef.current ||
-        mutedRef.current
+        !pushToTalkActiveRef.current
       )
         return;
       streamRef.current?.getAudioTracks().forEach((track) => {
@@ -595,7 +765,7 @@ export function HanVoiceConversation({
         forcedTranscriptFallbackTimerRef.current = null;
         completedVoiceTurnSignalsRef.current = [];
         pendingUserTextRef.current = "";
-        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setLatestCaption("Hold the red button to talk.");
         setState("listening");
       }, 5_000);
     } else {
@@ -615,7 +785,7 @@ export function HanVoiceConversation({
       completedVoiceTurnSignalsRef.current = [];
       ignoreNextSpeechStoppedRef.current = true;
       channel.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
-      setLatestCaption("I'm listening — begin whenever you're ready.");
+      setLatestCaption("Hold the red button to talk.");
       setState("listening");
     }
     // Continuous music can keep server VAD open even after its buffered bytes
@@ -678,6 +848,8 @@ export function HanVoiceConversation({
       audioRef.current.load();
     }
     audioRef.current = null;
+    remotePlaybackSuppressedRef.current = false;
+    remoteAudioAudibleRef.current = false;
     stopVoiceSignalAnalysis();
     stopRemoteAudioAnalysis();
     pendingUserTextRef.current = "";
@@ -685,11 +857,16 @@ export function HanVoiceConversation({
     replyNeedsAssessmentRef.current = false;
     remainingPracticeTargetsRef.current = null;
     pendingTurnInstructionsRef.current = "";
+    lastTutorTurnInstructionsRef.current = "";
+    tutorContinuationCountRef.current = 0;
     ephemeralTurnGuardItemIdRef.current = null;
     closingTurnRef.current = false;
     closeRequestedRef.current = false;
     closeAfterReplyRef.current = false;
     activeResponseRef.current = false;
+    outputPlaybackActiveRef.current = false;
+    pushToTalkInterruptedResponseRef.current = false;
+    pushToTalkInterruptedPlaybackRef.current = false;
     confirmedBargeInRef.current = false;
     ignoreNextSpeechStoppedRef.current = false;
     activeVoiceTurnItemIdRef.current = null;
@@ -707,9 +884,9 @@ export function HanVoiceConversation({
     speakingEvidenceRef.current = [];
     evidenceReviewPendingRef.current = false;
     evidenceReviewTextRef.current = "";
-    mutedRef.current = false;
+    pushToTalkActiveRef.current = false;
     onActiveChange(false);
-    setMuted(false);
+    setPushToTalkActive(false);
     setState("idle");
   }, [onActiveChange, stopRemoteAudioAnalysis, stopVoiceSignalAnalysis]);
 
@@ -848,8 +1025,11 @@ export function HanVoiceConversation({
 
   function resumeRolePlayListening() {
     streamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = !muted;
+      track.enabled = false;
     });
+    pushToTalkActiveRef.current = false;
+    setPushToTalkActive(false);
+    setLatestCaption("Hold the red button to talk.");
     setState("listening");
   }
 
@@ -936,6 +1116,7 @@ export function HanVoiceConversation({
       );
     }
     replyNeedsAssessmentRef.current = true;
+    resumeRemotePlaybackForNextResponse();
     const guardItemId = `item_guard_${crypto.randomUUID().replaceAll("-", "").slice(0, 21)}`;
     ephemeralTurnGuardItemIdRef.current = guardItemId;
     channel.send(
@@ -986,10 +1167,13 @@ export function HanVoiceConversation({
       setState("thinking");
       return;
     }
+    resumeRemotePlaybackForNextResponse();
     // Mark synchronously, before response.created comes back. Otherwise two
     // transcription events in the same network window can both request a
     // response and the API rejects the second one.
     activeResponseRef.current = true;
+    if (mode === "TUTOR" && !contextRef.current.rolePlay)
+      lastTutorTurnInstructionsRef.current = turnInstructions;
     const guardItemId = `item_guard_${crypto.randomUUID().replaceAll("-", "").slice(0, 21)}`;
     ephemeralTurnGuardItemIdRef.current = guardItemId;
     const { guardEvent, responseEvent } =
@@ -1123,6 +1307,9 @@ export function HanVoiceConversation({
     }
     if (event.type === "response.created") {
       activeResponseRef.current = true;
+      pushToTalkActiveRef.current = false;
+      setPushToTalkActive(false);
+      setMicrophoneInputEnabled(false);
       if (activeContext.rolePlay && !allowsBargeIn) {
         if (!closingTurnRef.current) {
           if (turnPlaybackTimerRef.current != null)
@@ -1139,14 +1326,32 @@ export function HanVoiceConversation({
       }
     }
     if (event.type === "response.output_audio.delta") {
+      // A few already-in-flight audio events may arrive after response.cancel.
+      // They belong to the interrupted answer and must never restart playback,
+      // switch the UI back to speaking, or disable the learner's held mic.
+      if (remotePlaybackSuppressedRef.current) return;
       activeResponseRef.current = true;
-      if (activeContext.rolePlay && !allowsBargeIn)
-        streamRef.current?.getAudioTracks().forEach((track) => {
-          track.enabled = false;
-        });
+      outputPlaybackActiveRef.current = true;
+      pushToTalkActiveRef.current = false;
+      setPushToTalkActive(false);
+      setMicrophoneInputEnabled(false);
       setState("speaking");
     }
+    if (event.type === "output_audio_buffer.cleared") {
+      outputPlaybackActiveRef.current = false;
+      remoteAudioAudibleRef.current = false;
+      pushToTalkInterruptedPlaybackRef.current = false;
+    }
     if (event.type === "output_audio_buffer.stopped") {
+      outputPlaybackActiveRef.current = false;
+      if (pushToTalkInterruptedPlaybackRef.current) {
+        pushToTalkInterruptedPlaybackRef.current = false;
+        turnResponseDoneAtRef.current = null;
+        turnAudioObservedRef.current = false;
+        turnLastAudibleAtRef.current = null;
+        turnPlaybackStoppedRef.current = true;
+        return;
+      }
       if (closingTurnRef.current && closingResponseDoneAtRef.current != null) {
         closingPlaybackStoppedRef.current = true;
         finishAfterClosingPlayback();
@@ -1157,6 +1362,10 @@ export function HanVoiceConversation({
         finishAfterRolePlayTurnPlayback();
         return;
       }
+      if (!activeContext.rolePlay && !pushToTalkActiveRef.current) {
+        setLatestCaption("Hold the red button to talk.");
+        setState("listening");
+      }
     }
     if (
       event.type === "conversation.item.input_audio_transcription.completed"
@@ -1166,7 +1375,7 @@ export function HanVoiceConversation({
         discardedVoiceTurnItemIdsRef.current.delete(event.item_id)
       ) {
         pendingUserTextRef.current = "";
-        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setLatestCaption("Hold the red button to talk.");
         setState("listening");
         return;
       }
@@ -1181,6 +1390,7 @@ export function HanVoiceConversation({
       const voiceSignal = completedVoiceTurnSignalsRef.current.shift() ?? null;
       const rawTranscript = event.transcript?.trim();
       if (!rawTranscript || isNonSpeechNoiseTranscript(rawTranscript)) {
+        setLatestCaption("Hold the red button to talk.");
         setState(
           allowsBargeIn && activeResponseRef.current ? "speaking" : "listening",
         );
@@ -1202,7 +1412,7 @@ export function HanVoiceConversation({
       if (!assessment.ok && assessment.reason === "prompt_leak") {
         pendingUserTextRef.current = "";
         setError(null);
-        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setLatestCaption("Hold the red button to talk.");
         setState(
           allowsBargeIn && activeResponseRef.current ? "speaking" : "listening",
         );
@@ -1240,12 +1450,13 @@ export function HanVoiceConversation({
           setState("speaking");
           return;
         }
-        setLatestCaption("I'm listening — begin whenever you're ready.");
+        setLatestCaption("Hold the red button to talk.");
         setState("listening");
         return;
       }
       setError(null);
       {
+        tutorContinuationCountRef.current = 0;
         if (activeContext.rolePlay && completionPolicy === "timer") {
           const learnerTurnIndex = speakingEvidenceRef.current.length + 1;
           speakingEvidenceRef.current.push(
@@ -1262,19 +1473,44 @@ export function HanVoiceConversation({
         const requestedSessionLevel = detectExplicitHskSessionLevel(transcript);
         if (requestedSessionLevel)
           sessionLevelRef.current = requestedSessionLevel;
-        const pronunciation = advancePronunciationPractice(
-          transcript,
-          transcriptRef.current,
-          pronunciationPracticeRef.current,
-        );
+        const tutorControlCommand =
+          !activeContext.rolePlay && mode === "TUTOR"
+            ? buildHanTutorControlCommandInstruction(transcript)
+            : null;
+        const pronunciation = tutorControlCommand
+          ? { state: pronunciationPracticeRef.current, progress: null }
+          : advancePronunciationPractice(
+              transcript,
+              transcriptRef.current,
+              pronunciationPracticeRef.current,
+            );
         pronunciationPracticeRef.current = pronunciation.state;
+        const currentTutorMessages = [
+          ...transcriptRef.current
+            .filter((message) => message.role === "user")
+            .map((message) => message.content),
+          transcript,
+        ];
+        const tutorSessionPreferences =
+          deriveHanTutorSessionPreferences(currentTutorMessages);
         const requiredLanguage =
           !activeContext.rolePlay && mode === "PRACTICE"
             ? "Chinese"
-            : nextHanExplanationLanguage(
-                transcript,
-                explanationLanguageRef.current,
-              );
+            : !activeContext.rolePlay && mode === "TUTOR"
+              ? resolveHanTutorConversationLanguage(
+                  currentTutorMessages,
+                  explanationLanguageRef.current,
+                  tutorSessionPreferences,
+                  {
+                    latestIsPronunciationAttempt: Boolean(
+                      pronunciation.progress,
+                    ),
+                  },
+                )
+              : nextHanExplanationLanguage(
+                  transcript,
+                  explanationLanguageRef.current,
+                );
         explanationLanguageRef.current = requiredLanguage;
         pendingUserTextRef.current = transcript;
         transcriptRef.current.push({ role: "user", content: transcript });
@@ -1377,7 +1613,13 @@ export function HanVoiceConversation({
             // Realtime response-level instructions override (rather than
             // extend) the session prompt. Keep Han's identity/adaptation in
             // force and add this turn's language rules as a temporary item.
-            sendSessionPreservingRealtimeReply(instructionsForThisTurn);
+            sendSessionPreservingRealtimeReply(
+              instructionsForThisTurn,
+              realtimeTutorPronunciationOutputTokenLimit(
+                transcript,
+                pronunciation.progress,
+              ),
+            );
           }
         }
       }
@@ -1399,6 +1641,7 @@ export function HanVoiceConversation({
             userText,
             transcript,
             activeContext,
+            mode,
           );
           pendingSavesRef.current.push(save);
           void save.catch(() => undefined);
@@ -1432,6 +1675,9 @@ export function HanVoiceConversation({
     }
     if (event.type === "response.done") {
       activeResponseRef.current = false;
+      const wasInterruptedByPushToTalk =
+        pushToTalkInterruptedResponseRef.current;
+      pushToTalkInterruptedResponseRef.current = false;
       if (evidenceReviewPendingRef.current) {
         evidenceReviewPendingRef.current = false;
         if (evidenceReviewTimerRef.current != null)
@@ -1465,7 +1711,7 @@ export function HanVoiceConversation({
       }
       if (
         pendingTurnInstructionsRef.current &&
-        (!activeContext.rolePlay || allowsBargeIn)
+        (!activeContext.rolePlay || allowsBargeIn || wasInterruptedByPushToTalk)
       ) {
         const pendingInstructions = pendingTurnInstructionsRef.current;
         pendingTurnInstructionsRef.current = "";
@@ -1482,6 +1728,41 @@ export function HanVoiceConversation({
         );
         return;
       }
+      if (wasInterruptedByPushToTalk) {
+        // The learner may still be holding the button, or the committed audio
+        // may be awaiting transcription. Do not run the cancelled response's
+        // ordinary playback cleanup: it would disable the live microphone and
+        // discard the explicit interruption turn.
+        return;
+      }
+      if (mode === "TUTOR" && !activeContext.rolePlay) {
+        const status = event.response?.status;
+        const reason = event.response?.status_details?.reason;
+        if (status === "incomplete" || status === "failed") {
+          // Log only transport state, never learner audio or transcript.
+          console.warn("Han Tutor response ended early", { status, reason });
+          if (
+            status === "incomplete" &&
+            reason === "max_output_tokens" &&
+            tutorContinuationCountRef.current === 0 &&
+            lastTutorTurnInstructionsRef.current &&
+            !pushToTalkActiveRef.current &&
+            !closeRequestedRef.current
+          ) {
+            tutorContinuationCountRef.current = 1;
+            sendSessionPreservingRealtimeReply(
+              `${lastTutorTurnInstructionsRef.current}\nThe preceding assistant response was cut off by its output limit. Continue only its unfinished explanation from the exact stopping point, preserving the established explanation language. Finish the thought in one short paragraph. Do not restart, repeat the example, introduce a new drill, or apologize. This completion instruction overrides pronunciation word-count restrictions for this response.`,
+              1200,
+            );
+            return;
+          }
+          setError(
+            explanationLanguageRef.current === "Spanish"
+              ? "La respuesta de Han se interrumpió. Puedes pedirle que continúe."
+              : "Han's response was interrupted. You can ask Han to continue.",
+          );
+        }
+      }
       if (activeContext.rolePlay) {
         // `response.done` means generation/transport has completed. WebRTC
         // may still have queued audio to play, so keep the microphone muted
@@ -1494,9 +1775,13 @@ export function HanVoiceConversation({
         requestNaturalClose();
         return;
       }
+      if (outputPlaybackActiveRef.current) return;
       streamRef.current?.getAudioTracks().forEach((track) => {
-        track.enabled = !muted;
+        track.enabled = false;
       });
+      pushToTalkActiveRef.current = false;
+      setPushToTalkActive(false);
+      setLatestCaption("Hold the red button to talk.");
       setState("listening");
     }
     if (event.type === "error" && evidenceReviewPendingRef.current) {
@@ -1509,6 +1794,9 @@ export function HanVoiceConversation({
     }
     if (event.type === "error") {
       activeResponseRef.current = false;
+      outputPlaybackActiveRef.current = false;
+      pushToTalkInterruptedResponseRef.current = false;
+      pushToTalkInterruptedPlaybackRef.current = false;
       setError(userFacingRealtimeVoiceError(event.error?.message));
     }
   }
@@ -1539,6 +1827,13 @@ export function HanVoiceConversation({
     closeRequestedRef.current = false;
     closeAfterReplyRef.current = false;
     activeResponseRef.current = false;
+    outputPlaybackActiveRef.current = false;
+    pushToTalkInterruptedResponseRef.current = false;
+    pushToTalkInterruptedPlaybackRef.current = false;
+    pushToTalkActiveRef.current = false;
+    setPushToTalkActive(false);
+    activeVoiceTurnRef.current = null;
+    activeVoiceTurnItemIdRef.current = null;
     if (bargeInConfirmationTimerRef.current != null)
       window.clearTimeout(bargeInConfirmationTimerRef.current);
     bargeInConfirmationTimerRef.current = null;
@@ -1635,9 +1930,7 @@ export function HanVoiceConversation({
         if (activeRolePlay) {
           openingTurnRef.current = true;
           stream.getAudioTracks().forEach((track) => {
-            track.enabled = allowsRealtimeBargeIn(activeRolePlay)
-              ? !muted
-              : false;
+            track.enabled = false;
           });
           setState("thinking");
           const openingGuard = buildRealtimeOpeningTurnGuard(activeRolePlay);
@@ -1678,10 +1971,10 @@ export function HanVoiceConversation({
           );
         } else {
           stream.getAudioTracks().forEach((track) => {
-            track.enabled = !muted;
+            track.enabled = false;
           });
           setState("listening");
-          setLatestCaption("I'm listening — begin whenever you're ready.");
+          setLatestCaption("Hold the red button to talk.");
         }
       };
       dataChannel.onopen = () => {
@@ -1723,8 +2016,12 @@ export function HanVoiceConversation({
           },
         },
       );
-      if (!response.ok) throw new Error(await response.text());
-      const payload = (await response.json()) as {
+      const responseBody = await response.text();
+      if (!response.ok)
+        throw new Error(
+          realtimeSessionStartErrorMessage(responseBody, response.status),
+        );
+      const payload = JSON.parse(responseBody) as {
         sdp?: unknown;
         instructions?: unknown;
         speechSpeed?: unknown;
@@ -1767,27 +2064,59 @@ export function HanVoiceConversation({
     }
   }
 
-  function toggleMute() {
-    const nextMuted = !muted;
-    streamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = !nextMuted;
-    });
-    mutedRef.current = nextMuted;
-    setMuted(nextMuted);
-  }
-
   const status =
     state === "connecting"
       ? "Connecting…"
       : state === "listening"
-        ? muted
-          ? "Microphone muted"
-          : "Listening…"
+        ? pushToTalkActive
+          ? "Listening… release to send"
+          : "Hold to talk"
         : state === "thinking"
-          ? "Thinking…"
+          ? "Analyzing…"
           : state === "speaking"
             ? "Speaking…"
             : "Ready to practice";
+
+  function renderPushToTalkButton(className: string, iconClassName = "size-6") {
+    const available = state === "listening" || state === "speaking";
+    return (
+      <button
+        type="button"
+        aria-label={
+          pushToTalkActive
+            ? "Release to send your voice"
+            : state === "speaking"
+              ? "Hold to interrupt Han and speak"
+              : "Hold to talk, then release to send"
+        }
+        aria-pressed={pushToTalkActive}
+        disabled={!available}
+        onPointerDown={handlePushToTalkPointerDown}
+        onPointerUp={handlePushToTalkPointerEnd}
+        onPointerCancel={handlePushToTalkPointerEnd}
+        onLostPointerCapture={handlePushToTalkPointerEnd}
+        onKeyDown={handlePushToTalkKeyDown}
+        onKeyUp={handlePushToTalkKeyUp}
+        onContextMenu={(event) => event.preventDefault()}
+        onClick={(event) => event.preventDefault()}
+        className={`${className} touch-none select-none disabled:cursor-not-allowed disabled:opacity-45`}
+      >
+        {pushToTalkActive ? (
+          <Square className={iconClassName} aria-hidden="true" />
+        ) : state === "thinking" || state === "connecting" ? (
+          <Loader2
+            className={`${iconClassName} animate-spin`}
+            aria-hidden="true"
+          />
+        ) : state === "speaking" ? (
+          <Volume2 className={iconClassName} aria-hidden="true" />
+        ) : (
+          <Mic className={iconClassName} aria-hidden="true" />
+        )}
+        <span>{pushToTalkActive ? "Release to send" : "Hold to talk"}</span>
+      </button>
+    );
+  }
 
   if (variant === "orb") {
     const active = state !== "idle";
@@ -1810,17 +2139,16 @@ export function HanVoiceConversation({
         <button
           ref={orbRef}
           type="button"
-          onClick={() =>
-            void (state === "idle"
-              ? startConversation()
-              : finishConversation())
-          }
+          onClick={() => {
+            if (state === "idle") void startConversation();
+          }}
           disabled={disabled && state === "idle"}
           aria-label={
             state === "idle"
               ? `Start voice conversation with ${roleLabel}`
-              : `End voice conversation with ${roleLabel}`
+              : `Voice conversation with ${roleLabel} is active`
           }
+          tabIndex={active ? -1 : 0}
           className="group relative grid size-64 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-primary-400 disabled:cursor-not-allowed disabled:opacity-50 sm:size-72"
         >
           <span
@@ -1856,6 +2184,30 @@ export function HanVoiceConversation({
             </span>
           </span>
         </button>
+
+        {active && (
+          <div className="absolute inset-x-4 bottom-5 z-10 flex flex-col items-center gap-2">
+            <div className="flex items-center gap-3">
+              {renderPushToTalkButton(
+                "flex h-14 items-center gap-2 rounded-full bg-error-500 px-5 font-interface text-body font-semibold text-neutral-0 shadow-lg transition active:scale-[0.98] enabled:hover:bg-error-600",
+                "size-5",
+              )}
+              <button
+                type="button"
+                onClick={() => void finishConversation()}
+                className="h-11 rounded-full border border-border bg-surface px-4 font-interface text-caption font-semibold text-text-primary shadow-sm transition hover:bg-surface-raised"
+              >
+                End
+              </button>
+            </div>
+            <span
+              className="font-interface text-caption font-medium text-text-secondary"
+              role="status"
+            >
+              {status}
+            </span>
+          </div>
+        )}
 
         <span className="sr-only" role="status" aria-live="polite">
           {status}
@@ -1915,29 +2267,20 @@ export function HanVoiceConversation({
               <Mic className="size-5" aria-hidden="true" /> Start conversation
             </Button>
           ) : (
-            <>
-              <button
-                type="button"
-                onClick={toggleMute}
-                aria-label={muted ? "Unmute microphone" : "Mute microphone"}
-                className="grid size-14 place-items-center rounded-full border border-neutral-0/35 bg-neutral-0/15 text-neutral-0 backdrop-blur transition hover:bg-neutral-0/25"
-              >
-                {muted ? (
-                  <MicOff className="size-5" />
-                ) : (
-                  <Mic className="size-5" />
-                )}
-              </button>
+            <div className="flex flex-col items-center gap-3 sm:flex-row">
+              {renderPushToTalkButton(
+                "flex min-h-16 min-w-48 items-center justify-center gap-3 rounded-full bg-error-500 px-7 font-interface text-body font-semibold text-neutral-0 shadow-lg transition active:scale-[0.98] enabled:hover:bg-error-600",
+                "size-6",
+              )}
               <button
                 type="button"
                 onClick={() => void finishConversation()}
                 aria-label="End conversation"
-                className="flex h-14 items-center gap-2 rounded-full bg-error-500 px-6 font-interface text-body font-semibold text-neutral-0 shadow-lg transition hover:bg-error-600"
+                className="h-12 rounded-full border border-neutral-0/35 bg-neutral-0/10 px-5 font-interface text-caption font-semibold text-neutral-0 backdrop-blur transition hover:bg-neutral-0/20"
               >
-                <PhoneOff className="size-5" aria-hidden="true" />
                 End conversation
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -1946,26 +2289,32 @@ export function HanVoiceConversation({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Button
-        type="button"
-        variant={state === "idle" ? "secondary" : "primary"}
-        className="w-full gap-2"
-        disabled={disabled && state === "idle"}
-        onClick={() =>
-          void (state === "idle" ? startConversation() : finishConversation())
-        }
-      >
-        {state === "idle" ? (
+      {state === "idle" ? (
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full gap-2"
+          disabled={disabled}
+          onClick={() => void startConversation()}
+        >
           <Mic className="size-4" />
-        ) : state === "connecting" || state === "thinking" ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : state === "speaking" ? (
-          <Volume2 className="size-4" />
-        ) : (
-          <Square className="size-4" />
-        )}
-        {state === "idle" ? "Start live conversation" : "End conversation"}
-      </Button>
+          Start live conversation
+        </Button>
+      ) : (
+        <div className="flex items-stretch gap-2">
+          {renderPushToTalkButton(
+            "flex min-h-12 flex-1 items-center justify-center gap-2 rounded-control bg-error-500 px-4 font-interface text-body font-semibold text-neutral-0 shadow-sm transition active:scale-[0.99] enabled:hover:bg-error-600",
+            "size-5",
+          )}
+          <button
+            type="button"
+            onClick={() => void finishConversation()}
+            className="rounded-control border border-border bg-surface px-3 font-interface text-caption font-semibold text-text-secondary transition hover:bg-surface-raised hover:text-text-primary"
+          >
+            End
+          </button>
+        </div>
+      )}
       {state !== "idle" && (
         <span
           className="font-interface text-caption text-text-secondary"

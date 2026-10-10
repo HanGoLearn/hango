@@ -62,8 +62,11 @@ export class OpenAiProvider implements AiProvider {
         body: JSON.stringify({
           model: this.model,
           max_completion_tokens: request.maxOutputTokens ?? 500,
+          // Han is an interactive tutor, not a long-form reasoning task. A
+          // higher effort can consume the whole completion budget in hidden
+          // reasoning and return an empty visible reply.
           ...(this.model.startsWith("gpt-5")
-            ? { reasoning_effort: "low" }
+            ? { reasoning_effort: "minimal" }
             : {}),
           messages: [
             { role: "system", content: request.systemPrompt },

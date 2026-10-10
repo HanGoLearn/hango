@@ -211,11 +211,30 @@ const portableUnitFields = [
   "source",
 ] as const satisfies readonly (keyof CurriculumTranslationUnit)[];
 
+function portableUnitSignature(unit: CurriculumTranslationUnit) {
+  return JSON.stringify(
+    portableUnitFields.map((field) => [field, unit[field]]),
+  );
+}
+
+function unitsByPortableSignature(units: readonly CurriculumTranslationUnit[]) {
+  const groups = new Map<string, CurriculumTranslationUnit[]>();
+  for (const unit of units) {
+    const signature = portableUnitSignature(unit);
+    const group = groups.get(signature) ?? [];
+    group.push(unit);
+    groups.set(signature, group);
+  }
+  return groups;
+}
+
 /**
  * Re-keys a reviewed translation package for an equivalent freshly seeded
- * database. Prisma-assigned entity IDs may differ between databases, but the
- * ordered authored source must remain byte-for-byte identical. Any real
- * content or structural drift aborts the rebase before an import can write.
+ * database. Prisma-assigned entity IDs and the order of equally ranked rows
+ * may differ between databases, but the authored source must remain
+ * byte-for-byte identical as a multiset. Any real content, structural drift,
+ * or ambiguous duplicate translation aborts the rebase before an import can
+ * write.
  */
 export function rebaseCurriculumTranslationPackage(
   currentPackage: CurriculumTranslationPackage,
@@ -245,19 +264,26 @@ export function rebaseCurriculumTranslationPackage(
     );
   }
 
-  const comparableLength = Math.min(
-    currentPackage.units.length,
-    incomingPackage.units.length,
-  );
-  for (let index = 0; index < comparableLength; index += 1) {
-    const currentUnit = currentPackage.units[index]!;
-    const incomingUnit = incomingPackage.units[index]!;
-    const changedFields = portableUnitFields.filter(
-      (field) => currentUnit[field] !== incomingUnit[field],
-    );
-    if (changedFields.length > 0) {
+  const currentGroups = unitsByPortableSignature(currentPackage.units);
+  const incomingGroups = unitsByPortableSignature(incomingPackage.units);
+
+  for (const [signature, currentUnits] of currentGroups) {
+    const incomingCount = incomingGroups.get(signature)?.length ?? 0;
+    if (currentUnits.length !== incomingCount) {
+      const example = currentUnits[0]!;
       errors.push(
-        `La unidad ${index + 1} cambió en ${changedFields.join(", ")}.`,
+        `El contenido actual no coincide con el paquete revisado (${example.entityType}.${example.field}, ${JSON.stringify(example.context)}): ${currentUnits.length} unidad(es) en la base y ${incomingCount} en el paquete.`,
+      );
+      if (errors.length >= 10) break;
+    }
+  }
+
+  if (errors.length < 10) {
+    for (const [signature, incomingUnits] of incomingGroups) {
+      if (currentGroups.has(signature)) continue;
+      const example = incomingUnits[0]!;
+      errors.push(
+        `El paquete contiene texto que ya no existe en la base actual (${example.entityType}.${example.field}, ${JSON.stringify(example.context)}).`,
       );
       if (errors.length >= 10) break;
     }
@@ -267,9 +293,63 @@ export function rebaseCurriculumTranslationPackage(
     return { valid: false, rebased: false, errors };
   }
 
-  const units = currentPackage.units.map((currentUnit, index) => ({
+  const translationsByCurrentKey = new Map<string, string>();
+
+  for (const [signature, currentUnits] of currentGroups) {
+    const incomingUnits = incomingGroups.get(signature)!;
+    const currentKeys = new Set(currentUnits.map((unit) => unit.key));
+    const incomingByKey = new Map(
+      incomingUnits.map((unit) => [unit.key, unit] as const),
+    );
+    const matchedIncomingKeys = new Set<string>();
+
+    // Stable entity IDs are the strongest possible match and also resolve
+    // duplicate source/context rows whose translations intentionally differ.
+    for (const currentUnit of currentUnits) {
+      const exactMatch = incomingByKey.get(currentUnit.key);
+      if (!exactMatch) continue;
+      translationsByCurrentKey.set(currentUnit.key, exactMatch.translation);
+      matchedIncomingKeys.add(exactMatch.key);
+    }
+
+    const unmatchedCurrent = currentUnits.filter(
+      (unit) => !translationsByCurrentKey.has(unit.key),
+    );
+    const unmatchedIncoming = incomingUnits.filter(
+      (unit) =>
+        !matchedIncomingKeys.has(unit.key) && !currentKeys.has(unit.key),
+    );
+
+    if (unmatchedCurrent.length === 0) continue;
+
+    const translations = new Set(
+      unmatchedIncoming.map((unit) => unit.translation),
+    );
+    if (
+      unmatchedCurrent.length !== unmatchedIncoming.length ||
+      translations.size !== 1
+    ) {
+      const example = unmatchedCurrent[0]!;
+      errors.push(
+        `No se puede reasignar de forma inequívoca una traducción duplicada (${example.entityType}.${example.field}, ${JSON.stringify(example.context)}).`,
+      );
+      if (errors.length >= 10) break;
+      continue;
+    }
+
+    const [translation] = translations;
+    for (const currentUnit of unmatchedCurrent) {
+      translationsByCurrentKey.set(currentUnit.key, translation!);
+    }
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, rebased: false, errors };
+  }
+
+  const units = currentPackage.units.map((currentUnit) => ({
     ...currentUnit,
-    translation: incomingPackage.units[index]!.translation,
+    translation: translationsByCurrentKey.get(currentUnit.key)!,
   }));
 
   return {

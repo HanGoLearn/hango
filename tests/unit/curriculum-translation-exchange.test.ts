@@ -146,6 +146,105 @@ describe("curriculum translation exchange", () => {
     );
   });
 
+  it("rebases reordered units by their stable IDs", () => {
+    const incoming = packageFixture();
+    incoming.units.push({
+      ...incoming.units[0]!,
+      key: "exercise:two:prompt",
+      entityId: "two",
+      translation:
+        "Una traducción deliberadamente diferente para 你好 (nǐ hǎo) y {name}.",
+    });
+    incoming.sourceHash = curriculumTranslationSourceHash(incoming.units);
+    incoming.translationBaselineHash = curriculumTranslationBaselineHash(
+      incoming.units,
+    );
+
+    const current = structuredClone(incoming);
+    current.units.reverse();
+    current.units.forEach((unit) => {
+      unit.translation = "";
+    });
+    current.sourceHash = curriculumTranslationSourceHash(current.units);
+    current.translationBaselineHash = curriculumTranslationBaselineHash(
+      current.units,
+    );
+
+    const result = rebaseCurriculumTranslationPackage(current, incoming);
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(
+      result.translationPackage.units.map((unit) => unit.translation),
+    ).toEqual([incoming.units[1]!.translation, incoming.units[0]!.translation]);
+  });
+
+  it("rebases reordered unique source units with fresh IDs", () => {
+    const incoming = packageFixture();
+    incoming.units.push({
+      key: "exercise:two:prompt",
+      entityType: "exercise",
+      entityId: "two",
+      field: "prompt",
+      context: "Lesson: Introductions",
+      source: "Say your name.",
+      translation: "Di tu nombre.",
+    });
+    incoming.sourceHash = curriculumTranslationSourceHash(incoming.units);
+    incoming.translationBaselineHash = curriculumTranslationBaselineHash(
+      incoming.units,
+    );
+
+    const current = structuredClone(incoming);
+    current.scenario.id = "fresh-scenario-id";
+    current.units = current.units.reverse().map((unit, index) => ({
+      ...unit,
+      key: `exercise:fresh-${index}:prompt`,
+      entityId: `fresh-${index}`,
+      translation: "",
+    }));
+    current.sourceHash = curriculumTranslationSourceHash(current.units);
+    current.translationBaselineHash = curriculumTranslationBaselineHash(
+      current.units,
+    );
+
+    const result = rebaseCurriculumTranslationPackage(current, incoming);
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(
+      result.translationPackage.units.map((unit) => unit.translation),
+    ).toEqual(["Di tu nombre.", incoming.units[0]!.translation]);
+  });
+
+  it("refuses an ambiguous duplicate after entity IDs change", () => {
+    const incoming = packageFixture();
+    incoming.units.push({
+      ...incoming.units[0]!,
+      key: "exercise:two:prompt",
+      entityId: "two",
+      translation: "Otra traducción válida de 你好 (nǐ hǎo) usando {name}.",
+    });
+    incoming.sourceHash = curriculumTranslationSourceHash(incoming.units);
+
+    const current = structuredClone(incoming);
+    current.units = current.units.map((unit, index) => ({
+      ...unit,
+      key: `exercise:fresh-${index}:prompt`,
+      entityId: `fresh-${index}`,
+      translation: "",
+    }));
+    current.sourceHash = curriculumTranslationSourceHash(current.units);
+
+    const result = rebaseCurriculumTranslationPackage(current, incoming);
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors[0]).toContain(
+      "No se puede reasignar de forma inequívoca una traducción duplicada",
+    );
+  });
+
   it("refuses to re-key when authored source content changed", () => {
     const incoming = packageFixture();
     const current = structuredClone(incoming);
@@ -159,6 +258,8 @@ describe("curriculum translation exchange", () => {
 
     expect(result.valid).toBe(false);
     if (result.valid) return;
-    expect(result.errors).toContain("La unidad 1 cambió en source.");
+    expect(result.errors[0]).toContain(
+      "El contenido actual no coincide con el paquete revisado",
+    );
   });
 });

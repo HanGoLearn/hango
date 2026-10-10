@@ -18,13 +18,17 @@ describe("speechInstructions", () => {
     );
     expect(instructions).toContain("absolutely no Chinese or foreign accent");
     expect(instructions).toContain("Only while saying Chinese characters");
+    expect(instructions).toContain(
+      "Accent-neutral does not mean emotionally neutral",
+    );
+    expect(instructions).toContain("audible smile");
     expect(instructions).not.toContain("Mandarin teacher");
   });
 
   it("uses a slow native Mandarin teaching pace for Chinese replies", () => {
     const instructions = speechInstructions("Chinese");
     expect(instructions).toContain("native Mandarin pronunciation");
-    expect(instructions).toContain("slow, clear teaching pace");
+    expect(instructions).toContain("clear teaching pace");
   });
 
   it("creates a shorter conversational oral script without pinyin", () => {
@@ -32,7 +36,8 @@ describe("speechInstructions", () => {
     expect(prompt).toContain("Latin American Spanish");
     expect(prompt).toContain("never reduce it to just the Chinese words");
     expect(prompt).toContain("NEVER say or include pinyin");
-    expect(prompt).toContain("friendly, confident, modern teacher");
+    expect(prompt).toContain("charismatic young-adult tutor");
+    expect(prompt).toContain("emotionally responsive");
   });
 
   it("gives live conversation a natural contextual opening", () => {
@@ -66,10 +71,20 @@ describe("speechInstructions", () => {
 
   it("does not mention Mandarin in instructions for a Spanish segment", () => {
     const instructions = segmentSpeechInstructions("Spanish");
-    expect(instructions).toContain(
-      "native speaker of neutral Latin American Spanish",
-    );
+    expect(instructions).toContain("accent-neutral Latin American Spanish");
     expect(instructions).not.toMatch(/Chinese|Mandarin/u);
+  });
+
+  it("gives Tutor expressive delivery without changing Companion's existing voice style", () => {
+    const tutor = segmentSpeechInstructions("Spanish", "tutor");
+    const companion = segmentSpeechInstructions("Spanish", "companion");
+
+    expect(tutor).toContain("Accent-neutral does NOT mean emotionally neutral");
+    expect(tutor).toContain("charismatic young-adult tutor");
+    expect(tutor).toContain("focused clarity for a correction");
+    expect(tutor).toContain("Never sound like an announcer");
+    expect(companion).toContain("confident, spontaneous, warm");
+    expect(companion).not.toContain("charismatic young-adult tutor");
   });
 
   it("merges streaming WAV chunks whose data size is unknown", () => {

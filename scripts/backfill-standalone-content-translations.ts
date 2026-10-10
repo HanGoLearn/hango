@@ -294,7 +294,11 @@ async function main() {
       JSON.parse(rawWritingPackage),
     );
     const writingTasks = await database.writingTask.findMany({
-      where: { id: { in: writingPackage.tasks.map((task) => task.id) } },
+      where: {
+        lessonId: null,
+        scenarioId: null,
+        status: "PUBLISHED",
+      },
       include: {
         translations: {
           where: { locale: ES },
@@ -303,6 +307,7 @@ async function main() {
       },
     });
     const writingById = new Map(writingTasks.map((task) => [task.id, task]));
+    const matchedWritingIds = new Set<string>();
     const writingData: Array<{
       writingTaskId: string;
       locale: typeof ES;
@@ -311,23 +316,40 @@ async function main() {
     }> = [];
 
     for (const packaged of writingPackage.tasks) {
-      const current = writingById.get(packaged.id);
-      if (!current) {
-        throw new Error("Writing task not found: " + packaged.id + ".");
-      }
-      if (current.lessonId || current.scenarioId) {
-        throw new Error(
-          "Writing task is no longer standalone: " + packaged.id + ".",
-        );
-      }
+      let current = writingById.get(packaged.id);
       if (
-        current.title !== packaged.sourceTitle ||
-        current.prompt !== packaged.sourcePrompt
+        current &&
+        (current.title !== packaged.sourceTitle ||
+          current.prompt !== packaged.sourcePrompt)
       ) {
         throw new Error(
-          "Writing task source changed after translation: " + packaged.id + ".",
+          "Writing task ID now points to different source content: " +
+            packaged.id +
+            ".",
         );
       }
+      if (!current) {
+        const candidates = writingTasks.filter(
+          (task) =>
+            !matchedWritingIds.has(task.id) &&
+            task.title === packaged.sourceTitle &&
+            task.prompt === packaged.sourcePrompt,
+        );
+        if (candidates.length > 1) {
+          throw new Error(
+            "Multiple current writing tasks match translated source: " +
+              packaged.sourceTitle +
+              ".",
+          );
+        }
+        current = candidates[0];
+      }
+      if (!current) {
+        throw new Error(
+          "Writing task source not found: " + packaged.sourceTitle + ".",
+        );
+      }
+      matchedWritingIds.add(current.id);
       const existing = current.translations[0];
       if (existing) {
         if (
@@ -341,10 +363,24 @@ async function main() {
         continue;
       }
       writingData.push({
-        writingTaskId: packaged.id,
+        writingTaskId: current.id,
         locale: ES,
         ...packaged.translation,
       });
+    }
+
+    const untranslatedWritingSources = writingTasks.filter(
+      (task) => !matchedWritingIds.has(task.id),
+    );
+    if (untranslatedWritingSources.length > 0) {
+      throw new Error(
+        "Published standalone writing tasks are missing from the reviewed package: " +
+          untranslatedWritingSources
+            .slice(0, 5)
+            .map((task) => task.title)
+            .join(", ") +
+          ".",
+      );
     }
 
     console.log("Standalone Spanish translation backfill");

@@ -3255,7 +3255,7 @@
       "field": "content",
       "context": "Scenario: Family · Lesson: Describing Family Members · quiz option",
       "source": "Age",
-      "translation": "La edad"
+      "translation": "Edad"
     },
     {
       "key": "quizQuestionOption:cmstlg9ei01213weojm3f8fxk:content",
@@ -3264,7 +3264,7 @@
       "field": "content",
       "context": "Scenario: Family · Lesson: Describing Family Members · quiz option",
       "source": "Height",
-      "translation": "La estatura"
+      "translation": "Estatura"
     },
     {
       "key": "quizQuestionOption:cmstlg9ei01223weoc7onb2zs:content",

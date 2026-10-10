@@ -5926,6 +5926,17 @@ That document is the source of truth for pre-beta work; keep updates here terse.
   targeted lint and formatting green. Production migrations, one-time seed,
   translation import, admin bootstrap, Resend, Google OAuth and the real-domain
   manual gate remain open; Han was not changed.
+  **Production data follow-up (2026-10-03):** all 70 migrations are applied to
+  the dedicated Prisma Postgres database; the one-time seed contains 9 domains,
+  41 scenarios, 164 lessons and 211 placement questions, with zero users. All
+  enriched curriculum rows were published without copying learner data. The 41
+  reviewed scenario packages plus the standalone backfill are imported and ES
+  coverage is 100% across all 22 measured areas (31,996 units, zero fallbacks).
+  The portable importer now compares exact authored-content multisets, prefers
+  stable IDs, rejects ambiguous duplicate translations and uses deterministic
+  tie-breaks. Production health is 200 and all temporary direct-connection
+  files were deleted. Admin bootstrap, Resend, Google OAuth, OpenAI, backup
+  restore and the real-device/manual gate remain open; Han was not changed.
 - [ ] **Beta readiness:** real Android/iPhone QA, privacy/terms/AI disclosure,
   human linguistic review, performance/image optimization and a measured closed
   beta before deciding on PWA/APK.
@@ -5937,3 +5948,179 @@ That document is the source of truth for pre-beta work; keep updates here terse.
 prompts, pedagogy, voice or transcription. Han Tutor, Learning Journey Speaking
 and Speaking Lab remain distinct systems. Security work around Realtime is
 limited to ownership, provenance, persistence and authorization.
+
+---
+
+## Conversational AI improvement program (2026-10-04) — 🟡 Design
+
+- [x] Local push-to-talk baseline: microphone input is enabled only while the
+  learner holds the talk control; release commits the turn for transcription
+  and reply. Automatic server VAD is disabled for these explicit turns. This
+  local batch has not been committed or deployed yet.
+- [x] Natural Han Tutor response modality: typed turns now always produce a
+  visible, silent written reply; releasing the small hold-to-talk control sends
+  its transcript immediately and produces one spoken reply while keeping the
+  text visible; Realtime voice keeps its spoken response and visible transcript.
+  The obsolete text/audio/audio-only selector is replaced by one accessibility
+  toggle that can mute automatic playback after the Tutor microphone without
+  affecting live voice. Its legacy database enum remains temporarily intact and
+  is reused only as this backwards-compatible mute flag until a safe later
+  cleanup. This local batch has not been committed or deployed yet.
+- [x] Contextual pronunciation coaching in the existing Han Tutor: an explicit
+  learner request now adapts to the real target length without truncating the
+  Mandarin the learner wants to practise. A 1–4-syllable target gets <=45 words
+  of coaching; 5–12 syllables get <=65 words plus 2–3 rhythm groups; a longer
+  target gets <=80 words, the complete phrase split into 2–4 prosodic groups,
+  and one natural 2–8-syllable chunk per turn (preferably 2–6) before the chunks
+  are recombined. Han conversationally offers the
+  reason for the tone change without adding a button; if accepted, it expands
+  that same target in 3–5 sentences and <=80 words without restarting the
+  drill. Grammar, vocabulary and usage requests keep Tutor's broad teaching
+  path. A recorded follow-up can attach bounded local tone-contour and pause
+  evidence to that same Tutor turn; Realtime instead listens to its own actual
+  audio. For a long phrase, local contour analysis scores only the active safe
+  chunk, never the complete sentence as an undifferentiated contour. Feedback
+  corrects one defensible issue at a time and stops after at most four guided
+  attempts. Transcript text is never treated as proof of
+  pronunciation. This does not create a new Han or alter Companion, Learning
+  Journey Speaking, Speaking Lab or placement. Typecheck, lint, 192 focused
+  tests and the real short/detail/grammar/long-phrase localhost flows pass; a
+  real learner-voice attempt is still required before deployment.
+- [x] Pronunciation microcoaching follow-up (2026-10-07). A transcript match of
+  at least 80% now closes that specific target immediately instead of leaving
+  it open for four attempts; this is a progression decision, not a claim that
+  transcription measures acoustic perfection. Han must name one brief success
+  and move to a different nearby target (or end the drill), and may not keep
+  isolating the passed syllable. Unsuccessful attempts are constrained to one
+  high-confidence cue, one demonstration and one direct repetition request,
+  with no meaning lesson, translation, spoken pinyin, extra examples or
+  meta-question. Initial pronunciation coaching has length-sensitive word and
+  audio-token ceilings; grammar, vocabulary and ordinary Tutor explanations
+  retain their broad path. The exact `共享喝水` → `我想喝水` regression is covered.
+  Typecheck, targeted lint and focused pronunciation/Realtime tests pass. No
+  Companion, Learning Journey Speaking, Speaking Lab or placement prompt was
+  changed; nothing is committed or deployed.
+- [x] Youthful, expressive delivery for the existing Han Tutor only. Cedar stays
+  as the voice while prompt direction now makes accent neutrality distinct from
+  emotional neutrality: delivery can shift through audible warmth, curiosity,
+  light playfulness, focused correction and earned energy while avoiding an
+  announcer, call-center, children's-host or exaggerated-actor sound. Both the
+  Tutor speech-synthesis route and Tutor Realtime session receive the style;
+  Han Companion and every Learning Journey/Speaking Lab/placement role-play do
+  not. Audio cache keys now include Tutor/Companion style so old neutral clips
+  cannot mask the update. Typecheck, lint, the combined 206 focused Han tests
+  and 4 database-backed speech-route integration tests pass. Local listening
+  and subjective tuning remain required; nothing is committed or deployed.
+- [x] Explicit Realtime interruption while holding to speak. During spoken
+  output the red control remains enabled; pressing it starts a clean learner
+  buffer, cancels the active response, clears queued WebRTC output and keeps
+  the new microphone turn alive when the cancelled response later emits
+  `response.done`. This is an interaction-layer improvement shared by the
+  existing Realtime surfaces only; Tutor/Companion/role-play prompts, memory,
+  evaluation and progress remain separate. Typecheck and 105 focused
+  unit/component tests pass, including queued playback after generation has
+  already completed. A real-device listening check is still required;
+  nothing is committed or deployed.
+- [x] Robust local interruption follow-up (2026-10-08). Real-browser testing
+  showed that server cancellation alone could leave an already-arriving audio
+  fragment audible, while a late `response.output_audio.delta` could restore
+  the speaking state and disable the learner's newly held microphone. Pressing
+  the red control now mutes the remote audio locally before any network round
+  trip, still sends `input clear` -> `response cancel` -> `output clear`,
+  measures actual remote audibility, ignores stale audio deltas during the
+  interrupted turn and unmutes only for the next legitimate response. The
+  client also handles `output_audio_buffer.cleared`. Typecheck, targeted lint
+  and 104 focused interruption/recording/modality/Realtime tests pass. A live
+  microphone confirmation by the user remains pending; nothing is committed
+  or deployed.
+- [x] Realtime local-start recovery (2026-10-07). The disappearing
+  `Start live conversation` flow was traced to the local test account reaching
+  the generic US$1 per-feature daily guard after four conservatively reserved
+  sessions, followed by the six-connections-per-ten-minutes burst guard during
+  retries. Local development now permits 30 starts per ten minutes and uses a
+  US$5 fallback only when neither an explicit user cap nor an explicit feature
+  cap exists. Production keeps its existing six-start burst limit and generic
+  fallback; explicit admin limits and the global safety budget still win in
+  every environment. Start failures are parsed into readable UI copy instead
+  of raw JSON and burst responses include retry timing. Typecheck, targeted
+  lint and 96 focused unit/component tests pass. The real microphone check is
+  left to the user so ambient audio is not captured without consent; nothing
+  is committed or deployed.
+- [x] Intelligent correction and temporary conversation preferences for the
+  existing Han Tutor (2026-10-08). Written chat and Realtime now share one
+  contract instead of making conflicting language and correction decisions.
+  Han silently chooses one action per turn — continue, natural recast, one
+  high-impact micro-correction, clarification, or explicit pronunciation
+  practice — and never stacks corrections or produces an unsolicited report.
+  Spanish and English carrier sentences keep their language even when they
+  quote Mandarin; a substantive Mandarin conversation can continue in Chinese.
+  During the currently open Tutor conversation only, the learner can request
+  Spanish/English/Chinese, flowing/balanced/strict correction, slower/normal/
+  faster speech, or direct actions such as repeat once, divide a phrase, or
+  compare one supported difference. These preferences reset with the Tutor
+  conversation: no persistent pedagogical memory, new UI, schema or end report
+  was added. Tutor voice now uses the same progressive-disclosure rule as text,
+  so a narrow question no longer conflicts with an unconditional two-example
+  lesson template. Companion, Learning Journey Speaking, Speaking Lab,
+  placement and role-play prompts are excluded. Typecheck, targeted lint and
+  187 focused unit/component tests pass; subjective live conversation testing
+  remains before deployment.
+- [x] Tutor/Companion conversation-boundary fix (2026-10-08). A live user test
+  exposed that Companion still appended its voice transcript to the floating
+  Tutor provider and that a Tutor dialog hidden on `/han/*` could reappear when
+  the learner left Companion. Companion now owns a voice-only client transcript
+  and an explicit persisted surface tag, never mutates Tutor's visible
+  messages/context, and closes any latent Tutor dialog on every standalone Han
+  route. Tutor and Companion history reads and resets are filtered separately;
+  Speaking role-play evidence remains outside both. Ending Companion performs
+  no navigation and leaves its own start screen in place. Typecheck, lint, 189
+  focused unit/component tests and 18 database integration tests pass. Live
+  browser confirmation remains pending; nothing is committed or deployed.
+- [x] Han Tutor sentence-ordering integrity guard (2026-10-08). A live Spanish
+  voice question supplied the fixed pieces `弟弟 / 笑了 / 高兴地`, but Tutor
+  invented `很`, changed the final tile to `很高兴地`, and proposed the
+  ungrammatical order `弟弟笑了，很高兴地`. Written and Realtime Tutor turns now
+  recognize ordering/tile requests as a closed set: use every supplied piece
+  exactly once, add/remove/split/merge none, treat spoken pinyin-to-Hanzi as an
+  explicit assumption, and request the actual characters or a screenshot when
+  ambiguity remains. The measured regression requires `弟弟高兴地笑了` and
+  explains that a `地` modifier precedes its verb. This rule is excluded from
+  Companion and every role-play/Speaking surface. Typecheck, lint and 173
+  focused tests pass; nothing is committed or deployed.
+- [x] 2026-10-09: Ground Han Tutor exam follow-ups in exact supplied options;
+  ask for clarification on corrupted transcripts and prioritize explicit new
+  Mandarin grammar topics (including 被 versus option B). Integrated in written
+  and Realtime turn instructions. Typecheck and 173 focused tests pass. Live
+  conversational acceptance remains pending; local only, no deployment.
+- [x] 2026-10-09: Preserve the established explanation language throughout
+  pronunciation drills, including historical Mandarin repetitions replayed
+  when resolving the language. Add a regression for 蛋糕被我的猫吃了 and
+  explicit language overrides. Clarify 被 fourth tone and forbid invented
+  acoustic diagnoses. 174 focused tests pass; local conversational check pending.
+- [x] 2026-10-09: Exit pending pronunciation drills when the learner asks a
+  new usage/grammar question; leave raw pinyin repetitions eligible. Give short
+  audio coaching enough output budget to finish. Han Tutor checks response.done
+  status/reason and continues a token-limited explanation once, never a cancelled
+  response; repeated cutoffs/failed responses show a recoverable message.
+  Typecheck, targeted lint and 108 focused tests pass. Live acceptance pending;
+  local only, no commit or deployment.
+- [ ] Review and approve the proposed naturalness, adaptive pedagogy,
+  evidence-based feedback, latency, mobile, cost and measurement work in
+  [`PLAN_VIVO_MEJORAS_IA_CONVERSACIONAL.md`](PLAN_VIVO_MEJORAS_IA_CONVERSACIONAL.md).
+- [x] 2026-10-09: Clarify ambiguous questions such as "What type of Han we can
+  check?" as questions about Han Tutor's actual capabilities, without replacing
+  them with a tone lesson or inventing selectable Tutor types. Shared text/voice
+  turn guard and English/Spanish regressions added.
+- [x] 2026-10-09: The user explicitly authorized correcting the Tutor-capability
+  question and publishing all reviewed pending changes to GitHub. This replaces
+  the earlier hold on publication; live-device acceptance checks remain pending
+  and must not be presented as completed. Tutor, Companion, Journey Speaking,
+  Speaking Lab and placement retain their separate conversation boundaries.
+- [x] 2026-10-09: Release verification completed: production build and lint
+  pass; 114 unit/component files covered (937 tests in the full run, then the
+  four tests whose worker failed to load a dependency passed on retry, alongside
+  nine Tutor-session regressions). The full isolated integration run passed
+  312/313 tests and exposed a timestamp-tie ordering issue; stable message-ID
+  tie-breaking fixed it and all 22 tests in the three affected suites passed on
+  retry. Smoke passes. Secret scanner passes for 36 commits and the non-ignored
+  worktree. No schema migrations added; temporary databases were removed.

@@ -16,12 +16,30 @@
 export type ToneNumber = 1 | 2 | 3 | 4 | 5;
 
 const TONE_MARK_TO_BASE_AND_TONE: Record<string, [string, ToneNumber]> = {
-  ā: ["a", 1], á: ["a", 2], ǎ: ["a", 3], à: ["a", 4],
-  ē: ["e", 1], é: ["e", 2], ě: ["e", 3], è: ["e", 4],
-  ī: ["i", 1], í: ["i", 2], ǐ: ["i", 3], ì: ["i", 4],
-  ō: ["o", 1], ó: ["o", 2], ǒ: ["o", 3], ò: ["o", 4],
-  ū: ["u", 1], ú: ["u", 2], ǔ: ["u", 3], ù: ["u", 4],
-  ǖ: ["v", 1], ǘ: ["v", 2], ǚ: ["v", 3], ǜ: ["v", 4],
+  ā: ["a", 1],
+  á: ["a", 2],
+  ǎ: ["a", 3],
+  à: ["a", 4],
+  ē: ["e", 1],
+  é: ["e", 2],
+  ě: ["e", 3],
+  è: ["e", 4],
+  ī: ["i", 1],
+  í: ["i", 2],
+  ǐ: ["i", 3],
+  ì: ["i", 4],
+  ō: ["o", 1],
+  ó: ["o", 2],
+  ǒ: ["o", 3],
+  ò: ["o", 4],
+  ū: ["u", 1],
+  ú: ["u", 2],
+  ǔ: ["u", 3],
+  ù: ["u", 4],
+  ǖ: ["v", 1],
+  ǘ: ["v", 2],
+  ǚ: ["v", 3],
+  ǜ: ["v", 4],
 };
 
 /** A pinyin syllable's tone is the tone borne by its (single) marked vowel; unmarked = neutral (5). */
@@ -35,11 +53,21 @@ function syllableTone(syllable: string): ToneNumber {
 
 /** Splits a pinyin string (e.g. "nǐ hǎo" or "xiè xie") into per-syllable tone numbers. */
 export function parsePinyinTones(pinyin: string): ToneNumber[] {
-  return pinyin
-    .trim()
-    .split(/\s+/u)
-    .filter(Boolean)
-    .map(syllableTone);
+  return pinyin.trim().split(/\s+/u).filter(Boolean).map(syllableTone);
+}
+
+/**
+ * The tutor evaluates how a phrase is actually pronounced, not a list of
+ * dictionary tones. In the most common and unambiguous case (two adjacent
+ * third tones), the first is realized as a rising second tone. Keep this
+ * opt-in so existing Speaking Lab results do not silently change.
+ */
+export function applyBasicThirdToneSandhi(
+  tones: readonly ToneNumber[],
+): ToneNumber[] {
+  return tones.map((tone, index) =>
+    tone === 3 && tones[index + 1] === 3 ? 2 : tone,
+  );
 }
 
 /**
@@ -61,9 +89,13 @@ export function buildReferenceContour(tones: ToneNumber[]): number[] {
 }
 
 /** Linear-interpolation resample to a fixed number of points, for comparing contours of different lengths. */
-export function resampleContour(contour: number[], targetLength: number): number[] {
+export function resampleContour(
+  contour: number[],
+  targetLength: number,
+): number[] {
   if (contour.length === 0 || targetLength <= 0) return [];
-  if (contour.length === 1) return new Array<number>(targetLength).fill(contour[0]!);
+  if (contour.length === 1)
+    return new Array<number>(targetLength).fill(contour[0]!);
 
   const result: number[] = [];
   for (let i = 0; i < targetLength; i++) {
@@ -140,7 +172,24 @@ export function scoreToneMatchPerSyllable(
   pitchHz: number[],
   pinyin: string,
 ): SyllableScore[] | null {
-  const tones = parsePinyinTones(pinyin);
+  return scoreToneMatchForTones(pitchHz, parsePinyinTones(pinyin));
+}
+
+/** Han Tutor-only phrase scoring with basic connected-speech tone sandhi. */
+export function scoreHanTutorToneMatchPerSyllable(
+  pitchHz: number[],
+  pinyin: string,
+): SyllableScore[] | null {
+  return scoreToneMatchForTones(
+    pitchHz,
+    applyBasicThirdToneSandhi(parsePinyinTones(pinyin)),
+  );
+}
+
+function scoreToneMatchForTones(
+  pitchHz: number[],
+  tones: ToneNumber[],
+): SyllableScore[] | null {
   if (tones.length === 0) return null;
 
   const voiced = pitchHz.filter((hz) => hz > 0);
@@ -194,7 +243,24 @@ export function scoreToneMatch(
     .filter((score): score is number => score !== null);
   if (scores.length === 0) return null;
 
-  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  return Math.round(
+    scores.reduce((sum, score) => sum + score, 0) / scores.length,
+  );
+}
+
+export function scoreHanTutorToneMatch(
+  pitchHz: number[],
+  pinyin: string,
+): number | null {
+  const perSyllable = scoreHanTutorToneMatchPerSyllable(pitchHz, pinyin);
+  if (!perSyllable) return null;
+  const scores = perSyllable
+    .map((syllable) => syllable.score)
+    .filter((score): score is number => score !== null);
+  if (scores.length === 0) return null;
+  return Math.round(
+    scores.reduce((sum, score) => sum + score, 0) / scores.length,
+  );
 }
 
 export interface ShadowingCharacter {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parsePinyinTones,
+  applyBasicThirdToneSandhi,
   buildReferenceContour,
   resampleContour,
   scoreToneMatch,
@@ -23,6 +24,13 @@ describe("parsePinyinTones", () => {
 
   it("returns an empty array for empty input", () => {
     expect(parsePinyinTones("")).toEqual([]);
+  });
+});
+
+describe("applyBasicThirdToneSandhi", () => {
+  it("scores the first of two adjacent third tones as its rising surface tone", () => {
+    expect(applyBasicThirdToneSandhi([3, 3])).toEqual([2, 3]);
+    expect(applyBasicThirdToneSandhi([1, 3, 4])).toEqual([1, 3, 4]);
   });
 });
 
@@ -138,7 +146,10 @@ describe("alignCharactersWithPinyin", () => {
   });
 
   it("passes punctuation through without a pinyin syllable and without consuming one", () => {
-    const result = alignCharactersWithPinyin("你好！你好吗？", "nǐ hǎo nǐ hǎo ma");
+    const result = alignCharactersWithPinyin(
+      "你好！你好吗？",
+      "nǐ hǎo nǐ hǎo ma",
+    );
     expect(result.filter((c) => c.isSyllable)).toHaveLength(5);
     expect(result.find((c) => c.char === "！")).toEqual({
       char: "！",
@@ -149,7 +160,11 @@ describe("alignCharactersWithPinyin", () => {
 });
 
 describe("extractPitchContourFromSamples", () => {
-  function sineWave(frequencyHz: number, sampleRate: number, durationSeconds: number): Float32Array {
+  function sineWave(
+    frequencyHz: number,
+    sampleRate: number,
+    durationSeconds: number,
+  ): Float32Array {
     const length = Math.round(sampleRate * durationSeconds);
     const samples = new Float32Array(length);
     for (let i = 0; i < length; i++) {

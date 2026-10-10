@@ -8,6 +8,7 @@ import {
   buildSystemPrompt,
   detectHanResponseLanguage,
   findLatestExplicitHskSessionLevel,
+  type HanConversationSurface,
   type HanResponseLanguage,
   type AiTeacherContext,
   type AiTeacherMode,
@@ -20,6 +21,10 @@ import { buildAdaptiveLearnerSummary } from "@/lib/ai-learner-adaptation";
 import { createTtlCache } from "@/lib/ttl-cache";
 import { detectHanAppContextIntent } from "@/lib/han-app-intent";
 import { getHanOnDemandAppContext } from "@/lib/han-app-context-data";
+import {
+  deriveHanTutorSessionPreferences,
+  resolveHanTutorConversationLanguage,
+} from "@/lib/han-tutor-session";
 import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
 import {
   buildLearnerFactsExtractionPrompt,
@@ -95,6 +100,8 @@ export async function getOrCreateConversation(userId: string) {
 interface ContextSnapshotShape {
   lessonTitle?: string;
   rolePlay?: unknown;
+  currentPageName?: string;
+  hanConversationSurface?: HanConversationSurface;
 }
 
 /**
@@ -110,37 +117,67 @@ function isSpeakingMessage(contextSnapshot: unknown): boolean {
   return Boolean((contextSnapshot as ContextSnapshotShape | null)?.rolePlay);
 }
 
+function conversationSurfaceForMessage(
+  contextSnapshot: unknown,
+): HanConversationSurface | null {
+  const snapshot = contextSnapshot as ContextSnapshotShape | null;
+  if (isSpeakingMessage(contextSnapshot)) return null;
+  if (snapshot?.hanConversationSurface === "COMPANION") return "COMPANION";
+  if (snapshot?.hanConversationSurface === "TUTOR") return "TUTOR";
+  // Companion already stored its page label before this explicit boundary
+  // existed. Recognize those rows so an upgrade cannot leak them into Tutor.
+  if (snapshot?.currentPageName === "Han Companion") return "COMPANION";
+  // All older untagged non-role-play messages came from the original Tutor
+  // thread and remain Tutor data for backwards compatibility.
+  return "TUTOR";
+}
+
+function contextForConversationSurface(
+  context: AiTeacherContext,
+  mode: AiTeacherMode,
+): AiTeacherContext {
+  if (context.rolePlay) return context;
+  return {
+    ...context,
+    hanConversationSurface: mode === "PRACTICE" ? "COMPANION" : "TUTOR",
+  };
+}
+
 /**
- * The text chat's own recent history only - Speaking-practice turns are
- * filtered out (see isSpeakingMessage) so a role-play exchange doesn't
- * show up as out-of-place chat bubbles, or get fed to Han as if it were
- * part of the current text conversation.
+ * One Han product's own recent history only. Tutor and Companion are
+ * independent: neither one's messages may be shown to, supplied to, or reset
+ * by the other. Speaking-practice turns are excluded from both.
  */
-export async function getConversationHistory(userId: string) {
+export async function getConversationHistory(
+  userId: string,
+  surface: HanConversationSurface = "TUTOR",
+) {
   const conversation = await db.aiConversation.findUnique({
     where: { userId },
     include: {
       messages: {
-        orderBy: { createdAt: "desc" },
+        // The timestamp can tie for nested/bulk-created turns. CUIDs provide
+        // a stable tie-breaker so reversing the result cannot swap speakers.
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: HISTORY_LIMIT * HISTORY_FETCH_MULTIPLIER,
       },
     },
   });
   if (!conversation) return [];
   return conversation.messages
-    .filter((message) => !isSpeakingMessage(message.contextSnapshot))
+    .filter(
+      (message) =>
+        conversationSurfaceForMessage(message.contextSnapshot) === surface,
+    )
     .slice(0, HISTORY_LIMIT)
     .reverse();
 }
 
 /**
- * How many real text-chat messages (already excluding Speaking-practice
- * turns) a conversation needs before it's worth extracting personal facts
- * from (2026-08-31, Han Companion memory) - `resetConversation` fires on
- * every single `openTeacher()` call, i.e. every bubble open, not on close
- * (see ai-teacher-provider.tsx's `openTeacher`), so without a floor this
- * would fire an AI call on every stray open/glance instead of once per
- * real conversation.
+ * How many real Companion messages a conversation needs before it is worth
+ * extracting personal facts. Companion resets on entry so a short or aborted
+ * call must not spend another AI request; Tutor resets use a separate surface
+ * and can never reach this extraction branch.
  */
 const MIN_MESSAGES_FOR_FACT_EXTRACTION = 8;
 
@@ -205,12 +242,10 @@ async function extractAndSaveLearnerFacts(
 }
 
 /**
- * Clears the text chat's own history so Han "starts fresh" every time the
- * chat is opened (openTeacher, ai-teacher-provider.tsx) - deliberately
- * does NOT delete the AiConversation row itself, and deliberately never
- * deletes Speaking-practice messages (see isSpeakingMessage), even though
- * they live in the same thread, since reflection.ts still needs them to
- * score a not-yet-reflected lesson's Speaking step.
+ * Clears only the requesting Han product's history so it starts fresh. The
+ * existing boolean remains the public contract: false is Tutor; true is
+ * Companion plus personal-fact extraction. Neither reset may delete the
+ * other product's turns, and neither ever deletes Speaking-practice evidence.
  *
  * Real bug this fixes (2026-08-19): before this, opening the text chat for
  * *any* reason, anywhere in the app - every "Ask AI" button, not just the
@@ -246,8 +281,13 @@ export async function resetConversation(
   });
   if (!conversation) return;
 
+  const requestedSurface: HanConversationSurface = extractFacts
+    ? "COMPANION"
+    : "TUTOR";
   const messagesToDelete = conversation.messages.filter(
-    (message) => !isSpeakingMessage(message.contextSnapshot),
+    (message) =>
+      conversationSurfaceForMessage(message.contextSnapshot) ===
+      requestedSurface,
   );
   if (messagesToDelete.length === 0) return;
 
@@ -278,10 +318,14 @@ export async function saveRealtimeConversationTurn(
   userText: string,
   assistantText: string,
   context: AiTeacherContext,
+  mode: AiTeacherMode = "TUTOR",
 ): Promise<void> {
   if (!(await getCachedConversationStorageEnabled(userId))) return;
   const conversation = await getOrCreateConversation(userId);
-  const contextSnapshot = context as unknown as Prisma.InputJsonValue;
+  const contextSnapshot = contextForConversationSurface(
+    context,
+    mode,
+  ) as unknown as Prisma.InputJsonValue;
   const userCreatedAt = new Date();
   await db.aiMessage.createMany({
     data: [
@@ -444,8 +488,10 @@ export async function sendAiTeacherMessage(
 
   const storageEnabled = profile?.aiConversationStorageEnabled ?? true;
 
+  const conversationSurface: HanConversationSurface =
+    mode === "PRACTICE" && !context.rolePlay ? "COMPANION" : "TUTOR";
   const history: AiMessageInput[] = storageEnabled
-    ? (await getConversationHistory(userId)).map((m) => ({
+    ? (await getConversationHistory(userId, conversationSurface)).map((m) => ({
         role: m.role === "USER" ? "user" : "assistant",
         content: m.content,
       }))
@@ -457,6 +503,16 @@ export async function sendAiTeacherMessage(
       .map((historyMessage) => historyMessage.content),
     trimmed,
   ]);
+  const tutorUserMessages = [
+    ...history
+      .filter((historyMessage) => historyMessage.role === "user")
+      .map((historyMessage) => historyMessage.content),
+    trimmed,
+  ];
+  const tutorSessionPreferences =
+    mode === "TUTOR" && !context.rolePlay
+      ? deriveHanTutorSessionPreferences(tutorUserMessages)
+      : undefined;
 
   const systemPrompt = buildSystemPrompt(
     {
@@ -473,6 +529,8 @@ export async function sendAiTeacherMessage(
     mode,
     trimmed,
     sessionLevelOverride,
+    tutorSessionPreferences,
+    tutorUserMessages,
   );
 
   const provider = getAiProvider();
@@ -502,7 +560,10 @@ export async function sendAiTeacherMessage(
 
   if (storageEnabled) {
     const conversation = await getOrCreateConversation(userId);
-    const contextSnapshot = context as unknown as Prisma.InputJsonValue;
+    const contextSnapshot = contextForConversationSurface(
+      context,
+      mode,
+    ) as unknown as Prisma.InputJsonValue;
     const userCreatedAt = new Date();
     const assistantCreatedAt = new Date(userCreatedAt.getTime() + 1);
     await db.aiMessage.createMany({
@@ -527,10 +588,25 @@ export async function sendAiTeacherMessage(
 
   return {
     reply: result.content,
-    responseLanguage: detectHanResponseLanguage(
-      trimmed,
-      profile?.explanationLanguage ?? null,
-    ),
+    responseLanguage:
+      mode === "TUTOR" && !context.rolePlay && tutorSessionPreferences
+        ? resolveHanTutorConversationLanguage(
+            tutorUserMessages,
+            detectHanResponseLanguage(
+              undefined,
+              profile?.explanationLanguage ?? null,
+            ),
+            tutorSessionPreferences,
+            {
+              latestIsPronunciationAttempt: Boolean(
+                context.pronunciationAttempt,
+              ),
+            },
+          )
+        : detectHanResponseLanguage(
+            trimmed,
+            profile?.explanationLanguage ?? null,
+          ),
   };
 }
 

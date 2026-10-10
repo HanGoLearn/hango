@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildRealtimeSystemPrompt,
   buildMandarinStudyItemInstruction,
+  buildSentenceOrderingIntegrityInstruction,
   buildSessionLevelInstruction,
   buildSystemPrompt,
   buildTranslationTargetInstruction,
@@ -11,6 +12,80 @@ import {
 } from "@/lib/ai-context";
 
 describe("buildSystemPrompt", () => {
+  it("treats sentence-ordering tiles as a closed set and never invents 很", () => {
+    const learnerMessage =
+      "¿Me ayudas a ordenar una oración? La primera palabra es di, la segunda xiaola y la tercera gaoxingdi.";
+    const instruction =
+      buildSentenceOrderingIntegrityInstruction(learnerMessage);
+    const tutorPrompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      learnerMessage,
+    );
+    const companionPrompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "PRACTICE",
+      learnerMessage,
+    );
+
+    expect(instruction).toContain("fixed, CLOSED SET");
+    expect(instruction).toContain("Use every supplied item exactly once");
+    expect(instruction).toContain("弟弟高兴地笑了");
+    expect(instruction).toContain("never insert 很");
+    expect(tutorPrompt).toContain("SENTENCE-ORDERING INTEGRITY RULE");
+    expect(companionPrompt).not.toContain("SENTENCE-ORDERING INTEGRITY RULE");
+    expect(
+      buildSentenceOrderingIntegrityInstruction("Explícame el uso de 地"),
+    ).toBeNull();
+  });
+
+  it("shares temporary language and correction behavior between written and live Tutor", () => {
+    const textPrompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "EN" },
+      {},
+      "TUTOR",
+      "¿Qué significa 从来?",
+      null,
+      {
+        language: "auto",
+        correctionStyle: "balanced",
+        speechPace: "normal",
+      },
+      ["¿Qué significa 从来?"],
+    );
+    const voicePrompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+    );
+
+    for (const prompt of [textPrompt, voicePrompt]) {
+      expect(prompt).toContain("HAN TUTOR CORRECTION POLICY");
+      expect(prompt).toContain("CONTINUE");
+      expect(prompt).toContain("RECAST");
+      expect(prompt).toContain("Never stack corrections");
+    }
+    expect(textPrompt).toContain("response language is Spanish");
+    expect(textPrompt).toContain("TEMPORARY HAN TUTOR SESSION PREFERENCES");
+    expect(textPrompt).toContain("currently open Han Tutor conversation");
+  });
+
+  it("does not add the Tutor correction contract to Han Companion", () => {
+    const companionPrompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "PRACTICE",
+      "你好",
+    );
+
+    expect(companionPrompt).not.toContain("HAN TUTOR CORRECTION POLICY");
+    expect(companionPrompt).not.toContain(
+      "TEMPORARY HAN TUTOR SESSION PREFERENCES",
+    );
+  });
+
   it("prohibits generic acknowledgement openings", () => {
     const textPrompt = buildSystemPrompt(
       { level: "BEGINNER", explanationLanguage: "ES" },
@@ -29,6 +104,150 @@ describe("buildSystemPrompt", () => {
       expect(prompt).toContain("These openings are prohibited");
       expect(prompt).toContain("Begin directly with the useful answer");
     }
+  });
+
+  it("keeps one Han identity while adding explicit pronunciation teaching", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      "¿Cómo se pronuncia 你好 con sus tonos y ritmo?",
+    );
+
+    expect(prompt).toContain("same general Han tutor");
+    expect(prompt).toContain("汉字 (tone-mark pinyin)");
+    expect(prompt).toContain("45 words or fewer");
+    expect(prompt).toContain("Give only ONE immediately useful cue");
+    expect(prompt).toContain("baja y vuelve a subir");
+    expect(prompt).toContain("never insert English fragments");
+    expect(prompt).toContain("你好 → ní hǎo");
+    expect(prompt).toContain("surface sequence 2+3");
+    expect(prompt).toContain("the result is 2+2, is incorrect");
+    expect(prompt).toContain("no deliberate internal pause");
+    expect(prompt).toContain(
+      "the ONLY Chinese item in this initial micro-lesson",
+    );
+    expect(prompt).toContain("exactly one short repetition");
+    expect(prompt).toContain("También puedo explicarte por qué cambia el tono");
+    expect(prompt).toContain("never a button or other UI control");
+    expect(prompt).toContain(
+      "adaptive coaching-prose limits apply ONLY to an initial pronunciation request",
+    );
+    expect(prompt).toContain("occasional gentle wit");
+  });
+
+  it("keeps broad grammar teaching outside the pronunciation micro-lesson", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      "Explícame en profundidad cómo funciona la estructura 把",
+    );
+
+    expect(prompt).toContain("explicit broad request");
+    expect(prompt).toContain(
+      "Meaning and context; How to use it; Example 1; Example 2 only if useful",
+    );
+    expect(prompt).not.toContain("45 words or fewer");
+    expect(prompt).not.toContain("never a button or other UI control");
+  });
+
+  it("expands coaching prose and adds rhythm groups for a medium phrase", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      "Ayúdame a pronunciar 我明天想去看电影",
+    );
+
+    expect(prompt).toContain("medium target of 5 to 12 Mandarin syllables");
+    expect(prompt).toContain("65 words or fewer");
+    expect(prompt).toContain("2 or 3 natural rhythmic groups");
+    expect(prompt).toContain("complete phrase");
+  });
+
+  it("segments a long phrase before recombining it", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      "Ayúdame a pronunciar 我明天想和朋友一起去电影院看一部新的中文电影",
+    );
+
+    expect(prompt).toContain("long target of more than 12 Mandarin syllables");
+    expect(prompt).toContain("80 words or fewer");
+    expect(prompt).toContain("FIRST natural group of 2 to 8 syllables");
+    expect(prompt).toContain("preferring 2 to 6");
+    expect(prompt).toContain("finally recombine the whole phrase");
+    expect(prompt).toContain("chunk, not the whole sentence");
+  });
+
+  it("keeps live pronunciation coaching brief and offers detail conversationally", () => {
+    const prompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+    );
+
+    expect(prompt).toContain("under about 15 seconds");
+    expect(prompt).toContain("offer to explain why the sound or tone changes");
+    expect(prompt).toContain("never a UI button");
+    expect(prompt).toContain(
+      "must never shorten a requested grammar, vocabulary, usage, or in-depth explanation",
+    );
+  });
+
+  it("expands the optional pronunciation explanation without restarting practice", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+      "Sí, explícame por qué cambia el tono.",
+    );
+
+    expect(prompt).toContain("accepted Han Tutor's conversational offer");
+    expect(prompt).toContain("at most 80 words");
+    expect(prompt).toContain("3 to 5 short prose sentences");
+    expect(prompt).toContain(
+      "Do not discuss chains of three or more third tones",
+    );
+    expect(prompt).toContain("Do not use headings, lists, a second example");
+    expect(prompt).not.toContain("45 words or fewer");
+    expect(prompt).not.toContain("También puedo explicarte");
+  });
+
+  it("feeds bounded audio-derived tone and rhythm evidence to Han Tutor", () => {
+    const prompt = buildSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {
+        pronunciationAttempt: {
+          targetHanzi: "你好",
+          targetPinyin: "nǐ hǎo",
+          attempt: 2,
+          overallToneScore: 63,
+          syllables: [
+            { pinyin: "nǐ", toneNumber: 2, score: 82 },
+            { pinyin: "hǎo", toneNumber: 3, score: 38 },
+          ],
+          rhythm: {
+            durationSeconds: 1.4,
+            syllablesPerSecond: 1.43,
+            longestInternalPauseMs: 720,
+            observation: "long_pause",
+            confidence: "useful",
+          },
+        },
+      },
+      "TUTOR",
+      "你好",
+    );
+
+    expect(prompt).toContain("actual recording");
+    expect(prompt).toContain("hǎo, surface tone 3, contour match 38");
+    expect(prompt).toContain("long_pause");
+    expect(prompt).toContain("not forced phonetic alignment");
+    expect(prompt).toContain("exactly ONE highest-confidence");
+    expect(prompt).toContain("On attempt 2, isolate");
   });
 
   it("keeps an explicitly selected HSK 5 level in Tutor after a short acknowledgement", () => {
@@ -639,6 +858,27 @@ describe("buildRealtimeSystemPrompt", () => {
     expect(prompt).toContain('always answer "Han"');
     expect(prompt).toContain("never say you have no name");
     expect(prompt).toContain("unrelated to Hangeul");
+  });
+
+  it("gives the existing live Han Tutor a youthful expressive delivery without leaking it into Companion", () => {
+    const tutorPrompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "TUTOR",
+    );
+    const companionPrompt = buildRealtimeSystemPrompt(
+      { level: "BEGINNER", explanationLanguage: "ES" },
+      {},
+      "PRACTICE",
+    );
+
+    expect(tutorPrompt).toContain("charismatic young-adult tutor");
+    expect(tutorPrompt).toContain(
+      "Accent-neutral never means emotionally flat",
+    );
+    expect(tutorPrompt).toContain("Vary pitch, emphasis, cadence");
+    expect(tutorPrompt).toContain("never become childish, theatrical");
+    expect(companionPrompt).not.toContain("VOICE PERSONALITY FOR HAN TUTOR");
   });
 
   it("never adds the Han identity/HanGo reinforcement when a role-play character is active - Speaking Lab and lesson Speaking steps stay a deliberately unnamed persona (project_han_persona_scope memory, confirmed twice)", () => {
