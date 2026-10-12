@@ -263,6 +263,26 @@ describe("placement role-play controls", () => {
 });
 
 describe("buildRealtimeTurnInstructions", () => {
+  it("does not leak a Tutor pronunciation drill into a character scene", () => {
+    const instructions = buildRealtimeTurnInstructions(
+      "Spanish",
+      {
+        aiRole: "new friend",
+        learnerRole: "learner",
+        scenarioContext: "First meeting",
+        objective: "Exchange names",
+        lessonHskLevel: 1,
+      },
+      { target: "你好", attempts: 1, similarity: 0.5, status: "retry" },
+      "你好",
+      null,
+      "PRACTICE",
+      "direct",
+    );
+    expect(instructions).toContain("in-character");
+    expect(instructions).not.toContain("ACTIVE PRONUNCIATION DRILL");
+    expect(instructions).not.toContain("PRONUNCIATION PASS");
+  });
   it("resolves profile-level free practice to Pre-HSK and clamps its audio length", () => {
     expect(
       resolveRealtimePracticeLevel({ isFreeTopic: true, level: undefined }, 0),
@@ -703,6 +723,8 @@ describe("buildRealtimeTurnInstructions", () => {
     expect(instructions).toContain("matched at least 80%");
     expect(instructions).toContain("NEVER ask for 爱情");
     expect(instructions).toContain("ONE different, nearby Mandarin target");
+    expect(instructions).toContain("NOT an acoustic score");
+    expect(instructions).toContain("do not automatically start");
     expect(instructions).toContain("Do not explain meaning");
   });
 
@@ -871,7 +893,7 @@ describe("buildRealtimeTurnInstructions", () => {
       scenarioContext: "Two classmates meet.",
       objective: "Exchange names.",
     });
-    expect(classmateOpening).toContain('Output exactly "你好，你叫什么名字？"');
+    expect(classmateOpening).toContain('Output exactly "你好。"');
 
     const timeAndDatesOpening = buildRealtimeOpeningTurnGuard({
       aiRole: "Friend",
@@ -1693,6 +1715,21 @@ describe("findAcceptedMandarinTarget", () => {
 });
 
 describe("advancePronunciationPractice", () => {
+  it("recognizes the Spanish invitation in the reported cookie exchange", () => {
+    const history = [
+      {
+        role: "assistant" as const,
+        content:
+          "饼干 significa galleta. 我喜欢吃饼干. ¿Quieres intentar decirlo tú?",
+      },
+    ];
+    expect(
+      advancePronunciationPractice("Pero ¿qué significa eso?", history, null),
+    ).toEqual({ state: null, progress: null });
+    expect(
+      advancePronunciationPractice("我是很吃敏感。", history, null).state,
+    ).not.toBeNull();
+  });
   it("exits a pending drill for a new grammar question without clipping its reply", () => {
     const result = advancePronunciationPractice(
       "I think there is another way that I can use 把 when I wanna emphasize an action or an object.",

@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai-usage";
 import {
   getAiUsageSummary,
+  getAiExperienceUsageSummary,
   getGlobalAiBudgetSummary,
   setDailyUsageCap,
   setGlobalAiBudgetPolicy,
@@ -133,7 +134,7 @@ describe("AI usage logging + daily caps (2026-09-05, integration, real database)
     const user = await createTestUser(
       `ai-usage-customcap-${Date.now()}@hango.dev`,
     );
-    capFeaturesToReset.push("dialogue-audio");
+    capFeaturesToReset.push("experience:SHARED_AUDIO");
     await setDailyUsageCap("dialogue-audio", 0.01);
 
     await recordAiUsage({
@@ -191,10 +192,7 @@ describe("AI usage logging + daily caps (2026-09-05, integration, real database)
     ).resolves.toBeUndefined();
   });
 
-  it("rejects a non-positive daily cap", async () => {
-    await expect(
-      setDailyUsageCap("speaking-feedback", 0),
-    ).rejects.toBeInstanceOf(InvalidDailyCapError);
+  it("rejects a negative daily cap", async () => {
     await expect(
       setDailyUsageCap("speaking-feedback", -5),
     ).rejects.toBeInstanceOf(InvalidDailyCapError);
@@ -208,19 +206,19 @@ describe("AI usage logging + daily caps (2026-09-05, integration, real database)
   });
 
   it("getAiUsageSummary reflects a newly configured daily cap", async () => {
-    capFeaturesToReset.push("placement-listening-audio");
+    capFeaturesToReset.push("experience:SHARED_AUDIO");
     await setDailyUsageCap("placement-listening-audio", 2.5);
 
-    let summary = await getAiUsageSummary();
+    let summary = await getAiExperienceUsageSummary();
     expect(
-      summary.find((row) => row.feature === "placement-listening-audio")!
+      summary.find((row) => row.feature === "experience:SHARED_AUDIO")!
         .dailyCapUsd,
     ).toBe(2.5);
 
     await setDailyUsageCap("placement-listening-audio", 5);
-    summary = await getAiUsageSummary();
+    summary = await getAiExperienceUsageSummary();
     expect(
-      summary.find((row) => row.feature === "placement-listening-audio")!
+      summary.find((row) => row.feature === "experience:SHARED_AUDIO")!
         .dailyCapUsd,
     ).toBe(5);
   });
@@ -238,6 +236,7 @@ describe("AI usage logging + daily caps (2026-09-05, integration, real database)
     await recordAiUsage({
       userId: userA.id,
       feature: "han-speech",
+      experience: "HAN_TUTOR",
       provider: "openai",
       model: "gpt-4o-mini-tts",
       estimatedCostUsd: 0.01,
@@ -245,6 +244,7 @@ describe("AI usage logging + daily caps (2026-09-05, integration, real database)
     await recordAiUsage({
       userId: userB.id,
       feature: "han-speech",
+      experience: "HAN_TUTOR",
       provider: "openai",
       model: "gpt-4o-mini-tts",
       estimatedCostUsd: 0.02,

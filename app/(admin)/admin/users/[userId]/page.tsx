@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isRealtimeUsageFeature } from "@/lib/realtime-usage";
 import { notFound } from "next/navigation";
 import {
   Activity,
@@ -66,6 +67,7 @@ function formatProfileList(values: string[] | undefined): string {
 }
 
 function formatAiEvidence(entry: {
+  feature: string;
   calculationMethod: "TOKEN_RATES" | "PER_MINUTE" | "LEGACY_ESTIMATE";
   inputTokens: number | null;
   outputTokens: number | null;
@@ -75,6 +77,9 @@ function formatAiEvidence(entry: {
   durationSeconds: number | null;
   durationSource: string | null;
 }): string {
+  if (isRealtimeUsageFeature(entry.feature)) {
+    return "Estimación por sesión; sin medición de tokens de voz";
+  }
   if (entry.calculationMethod === "PER_MINUTE") {
     const duration = entry.durationSeconds
       ? `${(entry.durationSeconds / 60).toFixed(2)} min`
@@ -425,7 +430,7 @@ export default async function AdminUserDetailPage({
       <section className="rounded-panel border border-border bg-surface">
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-display text-section-title font-semibold">
-            Costo de IA por función · este mes
+            Costo de IA por experiencia · este mes
           </h2>
           <p className="mt-1 font-interface text-caption text-text-muted">
             Estimación interna del usuario. Tokens y minutos solo aparecen
@@ -436,7 +441,7 @@ export default async function AdminUserDetailPage({
           <table className="w-full min-w-[760px] text-left font-interface text-supporting">
             <thead className="bg-elevated text-caption uppercase tracking-wide text-text-muted">
               <tr>
-                <th className="px-5 py-3">Función</th>
+                <th className="px-5 py-3">Experiencia</th>
                 <th className="px-5 py-3 text-right">Solicitudes</th>
                 <th className="px-5 py-3 text-right">Tokens</th>
                 <th className="px-5 py-3 text-right">Audio</th>
@@ -448,9 +453,6 @@ export default async function AdminUserDetailPage({
                 <tr key={row.feature} className="border-t border-border">
                   <td className="px-5 py-3">
                     <span className="block font-semibold">{row.label}</span>
-                    <span className="text-caption text-text-muted">
-                      {row.feature}
-                    </span>
                   </td>
                   <td className="px-5 py-3 text-right">{row.calls}</td>
                   <td className="px-5 py-3 text-right">

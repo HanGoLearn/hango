@@ -17,8 +17,8 @@ import userEvent from "@testing-library/user-event";
 // Same pattern as tests/component/shell.test.tsx: next/navigation and the
 // AI Teacher server actions pull in next-auth (-> next/server), which
 // Vitest's jsdom environment can't resolve the way Next's own bundler does.
-// GrammarScreenCard always renders AskAiButton (for the explanation screen),
-// which reaches this chain through AiTeacherProvider/useAiTeacher.
+// The pagination test wrapper includes AiTeacherProvider, which reaches this
+// chain through its server actions. Grammar itself no longer needs that provider.
 vi.mock("next/navigation", () => ({
   usePathname: () => "/es/lesson/test-lesson",
 }));
@@ -38,6 +38,7 @@ import { LessonDisplayPrefsProvider } from "@/components/lesson/lesson-display-p
 import { AiTeacherProvider } from "@/components/ai-teacher/ai-teacher-provider";
 import { GrammarStep } from "@/components/lesson/steps/grammar-step";
 import { messages as spanishMessages } from "@/i18n/messages/es";
+import { messages as englishMessages } from "@/i18n/messages/en";
 import { submitExerciseAttemptsAction } from "@/lib/actions/exercise-progress";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 
@@ -125,6 +126,38 @@ function renderGrammarStep(onContinue = vi.fn()) {
 }
 
 describe("GrammarStep pagination", () => {
+  it.each([
+    ["es", spanishMessages.lesson],
+    ["en", englishMessages.lesson],
+  ] as const)(
+    "removes the grammar AI shortcut in %s while keeping explanations and exercises",
+    (_locale, messages) => {
+      render(
+        <LessonMessagesProvider messages={messages}>
+          <LessonDisplayPrefsProvider>
+            <GrammarStep grammar={buildGrammar()} onContinue={vi.fn()} />
+          </LessonDisplayPrefsProvider>
+        </LessonMessagesProvider>,
+      );
+
+      expect(screen.getByText("Explicación del punto 1.")).toBeInTheDocument();
+      expect(screen.getByText("S + V + O")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Opción A/ })).toBeEnabled();
+      expect(
+        screen.queryByRole("button", {
+          name: /Preguntar a la IA|Ask AI/i,
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Preguntar a la IA sobre este punto gramatical"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Ask AI about this grammar point"),
+      ).not.toBeInTheDocument();
+      expect(submitExerciseAttemptsAction).not.toHaveBeenCalled();
+    },
+  );
+
   it("does not crash walking through mixed exercise types and locks each answer in place", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({

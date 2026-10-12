@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { getAiProvider } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
+import { speakingExperience } from "@/lib/ai-experiences";
+import type { AiExperience } from "@/lib/ai-experiences";
 import {
   recordAiUsage,
   trackAiOperation,
@@ -21,6 +23,7 @@ const MAX_TRANSCRIPT_MESSAGES = 30;
 const MAX_MESSAGE_CHARACTERS = 600;
 
 type AssessmentRequest = {
+  surface?: unknown;
   rolePlay?: unknown;
   latestLearnerTranscript?: unknown;
   phase?: unknown;
@@ -68,12 +71,22 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400 },
     );
 
+  let experience: AiExperience;
+  try {
+    experience = speakingExperience(body?.surface, rolePlay.isFreeTopic);
+  } catch {
+    return Response.json(
+      { error: "Invalid Speaking surface" },
+      { status: 400 },
+    );
+  }
   try {
     const provider = getAiProvider();
     const result = await trackAiOperation(
       {
         userId: session.user.id,
         feature: "han-realtime-assessment",
+        experience,
         provider: provider.name,
       },
       () =>
@@ -109,6 +122,7 @@ export async function POST(request: Request): Promise<Response> {
     await recordAiUsage({
       userId: session.user.id,
       feature: "han-realtime-assessment",
+      experience,
       provider: result.provider,
       model: result.model,
       inputTokens: result.inputTokens,

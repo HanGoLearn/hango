@@ -8,16 +8,32 @@ import {
 } from "@/lib/ai-context";
 import { hskNumberForPoints } from "@/lib/points-system";
 import {
+  renderJourneySpeakingBanks,
+  type JourneySpeakingBanks,
+} from "@/lib/content/journey-speaking-bank-contract";
+import {
+  buildJourneySpeakingPolicy,
+  buildJourneyLanguageHelpInstruction,
+  type JourneySpeakingPhase,
+} from "@/lib/journey-speaking-policy";
+import {
+  buildSpeakingLearnerIdentityMemory,
+  isIntroductionSpeakingScene,
+} from "@/lib/speaking-scene";
+import {
   classifyHanPronunciationRequestLength,
   isExplicitPronunciationRequest,
+  isPronunciationDetailRequest,
 } from "@/lib/speech/han-pronunciation";
 import {
   buildHanTutorControlCommandInstruction,
   buildHanTutorSessionInstruction,
   buildHanTutorTaskGroundingInstruction,
   deriveHanTutorSessionPreferences,
+  detectExplicitHanTutorLanguageRequest,
   detectHanTutorResponseLanguage,
   HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY,
+  isHanTutorMeaningRequest,
 } from "@/lib/han-tutor-session";
 
 export type HanExplanationLanguage = "English" | "Spanish" | "Chinese";
@@ -35,7 +51,16 @@ export type PronunciationPracticeState = {
   target: string;
   attempts: number;
   completed: boolean;
+  /** Tutor-only, ephemeral: never reconstructed from a later mistaken reply. */
+  explanationLanguage?: HanExplanationLanguage;
+  referencePinyin?: string | null;
+  fullTarget?: string;
+  awaitingAttempt?: boolean;
+  needsClarification?: boolean;
 } | null;
+
+const TUTOR_NEW_STUDY_REQUEST =
+  /\b(?:explain|meaning|means|structure|grammar|use|using|think|understand|difference|explica|explícame|significa|estructura|gramática|utiliza|utilizar|quiero|quisiera|entiendo|diferencia)\b|(?:什么意思|语法|结构|怎么用|如何用)/iu;
 
 export function isNonSpeechNoiseTranscript(transcript: string): boolean {
   const normalized = transcript.trim().toLowerCase();
@@ -84,10 +109,7 @@ function isMutualIntroductionRolePlay(
   rolePlay: Pick<RealtimeRolePlay, "objective"> &
     Partial<Pick<RealtimeRolePlay, "aiRole" | "scenarioContext">>,
 ): boolean {
-  const roleContext = `${rolePlay.aiRole ?? ""} ${rolePlay.scenarioContext ?? ""} ${rolePlay.objective}`;
-  return /\b(?:new classmate|meet(?:ing)? (?:someone|a person|a classmate) new|meet(?:ing)? for the first time|exchange names?|introduc(?:e|ing|tion)|ask(?:s|ing)? (?:for )?(?:their|your|someone'?s) name)\b/iu.test(
-    roleContext,
-  );
+  return isIntroductionSpeakingScene(rolePlay);
 }
 
 type RealtimeRolePlay = {
@@ -1133,7 +1155,10 @@ export function shouldHoldRealtimeLearnerAction(
   );
 }
 
-function lessonLanguageConstraints(rolePlay: RealtimeRolePlay): string[] {
+function lessonLanguageConstraints(
+  rolePlay: RealtimeRolePlay,
+  journeyPractice = false,
+): string[] {
   // A true beginner (HSK1-2, no explicit level override) has only seen the
   // words/patterns this specific lesson taught - "prefer" isn't strict
   // enough, since the model will otherwise reach for other simple-but-untaught
@@ -1142,9 +1167,10 @@ function lessonLanguageConstraints(rolePlay: RealtimeRolePlay): string[] {
     !rolePlay.level &&
     (rolePlay.lessonHskLevel ?? 0) > 0 &&
     (rolePlay.lessonHskLevel ?? 0) <= 2;
-  const vocabularyConstraint = isEarlyBeginner
-    ? `Use ONLY words and grammar already studied in this lesson - do not introduce any other word or pattern, even a supposedly simple one, unless the learner uses it first. Vocabulary: ${rolePlay.lessonVocabulary?.join(", ") || "the words taught in this lesson"}. Patterns: ${rolePlay.lessonGrammar?.join("; ") || "single-clause beginner patterns"}. Studied sentence bank: ${rolePlay.lessonPhrases?.join(" / ") || "not provided"}. Recombine familiar building blocks naturally; do not replay the reference dialogue as a sequence.`
-    : `Prefer only this lesson vocabulary: ${rolePlay.lessonVocabulary?.join(", ") || "the simplest words required by the scenario"}. Prefer only these lesson patterns: ${rolePlay.lessonGrammar?.join("; ") || "single-clause beginner patterns"}.`;
+  const vocabularyConstraint =
+    isEarlyBeginner && !journeyPractice
+      ? `Use ONLY words and grammar already studied in this lesson - do not introduce any other word or pattern, even a supposedly simple one, unless the learner uses it first. Vocabulary: ${rolePlay.lessonVocabulary?.join(", ") || "the words taught in this lesson"}. Patterns: ${rolePlay.lessonGrammar?.join("; ") || "single-clause beginner patterns"}. Studied sentence bank: ${rolePlay.lessonPhrases?.join(" / ") || "not provided"}. Recombine familiar building blocks naturally; do not replay the reference dialogue as a sequence.`
+      : `Prefer only this lesson vocabulary: ${rolePlay.lessonVocabulary?.join(", ") || "the simplest words required by the scenario"}. Prefer only these lesson patterns: ${rolePlay.lessonGrammar?.join("; ") || "single-clause beginner patterns"}.`;
 
   const constraints = [
     vocabularyConstraint,
@@ -1176,10 +1202,13 @@ export function buildRealtimeTurnInstructions(
   mode: AiTeacherMode = "TUTOR",
   rolePlayTurnStrategy: "assessed" | "direct" = "assessed",
   conversationTranscript: readonly RealtimeTranscriptMessage[] = [],
+  practiceState: PronunciationPracticeState = null,
+  journeyPhase?: JourneySpeakingPhase,
+  journeyBanks?: JourneySpeakingBanks,
 ): string {
   const pronunciationProgress = progress
     ? progress.status === "accepted"
-      ? `PRONUNCIATION PASS: the learner's transcript matched at least ${Math.round(PRONUNCIATION_ACCEPTANCE_THRESHOLD * 100)}% of ${progress.target}. This threshold is authoritative for exercise flow: accept the attempt and NEVER ask for ${progress.target} or one of its syllables again, even if you hear a minor imperfection. In at most 18 spoken words, name one concrete success and immediately give ONE different, nearby Mandarin target to repeat; if no useful next target exists, end the drill. Do not explain meaning, translate, speak pinyin, restate a tone lesson, or add any example beyond that single next target.`
+      ? `PRONUNCIATION PASS: the learner's transcript matched at least ${Math.round(PRONUNCIATION_ACCEPTANCE_THRESHOLD * 100)}% of ${progress.target}. This threshold is authoritative for exercise flow only: accept the attempt and NEVER ask for ${progress.target} or one of its syllables again. Recognition similarity is NOT an acoustic score and does not prove correct tones, syllables, or rhythm. In at most 18 spoken words, acknowledge that the word was recognized and close this target. You may clearly introduce ONE different, nearby Mandarin target if it serves the learner's requested practice; do not automatically start an unrelated syllable drill. Do not explain meaning, translate, speak pinyin, restate a tone lesson, or add any example beyond that single next target.`
       : progress.status === "max_attempts"
         ? `PRONUNCIATION STOP: after four guided attempts, ${progress.target} still did not reach the recognition threshold. End this target now. In at most 18 spoken words, give one kind reset cue and move to a different target or normal conversation. Do not request another repetition, translate, speak pinyin, or add examples.`
         : `ACTIVE PRONUNCIATION DRILL: attempt ${progress.attempts} of at most 4 for ${progress.target} did not reach the recognition threshold. This instruction overrides Tutor's normal broad teaching structure. Respond with at most 25 spoken words and exactly this pattern: ONE high-confidence sound/tone/rhythm cue, ONE natural demonstration of ${progress.target}, then ONE direct request to repeat. Choose a mismatched or missing portion first; a syllable already recognized in its correct position is not the default correction target. Never repeat the previous turn's syllable correction when the current transcript already recognizes it. Do not explain meaning, translate, speak pinyin, give another Mandarin example, ask a meta-question, or praise at length. If the audio does not support a specific acoustic diagnosis, briefly contrast what the transcript captured with the target instead of inventing an error. On attempt 3 you may demonstrate once slowly and once naturally, still within the same short reply.`
@@ -1203,26 +1232,44 @@ export function buildRealtimeTurnInstructions(
       ? { ...rolePlay, level: sessionLevelOverride }
       : rolePlay;
     const tutorMode = effectiveRolePlay.correctionMode === "tutor";
+    const journeyHelp = journeyPhase
+      ? buildJourneyLanguageHelpInstruction(
+          learnerTranscript ?? "",
+          requiredLanguage,
+        )
+      : null;
     const usesTimedConversationMemory = rolePlayTurnStrategy === "direct";
     const recentDialogueMemory = compactRecentDialogue(conversationTranscript);
     const learnerNameEvidence = findLearnerNameEvidence(conversationTranscript);
     const mutualIntroduction = isMutualIntroductionRolePlay(effectiveRolePlay);
+    const learnerIdentityMemory = usesTimedConversationMemory
+      ? buildSpeakingLearnerIdentityMemory(conversationTranscript)
+      : null;
     return [
-      `You are currently playing ${effectiveRolePlay.aiRole}; the learner is ${effectiveRolePlay.learnerRole}.`,
+      usesTimedConversationMemory
+        ? `You are currently playing ${effectiveRolePlay.aiRole}. The learner's suggested starting role is ${effectiveRolePlay.learnerRole}; their later explicit self-description is authoritative for their own identity.`
+        : `You are currently playing ${effectiveRolePlay.aiRole}; the learner is ${effectiveRolePlay.learnerRole}.`,
       `The active scenario is: ${effectiveRolePlay.scenarioContext}.`,
       `The active goal is: ${effectiveRolePlay.objective}.`,
       effectiveRolePlay.isFreeTopic
         ? "SCENE CONTRACT: The learner-authored topic and details are binding, not a loose theme. Resolve the roles exactly once: second-person 'you/eres/你' in the setup describes your character and first-person 'I/yo/我' describes the learner. If an explicit character role was selected, it remains authoritative. Keep one location, relationship, and current activity for the entire conversation."
         : null,
       buildSessionLevelInstruction(sessionLevelOverride),
-      ...lessonLanguageConstraints(effectiveRolePlay),
+      ...lessonLanguageConstraints(effectiveRolePlay, Boolean(journeyPhase)),
+      ...(journeyPhase && journeyBanks
+        ? [renderJourneySpeakingBanks(journeyBanks)]
+        : []),
       "Respond only as that character inside this scenario.",
-      `Respect role ownership every turn, not only the opening: you are ${effectiveRolePlay.aiRole}, not ${effectiveRolePlay.learnerRole}. Never produce the specific learner-owned action or message named by the goal. This is not a ban on all character questions: ask other new, relevant character-side questions when they make the exchange natural, provided they neither repeat a known fact nor say the learner's target content for them.`,
+      `Respect speaker ownership every turn, not only the opening: speak as ${effectiveRolePlay.aiRole}, never on behalf of the learner. Sharing an occupation or status is allowed when actually established; role ownership does not mean the two people must have different occupations. Never produce the specific learner-owned action or message named by the goal. This is not a ban on all character questions: ask other new, relevant character-side questions when they make the exchange natural, provided they neither repeat a known fact nor say the learner's target content for them.`,
       usesTimedConversationMemory
         ? "Your character identity is immutable. Keep the occupation, status, relationship, name, nationality, and other personal facts established by the scenario or by your own earlier lines. A learner statement changes only the learner's facts, never yours."
         : null,
       usesTimedConversationMemory && recentDialogueMemory
         ? `COMPACT DIALOGUE MEMORY — ${recentDialogueMemory}. Treat every fact already supplied by either speaker as known, including names, origin, nationality, role, occupation, age, preferences, family, plans, times, places, choices, and reasons. Before asking any explicit question OR saying 你呢？, resolve the information it requests and verify its answer is not already present here. If known, that question is forbidden; react to it and choose one new relevant question or statement instead.`
+        : null,
+      learnerIdentityMemory,
+      usesTimedConversationMemory && learnerTranscript
+        ? `LATEST LEARNER TURN — ${JSON.stringify(learnerTranscript)}. Conversation priorities, in order: answer or react to THIS turn; preserve established speaker-specific facts; then create a relevant opportunity for lesson practice. The lesson objective is not a script and never justifies ignoring a new learner question or looping back to a previously asked question.`
         : null,
       effectiveRolePlay.isFreeTopic && recentDialogueMemory
         ? "SCENE CONTINUITY: Infer what is happening now from the scene contract and compact dialogue memory, then continue from that exact moment. Answer or react to the learner's latest move before adding one logical next beat. Never restart an introduction, re-announce that an activity will begin after it already began, jump to an unrelated activity or location, or alternate incoherently between actions such as walking and starting class."
@@ -1245,7 +1292,9 @@ export function buildRealtimeTurnInstructions(
           ? "This is a mutual introduction, but the learner has ALREADY supplied their name. When you state your own name, do not append 你呢？ and do not ask for theirs again. Keep contributing naturally: if another relevant introduction fact about the learner is still unknown and the lesson language supports it, ask one short new question about that fact; otherwise give a brief statement that creates room for the learner's next objective move."
           : "This is genuinely a mutual introduction. After you contribute your own corresponding fact, a short reciprocal cue such as 你呢？ is allowed only because the learner has not given that fact yet."
         : "This is not an introduction exercise. Never ask the learner's name, where they are from, or another generic getting-to-know-you question unless the active scenario or objective explicitly requires it. Keep every question tied to the lesson topic.",
-      learnerTranscript && isLikelyRealtimeLearnerQuestion(learnerTranscript)
+      learnerTranscript &&
+      !journeyHelp &&
+      isLikelyRealtimeLearnerQuestion(learnerTranscript)
         ? effectiveRolePlay.isFreeTopic
           ? `The learner just asked this question: ${JSON.stringify(learnerTranscript)}. Answer it directly in-character now. Give the actual answer before any other scene move; do not replace the answer with a question back.`
           : learnerNameEvidence &&
@@ -1255,7 +1304,10 @@ export function buildRealtimeTurnInstructions(
         : null,
       tutorMode
         ? `Reply in-character in Mandarin first. Then, only if the learner's last turn had a clear pronunciation, tone, grammar, or word-choice mistake, briefly switch to ${requiredLanguage} and give one short, specific correction: what they said, what's correct, and how to say it. Keep the correction to one or two sentences, then let the conversation continue naturally. Skip the correction entirely when there was no clear mistake - never invent one.`
-        : "Output Mandarin Chinese only. Do not use English, Spanish, pinyin, translations, explanations, corrections, pronunciation feedback, or tutoring comments.",
+        : journeyPhase
+          ? (journeyHelp ??
+            `Stay in character in Mandarin by default. A request for help or an expression of not understanding pauses immersion: explain briefly in ${requiredLanguage === "Chinese" ? "the learner's explicitly requested Spanish or English, or the session help language" : requiredLanguage}. Do not ignore it or answer with another Mandarin question. Resume the scene once the learner is ready. No unsolicited correction or pronunciation drills.`)
+          : "Output Mandarin Chinese only. Do not use English, Spanish, pinyin, translations, explanations, corrections, pronunciation feedback, or tutoring comments.",
       "Speak standard Mainland Mandarin (Putonghua) with natural Chinese tones and rhythm. Never speak or imitate Korean and never use Korean pronunciation or intonation.",
       effectiveRolePlay.isFreeTopic
         ? "Match the requested persona and emotional energy in your voice on every turn. An argument or disagreement should sound naturally firm, terse, and annoyed when appropriate, not friendly and neutral; never become abusive or unsafe."
@@ -1263,16 +1315,19 @@ export function buildRealtimeTurnInstructions(
       effectiveRolePlay.isFreeTopic
         ? "Sound like spontaneous everyday Mandarin between real people, not a vocabulary drill, scripted questionnaire, or lesson narration. Respond to this exact moment, leave space for the learner, and never add tutoring filler merely to sound helpful."
         : null,
-      pronunciationProgress,
       effectiveRolePlay.level === "Pre-HSK"
         ? "This learner is Pre-HSK. Say exactly one tiny, immediately usable Mandarin phrase per turn, no more than 8 Chinese characters. Use only the most basic words; never give multiple facts, alternatives, examples, explanations, or more than one question."
-        : `Use at most two very short sentences${effectiveRolePlay.level ? ` at the ${effectiveRolePlay.level} level` : ", beginner-level"}, no more than ${realtimeRolePlayCharacterLimit(effectiveRolePlay)} Chinese characters total. Make one coherent conversational move: a direct reaction or answer, optionally followed by one short reciprocal cue. Never produce a list of questions or several teaching points.`,
+        : journeyPhase
+          ? "Normally use one or two short sentences and one coherent conversational move: a direct reaction or answer, with at most one easy optional question when useful. A requested hint stays tiny; never read a list or several teaching points. Do not compress or truncate the learner's chosen longer phrase to satisfy a character count."
+          : `Use at most two very short sentences${effectiveRolePlay.level ? ` at the ${effectiveRolePlay.level} level` : ", beginner-level"}, no more than ${realtimeRolePlayCharacterLimit(effectiveRolePlay)} Chinese characters total. Make one coherent conversational move: a direct reaction or answer, optionally followed by one short reciprocal cue. Never produce a list of questions or several teaching points.`,
       "If the learner only says nihao or 你好, accept it naturally and continue the scene. Do not greet as Han or ask what they want to practice.",
       "Never reproduce the lesson's reference dialogue verbatim. Keep the exchange natural and guide it toward the active goal.",
       rolePlayTurnStrategy === "direct"
-        ? effectiveRolePlay.isFreeTopic
-          ? "Continue this one live scene directly from the shared session history. Preserve its established roles, place, activity, and causal sequence; stay responsive and relaxed. The application timer, not this turn, decides when to close."
-          : `Continue directly from the shared session history toward this objective: ${effectiveRolePlay.objective}. During the available time, create one natural opportunity at a time for the learner to use lesson vocabulary or grammar they have not yet attempted. Never name a target, coach the answer, or turn the scene into an oral exam. The application timer, not objective completion, decides when to close.`
+        ? journeyPhase
+          ? buildJourneySpeakingPolicy(journeyPhase)
+          : effectiveRolePlay.isFreeTopic
+            ? "Continue this one live scene directly from the shared session history. Preserve its established roles, place, activity, and causal sequence; stay responsive and relaxed. The application timer, not this turn, decides when to close."
+            : `Continue directly from the shared session history toward this objective: ${effectiveRolePlay.objective}. During the available time, create one natural opportunity at a time for the learner to use lesson vocabulary or grammar they have not yet attempted. Never name a target, coach the answer, or turn the scene into an oral exam. The application timer, not objective completion, decides when to close.`
         : effectiveRolePlay.isFreeTopic
           ? "The separate completion check already decided this exchange should continue. Add exactly one natural new thing; do not wrap up merely because the conversation is short or long."
           : `The separate completion check already found that the exact objective is not complete: ${effectiveRolePlay.objective}. Continue with exactly one useful next step toward it, never a filler question.`,
@@ -1328,6 +1383,13 @@ export function buildRealtimeTurnInstructions(
     pronunciationProgress,
     mode === "TUTOR"
       ? buildHanTutorControlCommandInstruction(learnerTranscript)
+      : null,
+    mode === "TUTOR"
+      ? buildTutorPronunciationIdentityInstruction(
+          practiceState,
+          effectiveRequiredLanguage,
+          learnerTranscript,
+        )
       : null,
   ]
     .filter(Boolean)
@@ -1435,21 +1497,82 @@ export function advancePronunciationPractice(
   learnerTranscript: string,
   history: readonly { role: "user" | "assistant"; content: string }[],
   previousState: PronunciationPracticeState,
+  explanationLanguage?: HanExplanationLanguage,
 ): {
   state: PronunciationPracticeState;
   progress: PronunciationPracticeProgress | null;
 } {
+  if (
+    isExplicitPronunciationRequest(learnerTranscript) &&
+    !isPronunciationDetailRequest(learnerTranscript)
+  ) {
+    const target = exactRequestedMandarinTarget(learnerTranscript);
+    return {
+      state: target
+        ? newTutorPronunciationTarget(target, explanationLanguage)
+        : {
+            target: "",
+            attempts: 0,
+            completed: false,
+            explanationLanguage,
+            needsClarification: true,
+          },
+      progress: null,
+    };
+  }
+  if (
+    detectExplicitHanTutorLanguageRequest(learnerTranscript) &&
+    !TUTOR_NEW_STUDY_REQUEST.test(learnerTranscript) &&
+    !isHanTutorMeaningRequest(learnerTranscript)
+  )
+    return { state: previousState, progress: null };
+  if (previousState?.needsClarification) {
+    if (
+      isHanTutorMeaningRequest(learnerTranscript) ||
+      /(?:estructura|grammar|gramática|语法|结构|怎么用|如何用)/iu.test(
+        learnerTranscript,
+      )
+    )
+      return { state: null, progress: null };
+    const selected =
+      exactRequestedMandarinTarget(learnerTranscript) ??
+      (/^[\p{Script=Han}。？！\s]+$/u.test(learnerTranscript)
+        ? learnerTranscript.match(/\p{Script=Han}+/gu)?.join("")
+        : null);
+    if (selected)
+      return {
+        state: newTutorPronunciationTarget(
+          selected,
+          explanationLanguage ?? previousState.explanationLanguage,
+        ),
+        progress: null,
+      };
+    return { state: previousState, progress: null };
+  }
+  const target = previousState?.target ?? findPromptedMandarinTarget(history);
+  const isTargetAttempt =
+    target != null && isTutorTargetAttempt(learnerTranscript, target);
   // A substantive carrier-language turn or a question starts a new request,
   // even if Han's preceding reply happened to contain a repetition cue.
   // Pure Mandarin/pinyin attempts and short acknowledgements remain eligible.
-  const isNewStudyRequest =
-    /\b(?:explain|meaning|means|structure|grammar|use|using|think|understand|difference|explica|explícame|significa|estructura|gramática|utiliza|utilizar|quiero|quisiera|entiendo|diferencia)\b|(?:什么意思|语法|结构|怎么用|如何用)/iu.test(
-      learnerTranscript,
-    );
-  if (isNewStudyRequest || isLikelyRealtimeLearnerQuestion(learnerTranscript))
+  const isNewStudyRequest = TUTOR_NEW_STUDY_REQUEST.test(learnerTranscript);
+  if (
+    !isTargetAttempt &&
+    (isNewStudyRequest ||
+      isHanTutorMeaningRequest(learnerTranscript) ||
+      isLikelyRealtimeLearnerQuestion(learnerTranscript))
+  )
     return { state: null, progress: null };
-  const target = findPromptedMandarinTarget(history);
   if (!target) return { state: null, progress: null };
+  if (
+    previousState?.completed &&
+    (learnerTranscript.match(/\p{Script=Han}/gu)?.length ?? 0) >= 4 &&
+    mandarinTargetSimilarity(learnerTranscript, target) < 0.5
+  ) {
+    return { state: null, progress: null };
+  }
+  // A language/pace control is not an attempt, and must not reset the target.
+  if (!isTargetAttempt) return { state: previousState, progress: null };
 
   if (previousState?.target === target && previousState.completed) {
     // Once a target passes (or reaches the attempt cap), it is closed. Even if
@@ -1472,9 +1595,183 @@ export function advancePronunciationPractice(
   const completed = status !== "retry";
 
   return {
-    state: { target, attempts, completed },
+    state: {
+      ...previousState,
+      target,
+      attempts,
+      completed,
+      awaitingAttempt: !completed,
+    },
     progress: { target, attempts, similarity, status },
   };
+}
+
+const TUTOR_REFERENCE_PINYIN: Readonly<Record<string, string>> = {
+  吧: "ba (neutral tone)",
+  吗: "ma (neutral tone, question particle)",
+  妈: "mā (first tone, mother)",
+  八: "bā (first tone)",
+  把: "bǎ (third lexical tone)",
+  被: "bèi (fourth tone)",
+};
+
+function newTutorPronunciationTarget(
+  target: string,
+  explanationLanguage?: HanExplanationLanguage,
+): NonNullable<PronunciationPracticeState> {
+  return {
+    target,
+    fullTarget: target,
+    referencePinyin: TUTOR_REFERENCE_PINYIN[target] ?? null,
+    explanationLanguage,
+    attempts: 0,
+    completed: false,
+    awaitingAttempt: false,
+  };
+}
+
+function exactRequestedMandarinTarget(message: string): string | null {
+  const quoted = message
+    .match(/[“"「]([\p{Script=Han}，。！？、；：\s]+)[”"」]/u)?.[1]
+    ?.trim();
+  if (quoted) return quoted;
+  // Unquoted all-Chinese requests contain instructions as well as study content.
+  // Do not guess which of those characters is the target.
+  if (!/[a-záéíóúñ]/iu.test(message)) return null;
+  const expressions =
+    message.match(/\p{Script=Han}+(?:[，。！？、；：\s]+\p{Script=Han}+)*/gu) ??
+    [];
+  return expressions.length === 1 ? expressions[0]! : null;
+}
+
+function isTutorTargetAttempt(message: string, target: string): boolean {
+  const value = message.trim();
+  const pureMandarin = /^[\p{Script=Han}\p{Punctuation}\s]+$/u.test(value);
+  const purePinyin =
+    /^[a-züāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ1-5\p{Punctuation}\s]+$/iu.test(value);
+  if (!pureMandarin && !purePinyin) return false;
+  if (purePinyin && TUTOR_NEW_STUDY_REQUEST.test(value)) return false;
+  if (mandarinTargetSimilarity(value, target) >= 0.5) return true;
+  if (
+    isHanTutorMeaningRequest(value) ||
+    /(?:语法|结构|怎么用|如何用)/u.test(value)
+  )
+    return false;
+  if (!isLikelyRealtimeLearnerQuestion(value)) return true;
+  if (
+    purePinyin &&
+    !isLikelyRealtimeLearnerQuestion(value.replace(/[?？]/gu, ""))
+  )
+    return true;
+  // Short interrogative syllables are also drill targets, not language changes.
+  const count = value.match(/\p{Script=Han}/gu)?.length ?? 0;
+  return (
+    pureMandarin && count <= 2 && !/(?:什么|怎么|为什么|谁|哪里)/u.test(value)
+  );
+}
+
+/** Register once after Han demonstrates a target. Active identity is immutable;
+ * only a closed target plus a clearly announced next step can replace it. */
+export function rememberTutorPronunciationResponse(
+  assistantMessage: string,
+  previousState: PronunciationPracticeState,
+  explanationLanguage: HanExplanationLanguage,
+): PronunciationPracticeState {
+  // Until the learner identifies the character, an assistant guess is not evidence.
+  if (previousState?.needsClarification) return previousState;
+  const target = findPromptedMandarinTarget([
+    { role: "assistant", content: assistantMessage },
+  ]);
+  if (!target) return previousState;
+  if (previousState && !previousState.completed) {
+    const isInitialChunk =
+      previousState.awaitingAttempt === false &&
+      previousState.attempts === 0 &&
+      (previousState.fullTarget?.length ?? 0) > 12 &&
+      previousState.fullTarget!.includes(target);
+    if (target !== previousState.target && !isInitialChunk)
+      return previousState;
+    return {
+      ...previousState,
+      target,
+      referencePinyin: TUTOR_REFERENCE_PINYIN[target] ?? null,
+      awaitingAttempt: true,
+    };
+  }
+  if (previousState) {
+    if (target === previousState.target) return previousState;
+    if (
+      !/\b(?:next|another|different)\s+(?:word|target|phrase|syllable|sound|one|chunk)\b|\b(?:siguiente|otra|otro|nueva|nuevo)\s+(?:palabra|frase|sílaba|sonido|objetivo|grupo)\b|(?:ahora|now)\s+(?:vamos\s+con|practiquemos|practica|try|practice)\b|(?:seguimos|vamos|pasemos)\s+(?:con|a)\s*[:“"]?\p{Script=Han}|(?:接下来|下一个|另一)/iu.test(
+        assistantMessage,
+      )
+    )
+      return previousState;
+    if (
+      (previousState.fullTarget?.length ?? 0) > 12 &&
+      !previousState.fullTarget!.includes(target)
+    )
+      return previousState;
+  }
+  return {
+    ...newTutorPronunciationTarget(target, explanationLanguage),
+    fullTarget: previousState?.fullTarget?.includes(target)
+      ? previousState.fullTarget
+      : target,
+    awaitingAttempt: true,
+  };
+}
+
+function buildTutorPronunciationIdentityInstruction(
+  state: PronunciationPracticeState,
+  language: HanExplanationLanguage,
+  latestMessage?: string,
+): string | null {
+  if (
+    state?.target &&
+    !state.needsClarification &&
+    latestMessage &&
+    isHanTutorMeaningRequest(latestMessage)
+  ) {
+    const suppliedItems: string[] =
+      latestMessage.match(/\p{Script=Han}+/gu) ?? [];
+    if (suppliedItems.length > 0 && !suppliedItems.includes(state.target))
+      return null;
+    return `PAUSED TUTOR PRACTICE: the exact previously established study item is ${JSON.stringify(state.target)}. Answer its requested meaning in ${language}, not a homophone from an earlier mistaken assistant reply. Do not continue the drill or request another repetition. This turn is an explanation, not pronunciation grading.`;
+  }
+  if (
+    !state &&
+    latestMessage &&
+    isExplicitPronunciationRequest(latestMessage) &&
+    !isPronunciationDetailRequest(latestMessage)
+  ) {
+    const target = exactRequestedMandarinTarget(latestMessage);
+    if (target) state = newTutorPronunciationTarget(target, language);
+  }
+  if (state && !state.needsClarification)
+    return [
+      `AUTHORITATIVE TUTOR PRACTICE STATE: exact target = ${JSON.stringify(state.target)}; explanation language = ${language}; status = ${state.completed ? "closed" : "active"}. This state overrides conflicting words in earlier assistant replies.`,
+      state.referencePinyin
+        ? `Reference pronunciation: ${state.referencePinyin}. This is lexical reference, NOT evidence of the learner's actual tones.`
+        : "No verified phonetic reference is available here. Do not invent a tone diagnosis from the transcript.",
+      state.completed
+        ? "Never reopen this target. If continuing the requested practice, explicitly announce the different next target before demonstrating it."
+        : state.awaitingAttempt === false && state.target.length > 12
+          ? `The complete requested phrase is ${state.target}. For the first turn you may select one short exact contiguous chunk from this phrase; do not invent or substitute characters. After demonstrating that chunk, keep it as the current target until it closes.`
+          : `Keep demonstrating ${state.target}, not a similar-sounding word. In particular 吗 and 妈 are different targets, never interchangeable. A repeated target with question punctuation is a practice attempt, not permission to change language.`,
+      state.fullTarget && state.fullTarget !== state.target
+        ? `Complete requested phrase: ${state.fullTarget}. Subsequent chunks must come from this exact phrase, not unrelated syllables.`
+        : null,
+      `Keep all coaching in ${language}; only the Mandarin practice material is Chinese. Similarity measures recognition only, never tone accuracy.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  if (
+    !state?.needsClarification &&
+    (!isExplicitPronunciationRequest(latestMessage) ||
+      isPronunciationDetailRequest(latestMessage))
+  )
+    return null;
+  return `PRONUNCIATION TARGET CLARIFICATION: no single exact Mandarin target has been established. This clarification overrides demonstration and drill instructions for this turn. Untoned romanization such as ba can mean 吧, 八, or 把. Ask one short clarification in ${language} before choosing a character or starting a drill. Do not silently select a homophone or accept an earlier assistant guess as learner confirmation.`;
 }
 
 function findPromptedMandarinTarget(
@@ -1488,20 +1785,20 @@ function findPromptedMandarinTarget(
   // Only create a drill when Han actually asked for a pronunciation attempt.
   // This prevents ordinary role-play replies from being counted as drills.
   if (
-    !/\b(?:repeat|try|say|pronounce|repite|intenta|inténtalo|di|pronuncia)\b|(?:再说|再试|跟我|试着说|读一遍)/iu.test(
+    !/\b(?:repeat|try|say|pronounce|repite|intenta|intentar|inténtalo|di|decirlo|pronuncia)\b|(?:再说|再试|跟我|试着说|读一遍)/iu.test(
       previousAssistant.content,
     )
   )
     return null;
 
   const promptedAfterCue = previousAssistant.content.match(
-    /(?:repeat|try|say|pronounce|repite|intenta|inténtalo|di|pronuncia|再说|再试|跟我|试着说|读一遍)[^\p{Script=Han}]{0,80}(\p{Script=Han}{1,12})/iu,
+    /(?:repeat|try|say|pronounce|repite|intenta|inténtalo|di|pronuncia|再说|再试|跟我|试着说|读一遍)[^\p{Script=Han}]{0,80}(\p{Script=Han}{1,48}(?:[，、\s]+\p{Script=Han}{1,48})*)/iu,
   )?.[1];
   if (promptedAfterCue) return promptedAfterCue;
 
   const safeCandidates = [
     ...new Set(previousAssistant.content.match(/\p{Script=Han}+/gu) ?? []),
-  ].filter((candidate) => candidate.length <= 12);
+  ].filter((candidate) => candidate.length <= 48);
   return safeCandidates.at(-1) ?? null;
 }
 
@@ -1555,8 +1852,12 @@ function levenshteinDistance(left: string, right: string): number {
 export function buildRealtimeOpeningInstructions(
   rolePlay: RealtimeRolePlay,
 ): string {
-  if (rolePlay.openingLine?.trim()) {
-    const openingLine = rolePlay.openingLine.trim();
+  const openingLine =
+    rolePlay.openingLine?.trim() ||
+    (!rolePlay.isFreeTopic && isMutualIntroductionRolePlay(rolePlay)
+      ? "你好。"
+      : null);
+  if (openingLine) {
     return [
       `Start the scene now as ${rolePlay.aiRole}.`,
       `Output exactly ${JSON.stringify(openingLine)} and nothing else.`,
@@ -1602,29 +1903,31 @@ export function buildRealtimeOpeningTurnGuard(
   // create one short contextual opening for free-topic practice instead.
   if (rolePlay.isFreeTopic) return null;
   const roleContext = `${rolePlay.aiRole ?? ""} ${rolePlay.scenarioContext ?? ""} ${rolePlay.objective}`;
-  const opening =
-    /\b(?:tell(?:ing)? (?:the )?time|say(?:ing)? (?:a |the )?date|day and time|suggest(?:ing)? (?:a |the )?(?:day|time)|meet for coffee|when to meet|schedule|what time)\b/iu.test(
-      roleContext,
-    )
+  const opening = isMutualIntroductionRolePlay(rolePlay)
+    ? "你好。"
+    : /\b(?:tell(?:ing)? (?:the )?time|say(?:ing)? (?:a |the )?date|day and time|suggest(?:ing)? (?:a |the )?(?:day|time)|meet for coffee|when to meet|schedule|what time)\b/iu.test(
+          roleContext,
+        )
       ? "你明天忙吗？"
       : /\b(?:waiter|server|clerk|cashier|shop assistant|salesperson|restaurant|store|shop)\b/iu.test(
             roleContext,
           )
         ? "欢迎光临。"
-        : isMutualIntroductionRolePlay(rolePlay)
-          ? "你好，你叫什么名字？"
-          : /\b(?:doctor|nurse|clinic|hospital)\b/iu.test(roleContext)
-            ? "请坐。"
-            : /\b(?:passerby|staff|receptionist|front desk|information desk|directions?|asks?|asking|help)\b/iu.test(
-                  roleContext,
-                )
-              ? "请说。"
-              : "我们开始吧。";
+        : /\b(?:doctor|nurse|clinic|hospital)\b/iu.test(roleContext)
+          ? "请坐。"
+          : /\b(?:passerby|staff|receptionist|front desk|information desk|directions?|asks?|asking|help)\b/iu.test(
+                roleContext,
+              )
+            ? "请说。"
+            : "我们开始吧。";
   return `This opening is deterministic and contextual. Output exactly ${JSON.stringify(opening)} and nothing else. Your complete response must contain only these exact Chinese characters and punctuation: ${opening} Do not add a name, occupation, nationality, extra question, or second sentence.`;
 }
 
 export function buildRealtimeClosingInstructions(
   rolePlay: RealtimeRolePlay,
+  journeyTranscript?: readonly RealtimeTranscriptMessage[],
+  journeyBanks?: JourneySpeakingBanks,
+  helpLanguage: HanExplanationLanguage = "English",
 ): string {
   if (rolePlay.closingLine?.trim()) {
     const closingLine = rolePlay.closingLine.trim();
@@ -1637,12 +1940,29 @@ export function buildRealtimeClosingInstructions(
   return [
     `End the scene now naturally as ${rolePlay.aiRole}.`,
     `Scenario: ${rolePlay.scenarioContext}. Goal: ${rolePlay.objective}.`,
-    ...lessonLanguageConstraints(rolePlay),
-    "Output Mandarin Chinese only.",
+    ...lessonLanguageConstraints(rolePlay, Boolean(journeyTranscript)),
+    ...(journeyTranscript && journeyBanks
+      ? [renderJourneySpeakingBanks(journeyBanks)]
+      : []),
+    journeyTranscript
+      ? "Output Mandarin by default. Only if the unanswered last turn explicitly requests language help, one tiny Spanish or English hint is permitted before the Mandarin goodbye."
+      : "Output Mandarin Chinese only.",
     "Speak standard Mainland Mandarin (Putonghua), never Korean or Korean-accented Chinese.",
-    "This is the final audible line after the scene objective or natural endpoint was reached.",
-    "Use one very short sentence at the session's level that fits what just happened, such as confirming the outcome, thanking the learner, or saying goodbye in character.",
-    "Do not ask another question, introduce a new topic, explain, translate, correct, or mention that time is over.",
+    journeyTranscript
+      ? `This is a bounded final turn, not proof that the objective was achieved. Actual recent dialogue: ${compactRecentDialogue(journeyTranscript)}. If the last learner turn has not been answered, answer it briefly first, then say goodbye. Never confirm an order, agreement, identity or successful outcome not established by these speakers. Use at most two very short sentences, no final question, no new topic or teaching point.`
+      : "This is the final audible line after the scene objective or natural endpoint was reached.",
+    journeyTranscript
+      ? "Say goodbye briefly in character at the level actually understood; a brief pending answer may precede it. Thank the learner when appropriate, without inventing an outcome."
+      : "Use one very short sentence at the session's level that fits what just happened, such as confirming the outcome, thanking the learner, or saying goodbye in character.",
+    journeyTranscript
+      ? "Do not ask another question, introduce a new topic, give an unsolicited explanation, translation or correction, or mention that time is over."
+      : "Do not ask another question, introduce a new topic, explain, translate, correct, or mention that time is over.",
+    journeyTranscript?.at(-1)?.role === "user"
+      ? buildJourneyLanguageHelpInstruction(
+          journeyTranscript.at(-1)!.content,
+          helpLanguage,
+        )
+      : null,
   ].join(" ");
 }
 

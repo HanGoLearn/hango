@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { aiFeatureDescriptor } from "@/lib/ai-feature-catalog";
 import { AlertTriangle, Bot, ShieldCheck, UserRoundCog } from "lucide-react";
 import { AiUsageCapInput } from "@/components/admin/ai-usage-cap-input";
 import { AdminStatCard } from "@/components/admin/admin-stat-card";
 import { GlobalAiBudgetControl } from "@/components/admin/global-ai-budget-control";
 import {
   getAiUsageSummary,
+  getAiExperienceUsageSummary,
   getGlobalAiBudgetSummary,
   type GlobalAiBudgetAlertLevel,
 } from "@/lib/admin-ai-usage";
@@ -40,11 +42,12 @@ const ALERT_COPY: Record<
 };
 
 export default async function AdminLimitsPage() {
-  const [summary, globalBudget] = await Promise.all([
+  const [technical, summary, globalBudget] = await Promise.all([
     getAiUsageSummary(),
+    getAiExperienceUsageSummary(),
     getGlobalAiBudgetSummary(),
   ]);
-  const monthCost = summary.reduce(
+  const monthCost = technical.reduce(
     (total, item) => total + item.monthCostUsd,
     0,
   );
@@ -64,9 +67,9 @@ export default async function AdminLimitsPage() {
             Límites y uso de IA
           </h1>
           <p className="mt-1 max-w-3xl font-interface text-supporting text-text-secondary">
-            Costo estimado por cada función de OpenAI, TTS y transcripción. El
-            panel combina el presupuesto global del producto con límites
-            individuales por usuario y función.
+            Un presupuesto diario por experiencia: voz, texto y evaluación
+            descuentan del mismo saldo. Los nombres y consumos coinciden con
+            Analítica y con la ficha de cada usuario.
           </p>
         </div>
         <Link
@@ -168,7 +171,14 @@ export default async function AdminLimitsPage() {
 
       <p className="rounded-card border border-info-500/30 bg-info-500/10 px-4 py-3 font-interface text-supporting text-text-secondary">
         Estos son los límites generales. Una excepción configurada desde la
-        ficha 360° de un usuario tiene prioridad y no modifica a los demás.
+        ficha 360° de un usuario tiene prioridad y no modifica a los demás. La
+        burbuja de Han, Companion y cada Speaking son experiencias
+        independientes. Por ejemplo, US$2 para Han Tutor son US$2 compartidos
+        entre todas sus operaciones, no US$2 para cada una. Una sesión de voz
+        nueva descuenta US$0.05 estimados; las demás operaciones usan su costo
+        registrado. Cero bloquea nuevas llamadas de esa experiencia. El día
+        reinicia en UTC. Estos topes son sobre estimaciones, no máximos
+        garantizados de la factura.
       </p>
 
       <section className="grid gap-4 sm:grid-cols-3">
@@ -185,9 +195,9 @@ export default async function AdminLimitsPage() {
           icon={<ShieldCheck className="size-5" />}
         />
         <AdminStatCard
-          label="Funciones activas hoy"
+          label="Experiencias con uso hoy"
           value={activeFeatures}
-          detail={`De ${summary.length} funciones controladas`}
+          detail={`De ${summary.length} presupuestos compartidos`}
           icon={<AlertTriangle className="size-5" />}
         />
       </section>
@@ -196,7 +206,7 @@ export default async function AdminLimitsPage() {
         <table className="w-full min-w-[800px] border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-elevated font-interface text-caption font-semibold uppercase tracking-[0.08em] text-text-muted">
-              <th className="px-4 py-3">Función</th>
+              <th className="px-4 py-3">Experiencia</th>
               <th className="px-4 py-3">Hoy</th>
               <th className="px-4 py-3">Este mes</th>
               <th className="px-4 py-3">Límite diario por usuario</th>
@@ -206,15 +216,16 @@ export default async function AdminLimitsPage() {
             {summary.map((row) => (
               <tr
                 key={row.feature}
+                id={`ai-limit-${row.feature}`}
                 className="border-b border-border last:border-b-0"
               >
                 <td className="px-4 py-3 align-top">
                   <div className="font-interface text-body font-medium">
                     {row.label}
                   </div>
-                  <span className="font-interface text-caption text-text-muted">
-                    {row.feature}
-                  </span>
+                  <p className="mt-1 max-w-md font-interface text-caption text-text-muted">
+                    {row.description}
+                  </p>
                 </td>
                 <td className="px-4 py-3 align-top font-interface text-body">
                   {formatUsd(row.todayCostUsd)}
@@ -231,6 +242,7 @@ export default async function AdminLimitsPage() {
                 <td className="px-4 py-3 align-top">
                   <AiUsageCapInput
                     feature={row.feature}
+                    label={row.label}
                     initialValue={row.dailyCapUsd}
                   />
                 </td>
@@ -239,6 +251,46 @@ export default async function AdminLimitsPage() {
           </tbody>
         </table>
       </div>
+      <details className="rounded-panel border border-border bg-surface p-5">
+        <summary className="cursor-pointer font-interface font-semibold">
+          Avanzado: operaciones y políticas anteriores (solo lectura)
+        </summary>
+        <p className="mt-3 text-supporting text-text-muted">
+          No hay límites adicionales que configurar aquí. Los antiguos topes se
+          conservan como archivo; las nuevas llamadas usan el presupuesto
+          compartido de arriba. El histórico sin origen confirmado sigue
+          incluido en los totales, pero no se atribuye a una experiencia
+          inventada.
+        </p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[700px] text-left font-interface text-caption">
+            <thead>
+              <tr>
+                <th className="p-2">Operación técnica</th>
+                <th className="p-2">Hoy</th>
+                <th className="p-2">Mes</th>
+                <th className="p-2">Tope anterior archivado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {technical.map((row) => (
+                <tr key={row.feature} className="border-t border-border">
+                  <td className="p-2">
+                    {row.label}
+                    <p className="text-text-muted">
+                      {row.feature} ·{" "}
+                      {aiFeatureDescriptor(row.feature)?.description}
+                    </p>
+                  </td>
+                  <td className="p-2">{formatUsd(row.todayCostUsd)}</td>
+                  <td className="p-2">{formatUsd(row.monthCostUsd)}</td>
+                  <td className="p-2">{formatUsd(row.dailyCapUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }

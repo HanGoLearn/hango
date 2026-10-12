@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Clock3, Lock, Mic2 } from "lucide-react";
+import { ArrowLeft, Check, Clock3, Mic2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
   Body,
@@ -11,12 +11,14 @@ import {
   PageTitle,
 } from "@/components/ui/typography";
 import { EmptyState } from "@/components/ui/states";
-import { ConversationShadowing } from "@/components/speaking/conversation-shadowing";
+import { BetaSpeakingConversation } from "@/components/speaking/beta-speaking-conversation";
 import { localePath, type AppLocale } from "@/i18n/config";
 import { formatMessage } from "@/i18n/format";
 import type { SpeakingLabMessages } from "@/i18n/messages/types";
-import type { BetaSpeakingStationData } from "@/lib/beta-speaking-stations";
-import type { SpeakingPrompt } from "@/lib/content/speaking-prompts";
+import type {
+  BetaSpeakingStationData,
+  BetaSpeakingConversationData,
+} from "@/lib/beta-speaking-stations";
 
 const STATION_ICONS = {
   INTRODUCTIONS: Mic2,
@@ -28,13 +30,13 @@ export function BetaSpeakingStations({
   locale,
   stations,
   selectedStation,
-  selectedPrompt,
+  selectedConversation,
   messages,
 }: {
   locale: AppLocale;
   stations: BetaSpeakingStationData[];
   selectedStation: BetaSpeakingStationData | null;
-  selectedPrompt: SpeakingPrompt | null;
+  selectedConversation: BetaSpeakingConversationData | null;
   messages: SpeakingLabMessages;
 }) {
   const router = useRouter();
@@ -45,7 +47,7 @@ export function BetaSpeakingStations({
     );
     const copy = messages.beta.stations[selectedStation.id];
 
-    if (!selectedPrompt?.lines || !selectedPrompt.dialogueId) {
+    if (!selectedConversation) {
       return (
         <div className="flex flex-col gap-5">
           <Link
@@ -82,10 +84,8 @@ export function BetaSpeakingStations({
           <PageTitle>{copy.title}</PageTitle>
           <Body className="text-text-secondary">{copy.outcome}</Body>
         </div>
-        <ConversationShadowing
-          lines={selectedPrompt.lines}
-          lessonId={selectedPrompt.lessonId}
-          dialogueId={selectedPrompt.dialogueId}
+        <BetaSpeakingConversation
+          conversation={selectedConversation}
           onExit={() => router.push(localePath(locale, "/speaking-lab"))}
           messages={messages}
         />
@@ -135,35 +135,15 @@ export function BetaSpeakingStations({
                   </Caption>
                 </div>
 
-                {station.unlocked ? (
-                  <Link
-                    href={localePath(
-                      locale,
-                      `/speaking-lab?station=${station.id}`,
-                    )}
-                    className="flex min-h-11 items-center justify-center rounded-control bg-primary-500 px-4 py-2 font-interface text-supporting font-semibold text-on-color-light transition-colors hover:bg-primary-600"
-                  >
-                    {messages.beta.practiceNow}
-                  </Link>
-                ) : (
-                  <div className="flex flex-col gap-2.5 rounded-card bg-elevated p-3">
-                    <span className="flex items-center gap-1.5 font-interface text-caption font-semibold text-text-secondary">
-                      <Lock className="size-3.5" aria-hidden="true" />
-                      {messages.beta.locked}
-                    </span>
-                    <Caption className="text-text-muted">
-                      {formatMessage(messages.beta.unlockRequirement, {
-                        lesson: station.lessonTitle,
-                      })}
-                    </Caption>
-                    <Link
-                      href={localePath(locale, `/lesson/${station.lessonSlug}`)}
-                      className="font-interface text-caption font-semibold text-primary-300 underline-offset-4 hover:underline"
-                    >
-                      {messages.beta.goToLesson}
-                    </Link>
-                  </div>
-                )}
+                <Link
+                  href={localePath(
+                    locale,
+                    `/speaking-lab?station=${station.id}`,
+                  )}
+                  className="flex min-h-11 items-center justify-center rounded-control bg-primary-500 px-4 py-2 font-interface text-supporting font-semibold text-on-color-light transition-colors hover:bg-primary-600"
+                >
+                  {messages.beta.practiceNow}
+                </Link>
               </Card>
             </li>
           );

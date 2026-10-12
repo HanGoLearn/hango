@@ -179,7 +179,8 @@ export function PlacementSpeakingExam({
         voice="marin"
         explanationLanguage="EN"
         mode="PRACTICE"
-        context={context}
+        usageSurface="PLACEMENT"
+        context={{ ...context, speakingSurface: "PLACEMENT" }}
         open
         variant="immersive"
         roleLabel={scenario.rolePlay.aiRole}

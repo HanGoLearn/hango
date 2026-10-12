@@ -415,7 +415,8 @@ export function FreeTopicPractice({
               voice={voice}
               explanationLanguage={explanationLanguage}
               mode="PRACTICE"
-              context={{ rolePlay }}
+              usageSurface="SPEAKING_LAB"
+              context={{ rolePlay, speakingSurface: "SPEAKING_LAB" }}
               open
               variant="immersive"
               roleLabel={

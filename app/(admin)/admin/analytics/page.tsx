@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminStatCard } from "@/components/admin/admin-stat-card";
+import { AiCostReport } from "@/components/admin/ai-cost-report";
 import { requireAdministrator } from "@/lib/admin-auth";
 import { getAdminAnalytics, type AnalyticsPeriod } from "@/lib/admin-analytics";
 
@@ -39,42 +40,6 @@ function duration(seconds: number) {
   return `${(minutes / 60).toLocaleString("es-CO", { maximumFractionDigits: 1 })} h`;
 }
 
-function rateLabel(row: {
-  calculationMethod: string;
-  inputRateUsdPerMillionTokens: number | null;
-  outputRateUsdPerMillionTokens: number | null;
-  audioRateUsdPerMinute: number | null;
-}) {
-  if (
-    row.calculationMethod === "TOKEN_RATES" &&
-    row.inputRateUsdPerMillionTokens !== null &&
-    row.outputRateUsdPerMillionTokens !== null
-  ) {
-    return `${usd(row.inputRateUsdPerMillionTokens)} entrada · ${usd(row.outputRateUsdPerMillionTokens)} salida / 1M tokens`;
-  }
-  if (
-    row.calculationMethod === "PER_MINUTE" &&
-    row.audioRateUsdPerMinute !== null
-  ) {
-    return `${usd(row.audioRateUsdPerMinute)} / minuto`;
-  }
-  return "No registrada en el histórico anterior";
-}
-
-function methodLabel(method: string) {
-  if (method === "TOKEN_RATES") return "Tokens";
-  if (method === "PER_MINUTE") return "Audio por minuto";
-  return "Estimación heredada";
-}
-
-function durationSourceLabel(source: string | null) {
-  if (source === "CLIENT_RECORDED") return "medida por la grabación";
-  if (source === "PROVIDER_REPORTED") return "informada por el proveedor";
-  if (source === "BYTE_SIZE_ESTIMATE") return "aproximada por tamaño";
-  if (source === "TEXT_LENGTH_ESTIMATE") return "aproximada por texto";
-  return null;
-}
-
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
@@ -88,7 +53,9 @@ export default async function AdminAnalyticsPage({
   // Free cache() hit (2026-09-08 optimization pass) - admin/layout.tsx
   // already resolved this for the same request.
   const administrator = await requireAdministrator();
-  const analytics = await getAdminAnalytics(period, administrator.id);
+  const analytics = await getAdminAnalytics(period, administrator.id, {
+    includeAdministratorAi: true,
+  });
   const maxTrendValue = Math.max(
     1,
     ...analytics.trend.flatMap((day) => [day.activeUsers, day.completions]),
@@ -425,7 +392,8 @@ export default async function AdminAnalyticsPage({
           </h2>
           <p className="font-interface text-caption text-text-muted">
             Cada sistema conserva su propia señal; no se mezclan sesiones ni
-            actividades diferentes.
+            actividades diferentes. Solo se atribuyen costos con origen claro;
+            la generación compartida se detalla en el reporte de costos de abajo.
           </p>
         </div>
         <div className="grid gap-px bg-border sm:grid-cols-2 xl:grid-cols-4">
@@ -528,77 +496,13 @@ export default async function AdminAnalyticsPage({
               Funciones de IA con mayor costo
             </h2>
             <p className="font-interface text-caption text-text-muted">
-              Desglose por función, proveedor, modelo y tarifa histórica usada
-              en cada estimación.
+              Costo estimado por interacción y consumo acumulado por función,
+              proveedor y modelo. Incluye el consumo de la cuenta
+              administradora. Los límites diarios y sus alertas usan el día UTC;
+              el período de análisis usa fechas de Bogotá.
             </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-left font-interface text-supporting">
-              <thead className="bg-elevated text-caption uppercase tracking-wide text-text-muted">
-                <tr>
-                  <th className="px-5 py-3">Función</th>
-                  <th className="px-4 py-3">Proveedor / modelo</th>
-                  <th className="px-4 py-3">Método y evidencia</th>
-                  <th className="px-4 py-3">Tarifa histórica</th>
-                  <th className="px-4 py-3 text-right">Solicitudes</th>
-                  <th className="px-5 py-3 text-right">Costo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analytics.ai.rows.map((row) => (
-                  <tr
-                    key={`${row.feature}:${row.provider}:${row.model}:${row.calculationMethod}:${row.durationSource}:${row.inputRateUsdPerMillionTokens}:${row.outputRateUsdPerMillionTokens}:${row.audioRateUsdPerMinute}`}
-                    className="border-t border-border"
-                  >
-                    <td className="px-5 py-3">
-                      <span className="font-semibold">{row.label}</span>
-                      <span className="block text-caption text-text-muted">
-                        {row.feature}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {row.provider} · {row.model}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      <span className="font-semibold text-text-primary">
-                        {methodLabel(row.calculationMethod)}
-                      </span>
-                      {row.durationSeconds > 0 && (
-                        <span className="block text-caption text-text-muted">
-                          {(row.durationSeconds / 60).toLocaleString("es-CO", {
-                            maximumFractionDigits: 1,
-                          })}{" "}
-                          min
-                          {durationSourceLabel(row.durationSource)
-                            ? ` · ${durationSourceLabel(row.durationSource)}`
-                            : ""}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-caption text-text-secondary">
-                      {rateLabel(row)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {number(row.calls)}
-                    </td>
-                    <td className="px-5 py-3 text-right font-semibold">
-                      {usd(row.costUsd)}
-                    </td>
-                  </tr>
-                ))}
-                {!analytics.ai.rows.length && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-10 text-center text-text-muted"
-                    >
-                      No hubo consumo de IA durante este periodo.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <AiCostReport rows={analytics.ai.rows} />
         </article>
       </section>
 

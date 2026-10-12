@@ -96,6 +96,40 @@ async function createTestScenario() {
 }
 
 describe("Scenario completion (integration, real database)", () => {
+  it("a report with NULL score is not complete; a real zero is complete", async () => {
+    const user = await createTestUser(
+      `scenario-null-${crypto.randomUUID()}@hango.dev`,
+    );
+    const { scenario, lesson } = await createTestScenario();
+    const report = await db.lessonReflectionReport.create({
+      data: {
+        userId: user.id,
+        lessonId: lesson.id,
+        vocabularyCovered: 0,
+        vocabularyTotal: 0,
+        totalScore: null,
+        hanNarrative: "Pending",
+        strengths: [],
+        improvements: [],
+      },
+    });
+    expect(
+      await getOrGenerateScenarioCompletion(user.id, scenario.id),
+    ).toBeNull();
+    expect(
+      await db.scenarioCompletion.count({ where: { userId: user.id } }),
+    ).toBe(0);
+    expect(await db.coinLedgerEntry.count({ where: { userId: user.id } })).toBe(
+      0,
+    );
+    await db.lessonReflectionReport.update({
+      where: { id: report.id },
+      data: { totalScore: 0 },
+    });
+    expect(
+      await getOrGenerateScenarioCompletion(user.id, scenario.id),
+    ).toMatchObject({ earnedPoints: 0, weightedReflectionAverage: 0 });
+  });
   it("is null until every published lesson has a reflection report", async () => {
     const user = await createTestUser(
       `scenario-completion-incomplete-${Date.now()}@hango.dev`,
@@ -136,7 +170,9 @@ describe("Scenario completion (integration, real database)", () => {
     expect(result!.chapter).toBe("BEGINNER");
 
     const persisted = await db.scenarioCompletion.findUnique({
-      where: { userId_scenarioId: { userId: user.id, scenarioId: scenario.id } },
+      where: {
+        userId_scenarioId: { userId: user.id, scenarioId: scenario.id },
+      },
     });
     expect(persisted).not.toBeNull();
     expect(persisted!.earnedPoints).toBe(result!.earnedPoints);
@@ -180,7 +216,9 @@ describe("Scenario completion (integration, real database)", () => {
     // were never confirmed - before this fix, this state meant the reward
     // chain would never run again for this scenario.
     const afterFailure = await db.scenarioCompletion.findUnique({
-      where: { userId_scenarioId: { userId: user.id, scenarioId: scenario.id } },
+      where: {
+        userId_scenarioId: { userId: user.id, scenarioId: scenario.id },
+      },
     });
     expect(afterFailure).not.toBeNull();
     expect(afterFailure!.rewardsGrantedAt).toBeNull();
@@ -190,7 +228,9 @@ describe("Scenario completion (integration, real database)", () => {
     expect(recomputeGeneralLevelPointsMock).toHaveBeenCalledTimes(2);
 
     const afterRetry = await db.scenarioCompletion.findUnique({
-      where: { userId_scenarioId: { userId: user.id, scenarioId: scenario.id } },
+      where: {
+        userId_scenarioId: { userId: user.id, scenarioId: scenario.id },
+      },
     });
     expect(afterRetry!.rewardsGrantedAt).not.toBeNull();
   });

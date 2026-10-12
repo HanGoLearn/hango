@@ -1,5 +1,16 @@
 import "server-only";
+import { FEATURE_LABELS } from "@/lib/ai-feature-catalog";
+export { FEATURE_LABELS } from "@/lib/ai-feature-catalog";
 import { db } from "@/lib/db";
+import {
+  AI_EXPERIENCES,
+  AI_EXPERIENCE_IDS,
+  experienceLimitKey,
+  normalizeAiLimitKey,
+  recordedAiExperience,
+  type AiExperience,
+  type AiExperienceLimitKey,
+} from "@/lib/ai-experiences";
 import {
   AI_USAGE_FEATURES,
   DEFAULT_DAILY_CAP_USD,
@@ -9,33 +20,8 @@ import {
   type AiUsageFeature,
 } from "@/lib/ai-usage";
 
-export const FEATURE_LABELS: Record<AiUsageFeature, string> = {
-  "ai-teacher-chat": "Chat de Han Tutor y Companion",
-  "learner-fact-extraction": "Memoria de Han Companion",
-  "vocabulary-lookup": "Búsqueda de HanVocabulary",
-  "mission-chat": "Conversación de Mission",
-  "mission-report": "Evaluación final de Mission",
-  "speaking-feedback": "Evaluación de Speaking Lab",
-  "speaking-scenario": "Escenario personalizado de Speaking Lab",
-  "lesson-reflection": "Reflexión final de la lección",
-  "writing-feedback": "Evaluación de Writing Lab",
-  "placement-grading": "Evaluación oral de Placement",
-  "free-topic-feedback": "Evaluación de práctica libre",
-  "handwritten-writing": "Evaluación de escritura a mano",
-  "welcome-audio": "Audio de introducción al chino",
-  "dialogue-audio": "Audio de diálogos de lección",
-  "grammar-audio": "Audio de ejemplos de gramática",
-  "vocabulary-audio": "Audio de vocabulario y ejemplos",
-  "placement-listening-audio": "Audio de escucha de Placement",
-  "han-speech": "Voz generada de Han",
-  "han-teacher-transcribe": "Transcripción de Han Tutor y Companion",
-  "speaking-transcribe": "Transcripción de Speaking Lab",
-  "han-realtime-session": "Conversación de voz en vivo con Han",
-  "han-realtime-assessment": "Evaluación de conversación por voz",
-};
-
 export interface FeatureUsageSummary {
-  feature: AiUsageFeature;
+  feature: string;
   label: string;
   dailyCapUsd: number;
   todayCostUsd: number;
@@ -60,7 +46,8 @@ function startOfMonthUtc(): Date {
  * usage today - the admin dashboard should always show the full, real list
  * of AI/TTS/STT surfaces, not just whichever ones happened to fire recently.
  * Cost/count are summed across every user (the admin's own budget view);
- * `dailyCapUsd` is the per-user daily limit checkDailyUsageCap() enforces.
+ * `dailyCapUsd` is an archived operation policy, not an editable runtime limit.
+ * Runtime enforcement and editors use getAiExperienceUsageSummary().
  */
 export async function getAiUsageSummary(): Promise<FeatureUsageSummary[]> {
   const [caps, todayGroups, monthGroups] = await Promise.all([
@@ -89,9 +76,16 @@ export async function getAiUsageSummary(): Promise<FeatureUsageSummary[]> {
     monthGroups.map((group) => [group.feature, group]),
   );
 
-  return AI_USAGE_FEATURES.map((feature) => ({
+  const features = [
+    ...new Set([
+      ...AI_USAGE_FEATURES,
+      ...todayGroups.map((row) => row.feature),
+      ...monthGroups.map((row) => row.feature),
+    ]),
+  ];
+  return features.map((feature) => ({
     feature,
-    label: FEATURE_LABELS[feature],
+    label: FEATURE_LABELS[feature as AiUsageFeature] ?? feature,
     dailyCapUsd: capByFeature.get(feature) ?? DEFAULT_DAILY_CAP_USD,
     todayCostUsd: todayByFeature.get(feature)?._sum.estimatedCostUsd ?? 0,
     todayCallCount: todayByFeature.get(feature)?._count._all ?? 0,
@@ -205,7 +199,7 @@ export async function setGlobalAiBudgetPolicy(input: {
 export type UserAiUsageCapMode = "GENERAL" | "CUSTOM" | "BLOCKED";
 
 export interface UserAiUsageLimitSummary {
-  feature: AiUsageFeature;
+  feature: AiExperienceLimitKey;
   label: string;
   mode: UserAiUsageCapMode;
   generalLimitUsd: number;
@@ -216,52 +210,104 @@ export interface UserAiUsageLimitSummary {
 }
 
 export async function setDailyUsageCap(
-  feature: AiUsageFeature,
+  feature: string,
   dailyLimitUsd: number,
 ): Promise<void> {
+  const key = normalizeAiLimitKey(feature);
   if (
-    !AI_USAGE_FEATURES.includes(feature) ||
+    !key ||
     !Number.isFinite(dailyLimitUsd) ||
-    dailyLimitUsd <= 0
-  ) {
-    throw new InvalidDailyCapError("That daily limit isn't valid.");
-  }
+    dailyLimitUsd < 0 ||
+    dailyLimitUsd > 2000
+  )
+    throw new InvalidDailyCapError(
+      "Ingresa un presupuesto diario válido. Cero bloquea llamadas nuevas.",
+    );
   await db.aiUsageCap.upsert({
-    where: { feature },
-    create: { feature, dailyLimitUsd },
+    where: { feature: key },
+    create: { feature: key, dailyLimitUsd },
     update: { dailyLimitUsd },
   });
+}
+
+function sumExperienceUsage(
+  groups: {
+    feature: string;
+    experience: string | null;
+    _sum: { estimatedCostUsd: number | null };
+    _count: { _all: number };
+  }[],
+) {
+  const totals = new Map<AiExperience, { costUsd: number; calls: number }>();
+  for (const row of groups) {
+    const experience = recordedAiExperience(row.feature, row.experience);
+    if (!experience) continue;
+    const total = totals.get(experience) ?? { costUsd: 0, calls: 0 };
+    total.costUsd += row._sum.estimatedCostUsd ?? 0;
+    total.calls += row._count._all;
+    totals.set(experience, total);
+  }
+  return totals;
+}
+
+export async function getAiExperienceUsageSummary() {
+  const [caps, today, month] = await Promise.all([
+    db.aiUsageCap.findMany(),
+    db.aiUsageLog.groupBy({
+      by: ["feature", "experience"],
+      where: { createdAt: { gte: startOfTodayUtc() } },
+      _sum: { estimatedCostUsd: true },
+      _count: { _all: true },
+    }),
+    db.aiUsageLog.groupBy({
+      by: ["feature", "experience"],
+      where: { createdAt: { gte: startOfMonthUtc() } },
+      _sum: { estimatedCostUsd: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const capByKey = new Map(caps.map((row) => [row.feature, row.dailyLimitUsd]));
+  const todayByExperience = sumExperienceUsage(today);
+  const monthByExperience = sumExperienceUsage(month);
+  return AI_EXPERIENCE_IDS.map((experience) => ({
+    feature: experienceLimitKey(experience),
+    experience,
+    label: AI_EXPERIENCES[experience].label,
+    description: AI_EXPERIENCES[experience].description,
+    dailyCapUsd:
+      capByKey.get(experienceLimitKey(experience)) ?? DEFAULT_DAILY_CAP_USD,
+    todayCostUsd: todayByExperience.get(experience)?.costUsd ?? 0,
+    todayCallCount: todayByExperience.get(experience)?.calls ?? 0,
+    monthCostUsd: monthByExperience.get(experience)?.costUsd ?? 0,
+    monthCallCount: monthByExperience.get(experience)?.calls ?? 0,
+  }));
 }
 
 export async function getUserAiUsageLimits(
   userId: string,
 ): Promise<UserAiUsageLimitSummary[]> {
-  const [caps, overrides, todayGroups] = await Promise.all([
+  const [caps, overrides, today] = await Promise.all([
     db.aiUsageCap.findMany(),
     db.aiUsageUserCap.findMany({ where: { userId } }),
     db.aiUsageLog.groupBy({
-      by: ["feature"],
+      by: ["feature", "experience"],
       where: { userId, createdAt: { gte: startOfTodayUtc() } },
       _sum: { estimatedCostUsd: true },
       _count: { _all: true },
     }),
   ]);
-  const capByFeature = new Map(
-    caps.map((cap) => [cap.feature, cap.dailyLimitUsd]),
+  const capByKey = new Map(caps.map((row) => [row.feature, row.dailyLimitUsd]));
+  const overrideByKey = new Map(
+    overrides.map((row) => [row.feature, row.dailyLimitUsd]),
   );
-  const overrideByFeature = new Map(
-    overrides.map((override) => [override.feature, override.dailyLimitUsd]),
-  );
-  const todayByFeature = new Map(
-    todayGroups.map((group) => [group.feature, group]),
-  );
-
-  return AI_USAGE_FEATURES.map((feature) => {
-    const generalLimitUsd = capByFeature.get(feature) ?? DEFAULT_DAILY_CAP_USD;
-    const customLimitUsd = overrideByFeature.get(feature) ?? null;
+  const todayByExperience = sumExperienceUsage(today);
+  return AI_EXPERIENCE_IDS.map((experience) => {
+    const feature = experienceLimitKey(experience);
+    const generalLimitUsd = capByKey.get(feature) ?? DEFAULT_DAILY_CAP_USD;
+    const customLimitUsd = overrideByKey.get(feature) ?? null;
     return {
       feature,
-      label: FEATURE_LABELS[feature],
+      label: AI_EXPERIENCES[experience].label,
       mode:
         customLimitUsd === null
           ? "GENERAL"
@@ -271,60 +317,50 @@ export async function getUserAiUsageLimits(
       generalLimitUsd,
       customLimitUsd,
       effectiveLimitUsd: customLimitUsd ?? generalLimitUsd,
-      todayCostUsd: todayByFeature.get(feature)?._sum.estimatedCostUsd ?? 0,
-      todayCallCount: todayByFeature.get(feature)?._count._all ?? 0,
+      todayCostUsd: todayByExperience.get(experience)?.costUsd ?? 0,
+      todayCallCount: todayByExperience.get(experience)?.calls ?? 0,
     };
   });
 }
 
 export async function setUserAiUsageCap(input: {
   userId: string;
-  feature: AiUsageFeature;
+  feature: string;
   mode: UserAiUsageCapMode;
   dailyLimitUsd?: number;
 }): Promise<void> {
+  const feature = normalizeAiLimitKey(input.feature);
   if (
-    !AI_USAGE_FEATURES.includes(input.feature) ||
+    !feature ||
     !(["GENERAL", "CUSTOM", "BLOCKED"] as string[]).includes(input.mode)
-  ) {
+  )
     throw new InvalidUserAiUsageCapError("La configuración no es válida.");
-  }
   const user = await db.user.findUnique({
     where: { id: input.userId },
     select: { id: true, role: true },
   });
-  if (!user || user.role === "ADMINISTRATOR") {
+  if (!user || user.role === "ADMINISTRATOR")
     throw new InvalidUserAiUsageCapError("El usuario no es válido.");
-  }
-
   if (input.mode === "GENERAL") {
     await db.aiUsageUserCap.deleteMany({
-      where: { userId: input.userId, feature: input.feature },
+      where: { userId: input.userId, feature },
     });
     return;
   }
-
   const dailyLimitUsd = input.mode === "BLOCKED" ? 0 : input.dailyLimitUsd;
   if (
     dailyLimitUsd === undefined ||
     !Number.isFinite(dailyLimitUsd) ||
     dailyLimitUsd < 0 ||
+    dailyLimitUsd > 2000 ||
     (input.mode === "CUSTOM" && dailyLimitUsd <= 0)
-  ) {
+  )
     throw new InvalidUserAiUsageCapError(
-      "Ingresa un límite diario mayor que cero.",
+      "Ingresa un límite diario válido mayor que cero.",
     );
-  }
-
   await db.aiUsageUserCap.upsert({
-    where: {
-      userId_feature: { userId: input.userId, feature: input.feature },
-    },
-    create: {
-      userId: input.userId,
-      feature: input.feature,
-      dailyLimitUsd,
-    },
+    where: { userId_feature: { userId: input.userId, feature } },
+    create: { userId: input.userId, feature, dailyLimitUsd },
     update: { dailyLimitUsd },
   });
 }

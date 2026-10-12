@@ -10,6 +10,7 @@ export function HanSpeechButton({
   autoPlay = false,
   responseLanguage,
   speechStyle = "tutor",
+  experience,
   labels,
 }: {
   text: string;
@@ -17,6 +18,7 @@ export function HanSpeechButton({
   autoPlay?: boolean;
   responseLanguage?: "English" | "Spanish" | "Chinese";
   speechStyle?: "tutor" | "companion";
+  experience?: import("@/lib/ai-experiences").AiExperience;
   labels?: {
     listen: string;
     pause: string;
@@ -58,6 +60,7 @@ export function HanSpeechButton({
           voice,
           responseLanguage,
           delivery: speechStyle,
+          experience,
         }),
       });
       if (!response.ok) throw new Error("speech failed");
@@ -77,7 +80,7 @@ export function HanSpeechButton({
       setState("idle");
       setError(true);
     }
-  }, [responseLanguage, speechStyle, text, voice]);
+  }, [experience, responseLanguage, speechStyle, text, voice]);
 
   useEffect(() => {
     if (autoPlay && !autoPlayedRef.current) {

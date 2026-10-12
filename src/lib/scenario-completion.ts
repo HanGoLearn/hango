@@ -122,9 +122,20 @@ export async function getOrGenerateScenarioCompletion(
   });
   const scoreByLesson = new Map(reports.map((r) => [r.lessonId, r.totalScore]));
 
-  // Not every lesson has been through Reflection yet - the scenario isn't
-  // "complete" for General Level purposes until all of them have.
-  if (lessons.some((l) => !scoreByLesson.has(l.id))) return null;
+  // An existing partial/pending report is NOT a graded lesson. A legitimate
+  // zero is complete; null, non-integer and out-of-range grades are not.
+  if (
+    lessons.some((lesson) => {
+      const score = scoreByLesson.get(lesson.id);
+      return (
+        typeof score !== "number" ||
+        !Number.isInteger(score) ||
+        score < 0 ||
+        score > 100
+      );
+    })
+  )
+    return null;
 
   const weightedReflectionAverage = computeWeightedReflectionAverage(
     lessons.map((l) => ({
@@ -205,6 +216,15 @@ async function resetLessonsData(
     }),
     db.lessonReflectionReport.deleteMany({
       where: { userId, lessonId: { in: lessonIds } },
+    }),
+    db.progressEvidence.deleteMany({
+      where: {
+        userId,
+        source: "SPEAKING",
+        relatedActivityId: {
+          in: lessonIds.map((id) => `lesson-reflection-speaking:${id}`),
+        },
+      },
     }),
     db.exerciseAttempt.deleteMany({
       where: { userId, exercise: { lessonId: { in: lessonIds } } },

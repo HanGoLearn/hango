@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { aiFeatureDescriptor } from "@/lib/ai-feature-catalog";
+import { AI_EXPERIENCES, experienceForLimitKey } from "@/lib/ai-experiences";
 import { ShieldBan } from "lucide-react";
 import { updateUserAiUsageCapAction } from "@/lib/actions/admin-ai-usage";
 import { Button } from "@/components/ui/button";
@@ -54,15 +56,16 @@ export function UserAiUsageLimits({
           </h2>
           <p className="mt-1 max-w-3xl font-interface text-caption text-text-muted">
             Una excepción afecta únicamente a este usuario. Si eliges “usar
-            límite general”, la función vuelve a heredar la configuración de
-            Límites de IA.
+            límite general”, la experiencia vuelve a heredar la configuración de
+            Límites de IA. Voz, texto y evaluación comparten ese único saldo;
+            reinicia cada día en UTC.
           </p>
         </div>
       </div>
 
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 font-interface text-supporting font-semibold hover:bg-elevated">
-          <span>Administrar límites por función</span>
+          <span>Administrar presupuestos por experiencia</span>
           <span className="rounded-full bg-elevated px-3 py-1 text-caption text-text-secondary group-open:bg-primary-500/15 group-open:text-primary-400">
             {exceptionCount} excepción{exceptionCount === 1 ? "" : "es"}
           </span>
@@ -71,7 +74,7 @@ export function UserAiUsageLimits({
           <table className="w-full min-w-[920px] text-left font-interface text-supporting">
             <thead className="bg-elevated text-caption uppercase tracking-wide text-text-muted">
               <tr>
-                <th className="px-5 py-3">Función</th>
+                <th className="px-5 py-3">Experiencia</th>
                 <th className="px-4 py-3 text-right">Consumido hoy</th>
                 <th className="px-4 py-3 text-right">Límite general</th>
                 <th className="px-5 py-3">Configuración para este usuario</th>
@@ -132,7 +135,11 @@ function LimitControlRow({
     <tr className="border-t border-border align-top">
       <td className="px-5 py-4">
         <p className="font-semibold">{row.label}</p>
-        <p className="text-caption text-text-muted">{row.feature}</p>
+        <p className="mt-1 max-w-md text-caption text-text-muted">
+          {experienceForLimitKey(row.feature)
+            ? AI_EXPERIENCES[experienceForLimitKey(row.feature)!].description
+            : aiFeatureDescriptor(row.feature)?.description}
+        </p>
       </td>
       <td className="px-4 py-4 text-right">
         <p>{usd(row.todayCostUsd)}</p>
@@ -161,7 +168,7 @@ function LimitControlRow({
             <SelectContent>
               <SelectItem value="GENERAL">Usar límite general</SelectItem>
               <SelectItem value="CUSTOM">Límite personalizado</SelectItem>
-              <SelectItem value="BLOCKED">Bloquear función</SelectItem>
+              <SelectItem value="BLOCKED">Bloquear experiencia</SelectItem>
             </SelectContent>
           </Select>
           {mode === "CUSTOM" && (
@@ -195,7 +202,7 @@ function LimitControlRow({
           {mode === "GENERAL"
             ? `Límite efectivo: ${usd(row.generalLimitUsd)} al día.`
             : mode === "BLOCKED"
-              ? "La función quedará bloqueada solo para este usuario."
+              ? "La experiencia quedará bloqueada solo para este usuario."
               : `Límite efectivo: ${usd(Number(value) || 0)} al día.`}
         </p>
         <p aria-live="polite" className="mt-1 font-interface text-caption">

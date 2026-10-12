@@ -15,6 +15,10 @@ export interface AiCompletionRequest {
   maxOutputTokens?: number;
   /** Override for slower, non-interactive jobs such as lesson evaluation. */
   timeoutMs?: number;
+  /** Opt-in structured output; ordinary chat requests remain unchanged. */
+  structuredOutput?: { name: string; schema: Record<string, unknown> };
+  /** Disable transport retries for operations that must not silently rebill. */
+  retry?: false;
 }
 
 export interface AiCompletionResult {
@@ -23,6 +27,8 @@ export interface AiCompletionResult {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Preserve metering even when a structured completion cannot be consumed. */
+  outputStatus?: "complete" | "refused" | "incomplete";
 }
 
 export type AiProviderErrorCode =
@@ -40,5 +46,6 @@ export class AiProviderError extends Error {
 
 export interface AiProvider {
   readonly name: string;
+  readonly supportsStructuredOutput?: boolean;
   complete(request: AiCompletionRequest): Promise<AiCompletionResult>;
 }

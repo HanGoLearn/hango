@@ -1,20 +1,31 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock("@/components/speaking/conversation-shadowing", () => ({
-  ConversationShadowing: ({
-    lines,
+vi.mock("@/components/ai-teacher/ai-teacher-provider", () => ({
+  useAiTeacher: () => ({ voice: "cedar", explanationLanguage: "ES" }),
+}));
+vi.mock("@/components/ai-teacher/han-voice-conversation", () => ({
+  HanVoiceConversation: ({
+    mode,
+    context,
+    onComplete,
   }: {
-    lines: { chineseText: string; pinyin: string }[];
+    mode: string;
+    context: object;
+    onComplete: () => void;
   }) => (
-    <div data-testid="conversation-shadowing">
-      {lines[0]?.chineseText} · {lines[0]?.pinyin}
+    <div
+      data-testid="live-conversation"
+      data-mode={mode}
+      data-context={JSON.stringify(context)}
+    >
+      <button onClick={onComplete}>End scene</button>
     </div>
   ),
 }));
@@ -31,7 +42,6 @@ const stations: BetaSpeakingStationData[] = [
     lessonSlug: "foundations-greetings-and-introductions",
     lessonTitle: "Saludos y presentaciones",
     scenarioTitle: "Primeros pasos",
-    unlocked: true,
   },
   {
     id: "NUMBERS_TIME",
@@ -39,7 +49,6 @@ const stations: BetaSpeakingStationData[] = [
     lessonSlug: "foundations-numbers-time-and-dates",
     lessonTitle: "Números, hora y fechas",
     scenarioTitle: "Primeros pasos",
-    unlocked: false,
   },
   {
     id: "PRICES",
@@ -47,20 +56,19 @@ const stations: BetaSpeakingStationData[] = [
     lessonSlug: "basic-shopping-asking-the-price",
     lessonTitle: "Preguntar el precio",
     scenarioTitle: "Compras básicas",
-    unlocked: false,
   },
 ];
 
 afterEach(cleanup);
 
 describe("first closed-beta learning experience", () => {
-  it("shows exactly three guided stations and explains how locked ones open", () => {
+  it("lets every learner open all three stations without lesson prerequisites", () => {
     render(
       <BetaSpeakingStations
         locale="es"
         stations={stations}
         selectedStation={null}
-        selectedPrompt={null}
+        selectedConversation={null}
         messages={spanishMessages.speakingLab}
       />,
     );
@@ -72,33 +80,37 @@ describe("first closed-beta learning experience", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
     expect(
-      screen.getByRole("link", { name: "Practicar ahora" }),
-    ).toHaveAttribute("href", "/es/speaking-lab?station=INTRODUCTIONS");
+      screen
+        .getAllByRole("link", { name: "Practicar ahora" })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "/es/speaking-lab?station=INTRODUCTIONS",
+      "/es/speaking-lab?station=NUMBERS_TIME",
+      "/es/speaking-lab?station=PRICES",
+    ]);
     expect(
-      screen.getAllByText("Empieza primero la lección relacionada"),
-    ).toHaveLength(2);
+      screen.queryByText("Empieza primero la lección relacionada"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Practicar con Han")).not.toBeInTheDocument();
   });
 
-  it("opens a selected station with pinyin-backed conversation shadowing", () => {
+  it("opens a live character conversation, preserves optional pinyin help and lets the learner retry", () => {
     render(
       <BetaSpeakingStations
         locale="es"
         stations={stations}
         selectedStation={stations[0]!}
-        selectedPrompt={{
-          prompt: "你好！",
-          lessonId: "lesson-intro",
-          dialogueId: "dialogue-intro",
-          pinyin: "Nǐ hǎo!",
-          lines: [
-            {
-              id: "line-1",
-              chineseText: "你好！",
-              pinyin: "Nǐ hǎo!",
-              speakerName: "小李",
-              speakerOrder: 0,
-            },
+        selectedConversation={{
+          rolePlay: {
+            aiRole: "Un nuevo amigo",
+            learnerRole: "Tú",
+            scenarioContext: "Encuentra a un nuevo amigo",
+            objective: "Intercambia nombres",
+            lessonHskLevel: 1,
+            correctionMode: "scene",
+          },
+          helpPhrases: [
+            { chinese: "你好！", pinyin: "Nǐ hǎo!", english: "¡Hola!" },
           ],
         }}
         messages={spanishMessages.speakingLab}
@@ -108,9 +120,20 @@ describe("first closed-beta learning experience", () => {
     expect(
       screen.getByRole("heading", { name: "Saluda y preséntate" }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("conversation-shadowing")).toHaveTextContent(
-      "你好！ · Nǐ hǎo!",
+    const live = screen.getByTestId("live-conversation");
+    expect(live).toHaveAttribute("data-mode", "PRACTICE");
+    const context = JSON.parse(live.getAttribute("data-context")!);
+    expect(context.rolePlay.objective).toBe("Intercambia nombres");
+    expect(context).not.toHaveProperty("lessonTitle");
+    expect(screen.queryByText("Nǐ hǎo!")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Necesito ayuda" }));
+    expect(screen.getByText("Nǐ hǎo!")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "End scene" }));
+    expect(screen.queryByTestId("live-conversation")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Repetir la conversación" }),
     );
+    expect(screen.getByTestId("live-conversation")).toBeInTheDocument();
   });
 
   it("keeps later Journey chapters visible as honest previews", () => {

@@ -134,6 +134,42 @@ describe("Vocabulary word audio (integration, real database, mocked TTS provider
     expect(result.ok).toBe(false);
     expect(synthesizeMock).not.toHaveBeenCalled();
   });
+
+  it("reuses the stored audio for another learner without a second generation or charge", async () => {
+    const firstUser = await createTestUser(
+      `vocab-audio-shared-a-${Date.now()}@hango.dev`,
+    );
+    const secondUser = await createTestUser(
+      `vocab-audio-shared-b-${Date.now()}@hango.dev`,
+    );
+    const item = await createTestVocabularyItem();
+    synthesizeMock.mockResolvedValue({
+      audio: Buffer.from("fake wav bytes"),
+      contentType: "audio/wav",
+      provider: "test-mock",
+      model: "test-model",
+    });
+    const firstUrl = await getOrGenerateVocabularyItemAudioUrl(
+      firstUser.id,
+      item.id,
+    );
+    const secondUrl = await getOrGenerateVocabularyItemAudioUrl(
+      secondUser.id,
+      item.id,
+    );
+    expect(secondUrl).toBe(firstUrl);
+    expect(synthesizeMock).toHaveBeenCalledTimes(1);
+    expect(
+      await db.aiUsageLog.count({
+        where: { userId: firstUser.id, feature: "vocabulary-audio" },
+      }),
+    ).toBe(1);
+    expect(
+      await db.aiUsageLog.count({
+        where: { userId: secondUser.id, feature: "vocabulary-audio" },
+      }),
+    ).toBe(0);
+  });
 });
 
 describe("Vocabulary examples (integration, real database, mocked TTS provider)", () => {
@@ -155,7 +191,9 @@ describe("Vocabulary examples (integration, real database, mocked TTS provider)"
   });
 
   it("returns an empty list when the word has no examples authored yet", async () => {
-    const user = await createTestUser(`vocab-no-examples-${Date.now()}@hango.dev`);
+    const user = await createTestUser(
+      `vocab-no-examples-${Date.now()}@hango.dev`,
+    );
     const item = await createTestVocabularyItem();
 
     const examples = await getVocabularyExamples(user.id, item.id);

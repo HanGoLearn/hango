@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -8,6 +9,8 @@ import {
   type CSSProperties,
 } from "react";
 import { Check, ChevronLeft, X } from "lucide-react";
+import { BufferedLessonAnswers } from "@/lib/buffered-lesson-answers";
+import { useLessonLeaveGuard } from "@/components/lesson/lesson-save-barrier";
 import {
   SectionTitle,
   ChineseText,
@@ -118,10 +121,9 @@ export function VocabularyStep({
    * that same walk a sequence of screens instead, the same shape Grammar's
    * per-exercise cards and Comprehension already use.
    *
-   * Nothing about *when* answers are sent changes - `flushPendingAttempts`
-   * still only fires on a word boundary (`goToWord` below), never per
-   * question, so this costs zero extra Prisma round trips over the
-   * original stacked version.
+   * Answers remain batched on word boundaries, not sent per question.
+   * Leaving the step now waits for the batch acknowledgement; failed
+   * batches are retained for explicit retry before the Speaking snapshot.
    */
   const [screenIndex, setScreenIndex] = useState(-1);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -142,19 +144,46 @@ export function VocabularyStep({
    * computed client-side (vocabulary-quiz.ts) and shown from local state
    * regardless of when/whether this buffer has been sent yet.
    */
-  const pendingAttemptsRef = useRef<VocabularyQuizAttemptInput[]>([]);
+  const [answerQueue] = useState(
+    () =>
+      new BufferedLessonAnswers<VocabularyQuizAttemptInput>((attempts) =>
+        recordVocabularyQuizAttemptsAction(lessonId, attempts),
+      ),
+  );
+  const [savingAnswers, setSavingAnswers] = useState(false);
+  const [answerSaveError, setAnswerSaveError] = useState(false);
+  const quickTestQueued = useRef(false);
+  const finishing = useRef(false);
+  const flushPendingAttempts = useCallback(
+    () => answerQueue.flush(),
+    [answerQueue],
+  );
+  useLessonLeaveGuard(flushPendingAttempts);
+
+  function flushInBackground() {
+    void flushPendingAttempts().catch(() => setAnswerSaveError(true));
+  }
+
+  async function finishAfterSaving(next: () => void) {
+    if (finishing.current) return;
+    finishing.current = true;
+    setSavingAnswers(true);
+    setAnswerSaveError(false);
+    try {
+      await flushPendingAttempts();
+      next();
+    } catch {
+      setAnswerSaveError(true);
+    } finally {
+      finishing.current = false;
+      setSavingAnswers(false);
+    }
+  }
 
   const current = activeVocabulary[index];
   const currentItem = current?.vocabularyItem;
   const isLast = index === activeVocabulary.length - 1;
   const currentExamples = currentItem?.examples ?? [];
-
-  function flushPendingAttempts() {
-    if (pendingAttemptsRef.current.length === 0) return;
-    const attempts = pendingAttemptsRef.current;
-    pendingAttemptsRef.current = [];
-    void recordVocabularyQuizAttemptsAction(lessonId, attempts);
-  }
 
   useEffect(() => {
     if (!currentItem) return;
@@ -170,7 +199,9 @@ export function VocabularyStep({
   // (see the chat record - at most one word's worth of attempts, never the
   // whole session).
   useEffect(() => {
-    return () => flushPendingAttempts();
+    return () => {
+      void flushPendingAttempts().catch(() => undefined);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -221,7 +252,7 @@ export function VocabularyStep({
   }
 
   function goToWord(nextIndex: number, nextDirection: "forward" | "back") {
-    flushPendingAttempts();
+    flushInBackground();
     setDirection(nextDirection);
     setIndex(nextIndex);
     setScreenIndex(-1);
@@ -238,11 +269,13 @@ export function VocabularyStep({
       ...previous,
       [questionKey]: answer.type === "OPTION" ? answer.optionId : "submitted",
     }));
-    pendingAttemptsRef.current.push({
-      vocabularyItemId,
-      questionKey,
-      answer,
-    });
+    answerQueue.enqueue([
+      {
+        vocabularyItemId,
+        questionKey,
+        answer,
+      },
+    ]);
   }
 
   function startWalkthrough(words: LessonWithContent["vocabulary"]) {
@@ -267,21 +300,22 @@ export function VocabularyStep({
           ]
         : [];
     });
-    void recordVocabularyQuizAttemptsAction(lessonId, attempts);
+    if (!quickTestQueued.current) {
+      answerQueue.enqueue(attempts);
+      quickTestQueued.current = true;
+    }
 
     const passedCount = Object.values(finalAnswers).filter(
       (answer) => answer.isCorrect,
     ).length;
     const passed = passedCount / vocabulary.length >= QUICK_TEST_PASS_THRESHOLD;
 
-    if (passed) {
-      onContinue();
-      return;
-    }
     const missed = vocabulary.filter(
       (v) => !finalAnswers[v.vocabularyItem.id]?.isCorrect,
     );
-    startWalkthrough(missed);
+    void finishAfterSaving(() =>
+      passed ? onContinue() : startWalkthrough(missed),
+    );
   }
 
   const cardStyle: CSSProperties = {
@@ -304,6 +338,7 @@ export function VocabularyStep({
           <div className="mt-2">
             <HanSpeechButton
               text={messages.vocabulary.introduction}
+              experience="SHARED_AUDIO"
               voice={DEFAULT_HAN_VOICE}
               labels={{
                 listen: messages.vocabulary.listenToHan,
@@ -406,6 +441,8 @@ export function VocabularyStep({
           </Caption>
           <Button
             type="button"
+            disabled={savingAnswers || !qtAnswer}
+            loading={savingAnswers}
             onClick={() => {
               if (isLastQt) {
                 finishQuickTest(quickTestAnswers);
@@ -419,6 +456,11 @@ export function VocabularyStep({
               : messages.common.next}
           </Button>
         </div>
+        {answerSaveError && (
+          <Body role="alert" className="text-error-500">
+            {messages.header.saveError}
+          </Body>
+        )}
       </div>
     );
   }
@@ -449,8 +491,7 @@ export function VocabularyStep({
       return;
     }
     if (isLast) {
-      flushPendingAttempts();
-      onContinue();
+      void finishAfterSaving(onContinue);
       return;
     }
     goToWord(index + 1, "forward");
@@ -600,7 +641,7 @@ export function VocabularyStep({
         <button
           type="button"
           onClick={handleBack}
-          disabled={index === 0 && screenIndex === -1}
+          disabled={savingAnswers || (index === 0 && screenIndex === -1)}
           className="flex items-center gap-1 font-interface text-supporting text-text-secondary transition-opacity duration-fast ease-standard hover:text-text-primary disabled:pointer-events-none disabled:opacity-0"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
@@ -611,7 +652,12 @@ export function VocabularyStep({
           {index + 1} {messages.common.of} {activeVocabulary.length}
         </Caption>
 
-        <Button type="button" onClick={handleNext} disabled={!canAdvance}>
+        <Button
+          type="button"
+          onClick={handleNext}
+          disabled={!canAdvance || savingAnswers}
+          loading={savingAnswers}
+        >
           {isLast && isLastScreenOfWord
             ? messages.common.continue
             : isLastScreenOfWord
@@ -619,6 +665,11 @@ export function VocabularyStep({
               : messages.common.next}
         </Button>
       </div>
+      {answerSaveError && (
+        <Body role="alert" className="text-error-500">
+          {messages.header.saveError}
+        </Body>
+      )}
     </div>
   );
 }
@@ -627,8 +678,8 @@ export function VocabularyStep({
  * One question screen, as a real component rather than a helper function
  * called inline or a `.map()` over a synthetic array (2026-09-26). Both of
  * those shapes tripped React's ref-safety lint rule on `onAnswer`'s closure
- * over `handleAnswer` (which pushes into `VocabularyStep`'s
- * `pendingAttemptsRef`) even though the ref is only ever touched later,
+ * over `handleAnswer` (which originally pushed into `VocabularyStep`'s
+ * answer buffer) even though the buffer is only ever touched later,
  * inside a real click handler - the rule's static analysis apparently
  * trusts a genuine component boundary here in a way it didn't trust a
  * helper function or an inline array literal built fresh each render. The

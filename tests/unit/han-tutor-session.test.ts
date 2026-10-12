@@ -8,6 +8,23 @@ import {
 } from "@/lib/han-tutor-session";
 
 describe("Han Tutor temporary session behavior", () => {
+  it("protects an uncertain word in a meaning question and pauses the drill", () => {
+    const instruction =
+      buildHanTutorTaskGroundingInstruction("明纲, qué es eso?");
+    expect(instruction).toContain("MEANING REQUEST");
+    expect(instruction).toContain("明纲");
+    expect(instruction).toContain("do not silently replace");
+    expect(instruction).toContain("Do not give a pronunciation-only answer");
+    expect(
+      buildHanTutorTaskGroundingInstruction("Pero ¿qué significa eso?"),
+    ).toContain("MEANING REQUEST");
+    expect(
+      buildHanTutorTaskGroundingInstruction("What does that mean?"),
+    ).toContain("MEANING REQUEST");
+    expect(
+      buildHanTutorTaskGroundingInstruction("What is your name?"),
+    ).toBeNull();
+  });
   it("answers types of Han as Tutor capabilities rather than inventing a tone question", () => {
     for (const question of [
       "What type of Han we can check?",
@@ -27,7 +44,7 @@ describe("Han Tutor temporary session behavior", () => {
     ).toBeNull();
     expect(
       buildHanTutorTaskGroundingInstruction("What does 汉 mean?"),
-    ).toBeNull();
+    ).toContain("Exact learner-supplied Mandarin: 汉");
     expect(
       buildHanTutorTaskGroundingInstruction(
         "Han Tutor, explain how to pronounce nihao",

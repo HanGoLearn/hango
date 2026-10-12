@@ -28,10 +28,12 @@ import {
 import {
   buildHanTutorControlCommandInstruction,
   deriveHanTutorSessionPreferences,
+  isHanTutorMeaningRequest,
   resolveHanTutorConversationLanguage,
 } from "@/lib/han-tutor-session";
 import {
   advancePronunciationPractice,
+  rememberTutorPronunciationResponse,
   allowsRealtimeBargeIn,
   buildRealtimePushToTalkStartEvents,
   buildRealtimeAssessmentFallbackGuard,
@@ -56,6 +58,18 @@ import {
   type PronunciationPracticeState,
 } from "@/lib/han-realtime";
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
+import type {
+  JourneyAttemptSealInput,
+  JourneyCaptureQuality,
+} from "@/lib/journey-speaking-attempt-contract";
+import {
+  JOURNEY_BANK_VERSION,
+  type JourneySpeakingBanks,
+} from "@/lib/content/journey-speaking-bank-contract";
+import {
+  explicitlyEndsJourneySpeaking,
+  journeySpeakingPhase,
+} from "@/lib/journey-speaking-policy";
 import {
   assessHanTranscript,
   assessMandarinRolePlayTranscript,
@@ -93,6 +107,9 @@ export type RealtimeConversationState =
 export interface RealtimeConversationDiagnostics {
   learnerTurnConfidences: number[];
   speakingEvidence: SpeakingTurnEvidence[];
+  closeReason?: JourneyAttemptSealInput["closeReason"];
+  quality?: JourneyCaptureQuality;
+  capturedTurns?: JourneyAttemptSealInput["turns"];
 }
 type RealtimeEvent = {
   type?: string;
@@ -119,6 +136,7 @@ async function requestRolePlayAssessment(
   continueUntilTimeLimit: boolean,
   minimumLearnerTurns?: number,
   maximumLearnerTurns?: number,
+  usageSurface?: import("@/lib/realtime-usage").RealtimeRolePlaySurface,
 ): Promise<ConversationCompletionAssessment> {
   const response = await fetch("/api/han/realtime/assessment", {
     method: "POST",
@@ -132,6 +150,7 @@ async function requestRolePlayAssessment(
       continueUntilTimeLimit,
       minimumLearnerTurns,
       maximumLearnerTurns,
+      surface: usageSurface,
     }),
   });
   if (!response.ok) throw new Error("Role-play assessment failed");
@@ -156,6 +175,10 @@ export function HanVoiceConversation({
   completionPolicy = "timer",
   minimumLearnerTurns,
   maximumLearnerTurns,
+  usageSurface,
+  prepareJourneyAttempt,
+  onJourneyAbandon,
+  saveConversationHistory = true,
 }: {
   disabled: boolean;
   voice: string;
@@ -178,6 +201,17 @@ export function HanVoiceConversation({
   completionPolicy?: "timer" | "objective";
   minimumLearnerTurns?: number;
   maximumLearnerTurns?: number;
+  usageSurface?: import("@/lib/realtime-usage").RealtimeRolePlaySurface;
+  /** Journey-only opt-in; other surfaces retain their existing persistence. */
+  prepareJourneyAttempt?: () => Promise<{
+    attemptId: string;
+    banks: JourneySpeakingBanks;
+  }>;
+  onJourneyAbandon?: (
+    transcript: SpeakingTranscriptMessage[],
+    diagnostics: RealtimeConversationDiagnostics,
+  ) => void;
+  saveConversationHistory?: boolean;
 }) {
   const [state, setState] = useState<RealtimeConversationState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -186,6 +220,21 @@ export function HanVoiceConversation({
   const [latestCaption, setLatestCaption] = useState(
     "Start when you're ready.",
   );
+  const [latestCharacterCaption, setLatestCharacterCaption] = useState("");
+  const isJourneySpeaking =
+    usageSurface === "JOURNEY" && Boolean(context.rolePlay);
+  const isolatedJourney = isJourneySpeaking && Boolean(prepareJourneyAttempt);
+  const journeyAttemptIdRef = useRef<string | null>(null);
+  const journeyCapturedTurnsRef = useRef<JourneyAttemptSealInput["turns"]>([]);
+  const journeyInterruptedRef = useRef(false);
+  const journeyCloseReasonRef =
+    useRef<JourneyAttemptSealInput["closeReason"]>("NATURAL");
+  const onJourneyAbandonRef = useRef(onJourneyAbandon);
+  useEffect(() => {
+    onJourneyAbandonRef.current = onJourneyAbandon;
+  }, [onJourneyAbandon]);
+  const mountedRef = useRef(true);
+  const startPendingRef = useRef(false);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
@@ -228,6 +277,11 @@ export function HanVoiceConversation({
   const pendingSessionActivationRef = useRef<(() => void) | null>(null);
   const pendingSessionInstructionsRef = useRef<string | null>(null);
   const naturalCloseTimerRef = useRef<number | null>(null);
+  const hardCloseTimerRef = useRef<number | null>(null);
+  const sessionStartedAtRef = useRef<number | null>(null);
+  const learnerCommitPendingRef = useRef(false);
+  // Independent of React/provider context rerenders; never reused by Tutor.
+  const journeyBanksRef = useRef<JourneySpeakingBanks | null>(null);
   const openingTurnRef = useRef(false);
   const replyNeedsAssessmentRef = useRef(false);
   const remainingPracticeTargetsRef = useRef<string[] | null>(null);
@@ -249,6 +303,7 @@ export function HanVoiceConversation({
   const ignoreNextSpeechStoppedRef = useRef(false);
   const confirmedBargeInRef = useRef(false);
   const finishStartedRef = useRef(false);
+  const completionStartedRef = useRef(false);
   const evidenceReviewPendingRef = useRef(false);
   const evidenceReviewTextRef = useRef("");
   const evidenceReviewTimerRef = useRef<number | null>(null);
@@ -609,6 +664,8 @@ export function HanVoiceConversation({
       // Remember it until the cancelled response emits response.done so that
       // its cleanup cannot mute the learner's new turn.
       pushToTalkInterruptedResponseRef.current = isInterruptingResponse;
+      if (isolatedJourney && (isInterruptingResponse || isInterruptingPlayback))
+        journeyInterruptedRef.current = true;
       pushToTalkInterruptedPlaybackRef.current = isInterruptingPlayback;
       confirmedBargeInRef.current = true;
       turnPlaybackStoppedRef.current = true;
@@ -666,10 +723,12 @@ export function HanVoiceConversation({
       channel.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
       setLatestCaption("Hold the red button while you speak.");
       setState("listening");
+      if (isJourneySpeaking && closeRequestedRef.current) requestNaturalClose();
       return;
     }
 
     completeActiveVoiceTurn();
+    if (isJourneySpeaking) learnerCommitPendingRef.current = true;
     channel.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
     setLatestCaption("Analyzing what you said…");
     setState("thinking");
@@ -801,6 +860,12 @@ export function HanVoiceConversation({
       window.clearTimeout(sessionConfigurationTimerRef.current);
     if (naturalCloseTimerRef.current != null)
       window.clearTimeout(naturalCloseTimerRef.current);
+    if (hardCloseTimerRef.current != null)
+      window.clearTimeout(hardCloseTimerRef.current);
+    hardCloseTimerRef.current = null;
+    sessionStartedAtRef.current = null;
+    learnerCommitPendingRef.current = false;
+    journeyBanksRef.current = null;
     sessionTimerRef.current = null;
     sessionConfigurationTimerRef.current = null;
     pendingSessionActivationRef.current = null;
@@ -891,15 +956,30 @@ export function HanVoiceConversation({
   }, [onActiveChange, stopRemoteAudioAnalysis, stopVoiceSignalAnalysis]);
 
   const completeConversationAfterEvidence = useCallback(async () => {
+    if (completionStartedRef.current) return;
+    completionStartedRef.current = true;
     const transcript = [...transcriptRef.current];
     const speakingEvidence = [...speakingEvidenceRef.current];
     const diagnostics = {
       learnerTurnConfidences: [...learnerTurnConfidencesRef.current],
       speakingEvidence,
+      ...(isolatedJourney
+        ? {
+            capturedTurns: [...journeyCapturedTurnsRef.current],
+            closeReason: journeyCloseReasonRef.current,
+            quality: {
+              pendingLearnerTurn:
+                learnerCommitPendingRef.current || pushToTalkActiveRef.current,
+              interruptedAssistant: journeyInterruptedRef.current,
+            },
+          }
+        : {}),
     };
     const finalContext = contextRef.current;
     if (
       finalContext.rolePlay &&
+      !isolatedJourney &&
+      saveConversationHistory &&
       !finalContext.rolePlay.isFreeTopic &&
       finalContext.lessonTitle &&
       speakingEvidence.length > 0
@@ -915,54 +995,86 @@ export function HanVoiceConversation({
     await Promise.allSettled(pendingSavesRef.current);
     pendingSavesRef.current = [];
     await onComplete?.(transcript, diagnostics);
-  }, [onComplete, stopMedia]);
+  }, [onComplete, stopMedia, isolatedJourney, saveConversationHistory]);
 
-  const finishConversation = useCallback(async () => {
-    if (finishStartedRef.current) return;
-    finishStartedRef.current = true;
-    const rolePlay = contextRef.current.rolePlay;
-    const channel = dataChannelRef.current;
-    if (
-      rolePlay &&
-      completionPolicy === "timer" &&
-      speakingEvidenceRef.current.length > 0 &&
-      channel?.readyState === "open" &&
-      !activeResponseRef.current
-    ) {
-      evidenceReviewPendingRef.current = true;
-      evidenceReviewTextRef.current = "";
-      closingTurnRef.current = false;
-      streamRef.current?.getAudioTracks().forEach((track) => {
-        track.enabled = false;
-      });
-      setState("thinking");
-      setLatestCaption("Preparing your speaking feedback…");
-      channel.send(
-        JSON.stringify({
-          type: "response.create",
-          response: {
-            output_modalities: ["text"],
-            instructions: buildSpeakingEvidenceReviewInstructions(
-              rolePlay,
-              speakingEvidenceRef.current,
-            ),
-            tools: [],
-            tool_choice: "none",
-            metadata: { hango_phase: "speaking_evidence" },
-            max_output_tokens: 600,
-          },
-        }),
-      );
-      evidenceReviewTimerRef.current = window.setTimeout(() => {
-        if (!evidenceReviewPendingRef.current) return;
-        evidenceReviewPendingRef.current = false;
-        evidenceReviewTimerRef.current = null;
-        void completeConversationAfterEvidence();
-      }, 8_000);
-      return;
-    }
-    await completeConversationAfterEvidence();
-  }, [completeConversationAfterEvidence, completionPolicy]);
+  const finishConversation = useCallback(
+    async (
+      skipEvidenceReview = false,
+      reason?: JourneyAttemptSealInput["closeReason"],
+    ) => {
+      if (reason) journeyCloseReasonRef.current = reason;
+      if (finishStartedRef.current) {
+        if (
+          skipEvidenceReview &&
+          isJourneySpeaking &&
+          evidenceReviewPendingRef.current
+        ) {
+          evidenceReviewPendingRef.current = false;
+          await completeConversationAfterEvidence();
+        }
+        return;
+      }
+      finishStartedRef.current = true;
+      // End and the safety deadline must stop audible output immediately, even
+      // when an optional text-only evidence review would otherwise run afterward.
+      if (isJourneySpeaking) {
+        silenceRemotePlaybackImmediately();
+        setMicrophoneInputEnabled(false);
+      }
+      const rolePlay = contextRef.current.rolePlay;
+      const channel = dataChannelRef.current;
+      if (
+        rolePlay &&
+        !isolatedJourney &&
+        saveConversationHistory &&
+        !skipEvidenceReview &&
+        completionPolicy === "timer" &&
+        speakingEvidenceRef.current.length > 0 &&
+        channel?.readyState === "open" &&
+        !activeResponseRef.current
+      ) {
+        evidenceReviewPendingRef.current = true;
+        evidenceReviewTextRef.current = "";
+        closingTurnRef.current = false;
+        streamRef.current?.getAudioTracks().forEach((track) => {
+          track.enabled = false;
+        });
+        setState("thinking");
+        setLatestCaption("Preparing your speaking feedback…");
+        channel.send(
+          JSON.stringify({
+            type: "response.create",
+            response: {
+              output_modalities: ["text"],
+              instructions: buildSpeakingEvidenceReviewInstructions(
+                rolePlay,
+                speakingEvidenceRef.current,
+              ),
+              tools: [],
+              tool_choice: "none",
+              metadata: { hango_phase: "speaking_evidence" },
+              max_output_tokens: 600,
+            },
+          }),
+        );
+        evidenceReviewTimerRef.current = window.setTimeout(() => {
+          if (!evidenceReviewPendingRef.current) return;
+          evidenceReviewPendingRef.current = false;
+          evidenceReviewTimerRef.current = null;
+          void completeConversationAfterEvidence();
+        }, 8_000);
+        return;
+      }
+      await completeConversationAfterEvidence();
+    },
+    [
+      completeConversationAfterEvidence,
+      completionPolicy,
+      isJourneySpeaking,
+      isolatedJourney,
+      saveConversationHistory,
+    ],
+  );
 
   const finishAfterClosingPlayback = useCallback(() => {
     if (closingPlaybackTimerRef.current != null)
@@ -989,6 +1101,19 @@ export function HanVoiceConversation({
   }, [finishConversation]);
 
   const requestNaturalClose = useCallback(() => {
+    if (finishStartedRef.current || closingTurnRef.current) return;
+    if (
+      isJourneySpeaking &&
+      (pushToTalkActiveRef.current ||
+        learnerCommitPendingRef.current ||
+        activeResponseRef.current ||
+        outputPlaybackActiveRef.current ||
+        remoteAudioAudibleRef.current ||
+        turnResponseDoneAtRef.current != null)
+    ) {
+      closeRequestedRef.current = true;
+      return;
+    }
     const rolePlay = contextRef.current.rolePlay ?? context.rolePlay;
     const channel = dataChannelRef.current;
     if (!rolePlay || channel?.readyState !== "open") {
@@ -1001,6 +1126,7 @@ export function HanVoiceConversation({
     closingAudioObservedRef.current = false;
     closingLastAudibleAtRef.current = null;
     closingPlaybackStoppedRef.current = false;
+    if (isJourneySpeaking) resumeRemotePlaybackForNextResponse();
     streamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = false;
     });
@@ -1010,7 +1136,14 @@ export function HanVoiceConversation({
       JSON.stringify({
         type: "response.create",
         response: {
-          instructions: buildRealtimeClosingInstructions(rolePlay),
+          instructions: buildRealtimeClosingInstructions(
+            rolePlay,
+            isJourneySpeaking ? transcriptRef.current : undefined,
+            isJourneySpeaking
+              ? (journeyBanksRef.current ?? undefined)
+              : undefined,
+            explanationLanguageRef.current,
+          ),
           tools: [],
           tool_choice: "none",
           metadata: { hango_phase: "closing" },
@@ -1021,7 +1154,24 @@ export function HanVoiceConversation({
         },
       }),
     );
-  }, [context.rolePlay, finishConversation]);
+  }, [context.rolePlay, finishConversation, isJourneySpeaking]);
+
+  useEffect(() => {
+    if (!isJourneySpeaking) return;
+    const checkDeadline = () => {
+      const startedAt = sessionStartedAtRef.current;
+      if (startedAt != null && Date.now() - startedAt >= maxSessionMs)
+        void finishConversation(true);
+    };
+    // A suspended browser cannot execute timers; check wall time immediately
+    // when it wakes. This is not a server-side financial enforcement promise.
+    window.addEventListener("focus", checkDeadline);
+    document.addEventListener("visibilitychange", checkDeadline);
+    return () => {
+      window.removeEventListener("focus", checkDeadline);
+      document.removeEventListener("visibilitychange", checkDeadline);
+    };
+  }, [finishConversation, isJourneySpeaking, maxSessionMs]);
 
   function resumeRolePlayListening() {
     streamRef.current?.getAudioTracks().forEach((track) => {
@@ -1034,11 +1184,20 @@ export function HanVoiceConversation({
   }
 
   function completeRolePlayResponseAfterPlayback() {
+    if (isJourneySpeaking) {
+      outputPlaybackActiveRef.current = false;
+      remoteAudioAudibleRef.current = false;
+    }
     turnResponseDoneAtRef.current = null;
     turnAudioObservedRef.current = false;
     turnLastAudibleAtRef.current = null;
     turnPlaybackStoppedRef.current = false;
     if (openingTurnRef.current) openingTurnRef.current = false;
+    if (isJourneySpeaking && closeRequestedRef.current) {
+      replyNeedsAssessmentRef.current = false;
+      requestNaturalClose();
+      return;
+    }
     if (closeAfterReplyRef.current) {
       closeAfterReplyRef.current = false;
       replyNeedsAssessmentRef.current = false;
@@ -1191,7 +1350,27 @@ export function HanVoiceConversation({
     );
   }
 
-  useEffect(() => () => stopMedia(), [stopMedia]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (journeyAttemptIdRef.current && !completionStartedRef.current) {
+        completionStartedRef.current = true;
+        onJourneyAbandonRef.current?.([...transcriptRef.current], {
+          learnerTurnConfidences: [...learnerTurnConfidencesRef.current],
+          speakingEvidence: [...speakingEvidenceRef.current],
+          capturedTurns: [...journeyCapturedTurnsRef.current],
+          closeReason: "ABANDONED",
+          quality: {
+            pendingLearnerTurn:
+              learnerCommitPendingRef.current || pushToTalkActiveRef.current,
+            interruptedAssistant: journeyInterruptedRef.current,
+          },
+        });
+      }
+      stopMedia();
+    };
+  }, [stopMedia]);
   useEffect(() => {
     contextRef.current = context;
   }, [context]);
@@ -1208,6 +1387,12 @@ export function HanVoiceConversation({
     } catch {
       return;
     }
+    if (
+      isJourneySpeaking &&
+      finishStartedRef.current &&
+      !evidenceReviewPendingRef.current
+    )
+      return;
     const activeContext = contextRef.current;
     const allowsBargeIn = allowsRealtimeBargeIn(activeContext.rolePlay);
     if (event.type === "session.updated") {
@@ -1220,8 +1405,12 @@ export function HanVoiceConversation({
       if (event.session?.instructions !== expectedInstructions) {
         pendingSessionActivationRef.current = null;
         setError("Han's live voice identity could not be confirmed.");
-        stopMedia();
-        onUnavailable?.();
+        if (isolatedJourney && journeyAttemptIdRef.current)
+          void finishConversation(true, "TECHNICAL_FAILURE");
+        else {
+          stopMedia();
+          onUnavailable?.();
+        }
         return;
       }
       const activateSession = pendingSessionActivationRef.current;
@@ -1370,6 +1559,11 @@ export function HanVoiceConversation({
     if (
       event.type === "conversation.item.input_audio_transcription.completed"
     ) {
+      learnerCommitPendingRef.current = false;
+      const closeDiscardedJourneyTurn = () => {
+        if (isJourneySpeaking && closeRequestedRef.current)
+          requestNaturalClose();
+      };
       if (
         event.item_id &&
         discardedVoiceTurnItemIdsRef.current.delete(event.item_id)
@@ -1377,6 +1571,7 @@ export function HanVoiceConversation({
         pendingUserTextRef.current = "";
         setLatestCaption("Hold the red button to talk.");
         setState("listening");
+        closeDiscardedJourneyTurn();
         return;
       }
       if (forcedTranscriptFallbackTimerRef.current != null)
@@ -1394,21 +1589,23 @@ export function HanVoiceConversation({
         setState(
           allowsBargeIn && activeResponseRef.current ? "speaking" : "listening",
         );
+        closeDiscardedJourneyTurn();
         return;
       }
 
       const transcriptConfidence = confidenceFromLogprobs(event.logprobs);
-      const assessment = activeContext.rolePlay
-        ? assessMandarinRolePlayTranscript(
-            rawTranscript,
-            transcriptConfidence,
-            transcriptHintsFromContext(activeContext),
-          )
-        : assessHanTranscript(
-            rawTranscript,
-            transcriptConfidence,
-            transcriptHintsFromContext(activeContext),
-          );
+      const assessment =
+        activeContext.rolePlay && !isJourneySpeaking
+          ? assessMandarinRolePlayTranscript(
+              rawTranscript,
+              transcriptConfidence,
+              transcriptHintsFromContext(activeContext),
+            )
+          : assessHanTranscript(
+              rawTranscript,
+              transcriptConfidence,
+              transcriptHintsFromContext(activeContext),
+            );
       if (!assessment.ok && assessment.reason === "prompt_leak") {
         pendingUserTextRef.current = "";
         setError(null);
@@ -1416,6 +1613,7 @@ export function HanVoiceConversation({
         setState(
           allowsBargeIn && activeResponseRef.current ? "speaking" : "listening",
         );
+        closeDiscardedJourneyTurn();
         return;
       }
       if (!assessment.ok) {
@@ -1432,6 +1630,7 @@ export function HanVoiceConversation({
         setLatestCaption(repeatMessage);
         setError(repeatMessage);
         setState("listening");
+        closeDiscardedJourneyTurn();
         return;
       }
 
@@ -1452,6 +1651,7 @@ export function HanVoiceConversation({
         }
         setLatestCaption("Hold the red button to talk.");
         setState("listening");
+        closeDiscardedJourneyTurn();
         return;
       }
       setError(null);
@@ -1477,13 +1677,18 @@ export function HanVoiceConversation({
           !activeContext.rolePlay && mode === "TUTOR"
             ? buildHanTutorControlCommandInstruction(transcript)
             : null;
-        const pronunciation = tutorControlCommand
-          ? { state: pronunciationPracticeRef.current, progress: null }
-          : advancePronunciationPractice(
-              transcript,
-              transcriptRef.current,
-              pronunciationPracticeRef.current,
-            );
+        const previousTutorPractice = pronunciationPracticeRef.current;
+        const pronunciation =
+          activeContext.rolePlay || mode !== "TUTOR"
+            ? { state: null, progress: null }
+            : tutorControlCommand
+              ? { state: pronunciationPracticeRef.current, progress: null }
+              : advancePronunciationPractice(
+                  transcript,
+                  transcriptRef.current,
+                  pronunciationPracticeRef.current,
+                  explanationLanguageRef.current,
+                );
         pronunciationPracticeRef.current = pronunciation.state;
         const currentTutorMessages = [
           ...transcriptRef.current
@@ -1493,7 +1698,7 @@ export function HanVoiceConversation({
         ];
         const tutorSessionPreferences =
           deriveHanTutorSessionPreferences(currentTutorMessages);
-        const requiredLanguage =
+        const detectedLanguage =
           !activeContext.rolePlay && mode === "PRACTICE"
             ? "Chinese"
             : !activeContext.rolePlay && mode === "TUTOR"
@@ -1502,20 +1707,54 @@ export function HanVoiceConversation({
                   explanationLanguageRef.current,
                   tutorSessionPreferences,
                   {
-                    latestIsPronunciationAttempt: Boolean(
-                      pronunciation.progress,
-                    ),
+                    latestIsPronunciationAttempt: Boolean(pronunciation.state),
+                    latestOnly: true,
                   },
                 )
               : nextHanExplanationLanguage(
                   transcript,
                   explanationLanguageRef.current,
                 );
+        // Mandarin scene replies/questions do not replace the ES/EN help
+        // language. A later 什么意思 must still use the selected help language.
+        const requiredLanguage =
+          isJourneySpeaking && detectedLanguage === "Chinese"
+            ? explanationLanguageRef.current === "Chinese"
+              ? explanationLanguage === "Spanish"
+                ? "Spanish"
+                : "English"
+              : explanationLanguageRef.current
+            : detectedLanguage;
         explanationLanguageRef.current = requiredLanguage;
+        if (pronunciationPracticeRef.current)
+          pronunciationPracticeRef.current.explanationLanguage =
+            requiredLanguage;
         pendingUserTextRef.current = transcript;
         transcriptRef.current.push({ role: "user", content: transcript });
+        if (isolatedJourney)
+          journeyCapturedTurnsRef.current.push({
+            role: "user",
+            content: rawTranscript,
+            recognition: {
+              rawTranscript,
+              interpretedTranscript: transcript,
+              confidence: transcriptConfidence,
+            },
+          });
         setLatestCaption(transcript);
-        appendMessage({ role: "user", content: transcript });
+        if (!isolatedJourney)
+          appendMessage({ role: "user", content: transcript });
+        if (
+          isJourneySpeaking &&
+          (closeRequestedRef.current ||
+            explicitlyEndsJourneySpeaking(transcript))
+        ) {
+          if (explicitlyEndsJourneySpeaking(transcript))
+            journeyCloseReasonRef.current = "USER_END";
+          closeRequestedRef.current = true;
+          requestNaturalClose();
+          return;
+        }
         if (dataChannelRef.current?.readyState === "open") {
           const blocksForAssessment = activeContext.rolePlay
             ? shouldBlockForRolePlayAssessment(completionPolicy)
@@ -1529,6 +1768,19 @@ export function HanVoiceConversation({
             mode,
             blocksForAssessment ? "assessed" : "direct",
             transcriptRef.current,
+            pronunciationPracticeRef.current ??
+              (mode === "TUTOR" && isHanTutorMeaningRequest(transcript)
+                ? previousTutorPractice
+                : null),
+            isJourneySpeaking
+              ? journeySpeakingPhase(
+                  Date.now() - (sessionStartedAtRef.current ?? Date.now()),
+                  naturalCloseAfterMs ?? maxSessionMs,
+                )
+              : undefined,
+            isJourneySpeaking
+              ? (journeyBanksRef.current ?? undefined)
+              : undefined,
           );
           if (activeContext.rolePlay && blocksForAssessment) {
             pendingTurnInstructionsRef.current = turnInstructions;
@@ -1543,6 +1795,7 @@ export function HanVoiceConversation({
               completionPolicy === "timer",
               minimumLearnerTurns,
               maximumLearnerTurns,
+              usageSurface,
             )
               .then((assessment) => {
                 remainingPracticeTargetsRef.current =
@@ -1627,16 +1880,34 @@ export function HanVoiceConversation({
     if (event.type === "response.output_audio_transcript.done") {
       const transcript = event.transcript?.trim();
       if (transcript) {
+        if (
+          mode === "TUTOR" &&
+          !activeContext.rolePlay &&
+          !remotePlaybackSuppressedRef.current
+        ) {
+          pronunciationPracticeRef.current = rememberTutorPronunciationResponse(
+            transcript,
+            pronunciationPracticeRef.current,
+            explanationLanguageRef.current,
+          );
+        }
         transcriptRef.current.push({ role: "assistant", content: transcript });
+        if (isolatedJourney)
+          journeyCapturedTurnsRef.current.push({
+            role: "assistant",
+            content: transcript,
+          });
         setLatestCaption(transcript);
-        appendMessage({
-          role: "assistant",
-          content: transcript,
-          spokenLive: true,
-        });
+        setLatestCharacterCaption(transcript);
+        if (!isolatedJourney)
+          appendMessage({
+            role: "assistant",
+            content: transcript,
+            spokenLive: true,
+          });
         const userText = pendingUserTextRef.current;
         pendingUserTextRef.current = "";
-        if (userText) {
+        if (userText && !isolatedJourney && saveConversationHistory) {
           const save = saveRealtimeConversationTurnAction(
             userText,
             transcript,
@@ -1647,7 +1918,9 @@ export function HanVoiceConversation({
           void save.catch(() => undefined);
         } else if (
           (openingTurnRef.current || closingTurnRef.current) &&
-          activeContext.rolePlay
+          activeContext.rolePlay &&
+          !isolatedJourney &&
+          saveConversationHistory
         ) {
           const save = saveRealtimeConversationMessageAction(
             "ASSISTANT",
@@ -1733,6 +2006,13 @@ export function HanVoiceConversation({
         // may be awaiting transcription. Do not run the cancelled response's
         // ordinary playback cleanup: it would disable the live microphone and
         // discard the explicit interruption turn.
+        if (
+          isJourneySpeaking &&
+          closeRequestedRef.current &&
+          !pushToTalkActiveRef.current &&
+          !learnerCommitPendingRef.current
+        )
+          requestNaturalClose();
         return;
       }
       if (mode === "TUTOR" && !activeContext.rolePlay) {
@@ -1802,13 +2082,27 @@ export function HanVoiceConversation({
   }
 
   async function startConversation() {
+    if (startPendingRef.current) return;
     setError(null);
+    setLatestCharacterCaption("");
+    pronunciationPracticeRef.current = null;
+    explanationLanguageRef.current =
+      explanationLanguage === "ES"
+        ? "Spanish"
+        : explanationLanguage === "ZH"
+          ? "Chinese"
+          : "English";
     sessionLevelRef.current = context.rolePlay?.level ?? null;
     transcriptRef.current = [];
+    journeyAttemptIdRef.current = null;
+    journeyCapturedTurnsRef.current = [];
+    journeyInterruptedRef.current = false;
+    journeyCloseReasonRef.current = "NATURAL";
     learnerTurnConfidencesRef.current = [];
     speakingEvidenceRef.current = [];
     pendingSavesRef.current = [];
     finishStartedRef.current = false;
+    completionStartedRef.current = false;
     evidenceReviewPendingRef.current = false;
     evidenceReviewTextRef.current = "";
     if (evidenceReviewTimerRef.current != null)
@@ -1853,6 +2147,7 @@ export function HanVoiceConversation({
       return;
     }
     setState("connecting");
+    startPendingRef.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -1862,6 +2157,26 @@ export function HanVoiceConversation({
         },
       });
       streamRef.current = stream;
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      if (isolatedJourney && prepareJourneyAttempt) {
+        const prepared = await prepareJourneyAttempt();
+        journeyAttemptIdRef.current = prepared.attemptId;
+        journeyBanksRef.current = prepared.banks;
+      }
+      if (!mountedRef.current) {
+        if (journeyAttemptIdRef.current)
+          onJourneyAbandonRef.current?.([], {
+            learnerTurnConfidences: [],
+            speakingEvidence: [],
+            capturedTurns: [],
+            closeReason: "ABANDONED",
+            quality: { pendingLearnerTurn: false, interruptedAssistant: false },
+          });
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       // Do not let an early utterance trigger a response before the explicit
       // session.update carrying Han's full identity/tutor prompt is confirmed.
       stream.getAudioTracks().forEach((track) => {
@@ -1887,8 +2202,12 @@ export function HanVoiceConversation({
           setError(
             "The live voice connection ended. Use the text fallback or try again.",
           );
-          stopMedia();
-          onUnavailable?.();
+          if (isolatedJourney && journeyAttemptIdRef.current)
+            void finishConversation(true, "TECHNICAL_FAILURE");
+          else {
+            stopMedia();
+            onUnavailable?.();
+          }
         }
       };
       const dataChannel = peer.createDataChannel("oai-events");
@@ -1910,17 +2229,33 @@ export function HanVoiceConversation({
         // the API) is the real backstop for that case, independent of
         // anything this client does.
         const sessionStartedAt = Date.now();
-        sessionTimerRef.current = window.setInterval(() => {
-          if (Date.now() - sessionStartedAt < maxSessionMs) return;
-          if (sessionTimerRef.current != null) {
-            window.clearInterval(sessionTimerRef.current);
-            sessionTimerRef.current = null;
-          }
-          void finishConversation();
-        }, 15_000);
+        sessionStartedAtRef.current = sessionStartedAt;
+        sessionTimerRef.current = window.setInterval(
+          () => {
+            if (Date.now() - sessionStartedAt < maxSessionMs) return;
+            if (sessionTimerRef.current != null) {
+              window.clearInterval(sessionTimerRef.current);
+              sessionTimerRef.current = null;
+            }
+            void finishConversation(isJourneySpeaking);
+          },
+          isJourneySpeaking ? 500 : 15_000,
+        );
+        if (isJourneySpeaking) {
+          hardCloseTimerRef.current = window.setTimeout(
+            () => void finishConversation(true),
+            maxSessionMs,
+          );
+        }
         if (activeRolePlay && naturalCloseAfterMs) {
           naturalCloseTimerRef.current = window.setTimeout(() => {
             closeRequestedRef.current = true;
+            if (isJourneySpeaking) {
+              // No new press after the window, but a held or committed last
+              // turn may finish within the same finite closing reserve.
+              requestNaturalClose();
+              return;
+            }
             stream.getAudioTracks().forEach((track) => {
               track.enabled = false;
             });
@@ -1933,7 +2268,14 @@ export function HanVoiceConversation({
             track.enabled = false;
           });
           setState("thinking");
-          const openingGuard = buildRealtimeOpeningTurnGuard(activeRolePlay);
+          const openingGuard = buildRealtimeOpeningTurnGuard(
+            isJourneySpeaking && journeyBanksRef.current
+              ? {
+                  ...activeRolePlay,
+                  openingLine: journeyBanksRef.current.openingLine,
+                }
+              : activeRolePlay,
+          );
           if (openingGuard) {
             const guardItemId = `item_guard_${crypto.randomUUID().replaceAll("-", "").slice(0, 21)}`;
             ephemeralTurnGuardItemIdRef.current = guardItemId;
@@ -1980,8 +2322,12 @@ export function HanVoiceConversation({
       dataChannel.onopen = () => {
         if (!realtimeSessionInstructions) {
           setError("Han's live voice configuration was not received.");
-          stopMedia();
-          onUnavailable?.();
+          if (isolatedJourney && journeyAttemptIdRef.current)
+            void finishConversation(true, "TECHNICAL_FAILURE");
+          else {
+            stopMedia();
+            onUnavailable?.();
+          }
           return;
         }
         pendingSessionActivationRef.current = activateRealtimeSession;
@@ -1999,20 +2345,27 @@ export function HanVoiceConversation({
           pendingSessionActivationRef.current = null;
           pendingSessionInstructionsRef.current = null;
           setError("Han's live voice configuration could not be confirmed.");
-          stopMedia();
-          onUnavailable?.();
+          if (isolatedJourney && journeyAttemptIdRef.current)
+            void finishConversation(true, "TECHNICAL_FAILURE");
+          else {
+            stopMedia();
+            onUnavailable?.();
+          }
         }, 8_000);
       };
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       const response = await fetch(
-        `/api/han/realtime?voice=${encodeURIComponent(voice)}&mode=${encodeURIComponent(mode)}`,
+        `/api/han/realtime?voice=${encodeURIComponent(voice)}&mode=${encodeURIComponent(mode)}${usageSurface ? `&surface=${encodeURIComponent(usageSurface)}` : ""}`,
         {
           method: "POST",
           body: offer.sdp,
           headers: {
             "content-type": "application/sdp",
             "x-han-context": encodeURIComponent(JSON.stringify(context)),
+            ...(journeyAttemptIdRef.current
+              ? { "x-hango-journey-attempt-id": journeyAttemptIdRef.current }
+              : {}),
           },
         },
       );
@@ -2026,6 +2379,8 @@ export function HanVoiceConversation({
         instructions?: unknown;
         speechSpeed?: unknown;
         rolePlayLevel?: unknown;
+        journeySpeakingBanks?: JourneySpeakingBanks | null;
+        journeyAttemptId?: string;
       };
       if (
         typeof payload.sdp !== "string" ||
@@ -2037,6 +2392,22 @@ export function HanVoiceConversation({
         throw new Error("Han's live voice configuration was incomplete.");
       realtimeSessionInstructions = payload.instructions;
       realtimeSessionSpeechSpeed = payload.speechSpeed;
+      const banks = payload.journeySpeakingBanks;
+      if (
+        isolatedJourney &&
+        (payload.journeyAttemptId !== journeyAttemptIdRef.current ||
+          !banks ||
+          banks.version !== journeyBanksRef.current?.version ||
+          banks.lessonId !== context.lessonId)
+      )
+        throw new Error("The Journey session did not match its saved attempt.");
+      if (
+        isJourneySpeaking &&
+        banks &&
+        banks.version === JOURNEY_BANK_VERSION &&
+        banks.lessonId === context.lessonId
+      )
+        journeyBanksRef.current = banks;
       if (
         context.rolePlay?.isFreeTopic &&
         !context.rolePlay.level &&
@@ -2054,13 +2425,17 @@ export function HanVoiceConversation({
         sdp: payload.sdp,
       });
     } catch (caught) {
-      stopMedia();
+      if (isolatedJourney && journeyAttemptIdRef.current)
+        await finishConversation(true, "TECHNICAL_FAILURE");
+      else stopMedia();
       setError(
         caught instanceof Error && caught.message
           ? caught.message
           : "Allow microphone access to start a live conversation.",
       );
-      onUnavailable?.();
+      if (!isolatedJourney || !journeyAttemptIdRef.current) onUnavailable?.();
+    } finally {
+      startPendingRef.current = false;
     }
   }
 
@@ -2194,7 +2569,9 @@ export function HanVoiceConversation({
               )}
               <button
                 type="button"
-                onClick={() => void finishConversation()}
+                onClick={() =>
+                  void finishConversation(isJourneySpeaking, "USER_END")
+                }
                 className="h-11 rounded-full border border-border bg-surface px-4 font-interface text-caption font-semibold text-text-primary shadow-sm transition hover:bg-surface-raised"
               >
                 End
@@ -2234,7 +2611,11 @@ export function HanVoiceConversation({
             <UserRound className="size-16 text-neutral-0" aria-hidden="true" />
           </div>
           <div
-            className="flex items-center gap-2 text-neutral-0/85"
+            className={
+              isJourneySpeaking
+                ? "sr-only"
+                : "flex items-center gap-2 text-neutral-0/85"
+            }
             role="status"
           >
             {(state === "connecting" || state === "thinking") && (
@@ -2248,7 +2629,7 @@ export function HanVoiceConversation({
             </span>
           </div>
           <p className="min-h-14 max-w-lg font-interface text-lg leading-relaxed text-neutral-0">
-            {latestCaption}
+            {isJourneySpeaking ? latestCharacterCaption : latestCaption}
           </p>
           {error && (
             <InformationBanner variant="error" className="text-left">
@@ -2274,7 +2655,9 @@ export function HanVoiceConversation({
               )}
               <button
                 type="button"
-                onClick={() => void finishConversation()}
+                onClick={() =>
+                  void finishConversation(isJourneySpeaking, "USER_END")
+                }
                 aria-label="End conversation"
                 className="h-12 rounded-full border border-neutral-0/35 bg-neutral-0/10 px-5 font-interface text-caption font-semibold text-neutral-0 backdrop-blur transition hover:bg-neutral-0/20"
               >
@@ -2308,7 +2691,9 @@ export function HanVoiceConversation({
           )}
           <button
             type="button"
-            onClick={() => void finishConversation()}
+            onClick={() =>
+              void finishConversation(isJourneySpeaking, "USER_END")
+            }
             className="rounded-control border border-border bg-surface px-3 font-interface text-caption font-semibold text-text-secondary transition hover:bg-surface-raised hover:text-text-primary"
           >
             End

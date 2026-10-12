@@ -22,6 +22,7 @@ const MAX_RETRIES = 1;
  */
 export class OpenAiProvider implements AiProvider {
   readonly name = "openai";
+  readonly supportsStructuredOutput = true;
 
   constructor(
     private readonly apiKey: string,
@@ -30,13 +31,14 @@ export class OpenAiProvider implements AiProvider {
 
   async complete(request: AiCompletionRequest): Promise<AiCompletionResult> {
     let lastError: unknown;
+    const retries = request.retry === false ? 0 : MAX_RETRIES;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         return await this.completeOnce(request);
       } catch (error) {
         lastError = error;
-        if (!shouldRetry(error) || attempt === MAX_RETRIES) break;
+        if (!shouldRetry(error) || attempt === retries) break;
       }
     }
 
@@ -62,6 +64,14 @@ export class OpenAiProvider implements AiProvider {
         body: JSON.stringify({
           model: this.model,
           max_completion_tokens: request.maxOutputTokens ?? 500,
+          ...(request.structuredOutput
+            ? {
+                response_format: {
+                  type: "json_schema",
+                  json_schema: { ...request.structuredOutput, strict: true },
+                },
+              }
+            : {}),
           // Han is an interactive tutor, not a long-form reasoning task. A
           // higher effort can consume the whole completion budget in hidden
           // reasoning and return an empty visible reply.
@@ -86,7 +96,7 @@ export class OpenAiProvider implements AiProvider {
       const data = (await response.json()) as OpenAiResponse;
       const content = data.choices[0]?.message.content ?? "";
 
-      if (!content.trim()) {
+      if (!content.trim() && !request.structuredOutput) {
         throw new AiProviderError(
           "unavailable",
           "Han couldn't finish that response. Please try again.",
@@ -99,6 +109,15 @@ export class OpenAiProvider implements AiProvider {
         model: this.model,
         inputTokens: data.usage.prompt_tokens,
         outputTokens: data.usage.completion_tokens,
+        ...(request.structuredOutput
+          ? {
+              outputStatus: data.choices[0]?.message.refusal
+                ? ("refused" as const)
+                : data.choices[0]?.finish_reason !== "stop" || !content.trim()
+                  ? ("incomplete" as const)
+                  : ("complete" as const),
+            }
+          : {}),
       };
     } finally {
       clearTimeout(timeout);
@@ -107,7 +126,10 @@ export class OpenAiProvider implements AiProvider {
 }
 
 interface OpenAiResponse {
-  choices: { message: { role: string; content: string } }[];
+  choices: {
+    message: { role: string; content: string | null; refusal?: string | null };
+    finish_reason?: string;
+  }[];
   usage: { prompt_tokens: number; completion_tokens: number };
 }
 
@@ -135,6 +157,7 @@ function shouldRetry(error: unknown): boolean {
 }
 
 function normalizeError(error: unknown): AiProviderError {
+  if (error instanceof AiProviderError) return error;
   if (error instanceof DOMException && error.name === "AbortError") {
     return new AiProviderError("timeout", "Han took too long to respond.");
   }

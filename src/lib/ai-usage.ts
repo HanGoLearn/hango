@@ -1,6 +1,30 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { estimateCostUsd, getTokenPricingUsdPerMillion } from "@/lib/ai/cost";
+import {
+  REALTIME_SESSION_ESTIMATE_USD,
+  isRealtimeUsageFeature,
+} from "@/lib/realtime-usage";
+import {
+  AI_FEATURE_FAMILY,
+  type AiUsageFamily,
+  type AiUsageFeature,
+} from "@/lib/ai-feature-catalog";
+export {
+  AI_USAGE_FEATURES,
+  AI_USAGE_LIMIT_FEATURES,
+  AI_FEATURE_FAMILY,
+  type AiUsageFamily,
+  type AiUsageFeature,
+} from "@/lib/ai-feature-catalog";
+import {
+  EXPERIENCE_BUDGET_MIGRATION,
+  experienceLimitKey,
+  fixedFeaturesForExperience,
+  recordedAiExperience,
+  resolveAiExperience,
+  type AiExperience,
+} from "@/lib/ai-experiences";
 
 /**
  * Every real paid AI/TTS/STT surface in the app, one entry per feature that
@@ -10,75 +34,22 @@ import { estimateCostUsd, getTokenPricingUsdPerMillion } from "@/lib/ai/cost";
  * and a typo in a call site fails to compile instead of silently logging
  * under a feature name nothing else recognizes.
  */
-export const AI_USAGE_FEATURES = [
-  "ai-teacher-chat",
-  "learner-fact-extraction",
-  "vocabulary-lookup",
-  "mission-chat",
-  "mission-report",
-  "speaking-feedback",
-  "speaking-scenario",
-  "lesson-reflection",
-  "writing-feedback",
-  "placement-grading",
-  "free-topic-feedback",
-  "handwritten-writing",
-  "welcome-audio",
-  "dialogue-audio",
-  "grammar-audio",
-  "vocabulary-audio",
-  "placement-listening-audio",
-  "han-speech",
-  "han-teacher-transcribe",
-  "speaking-transcribe",
-  "han-realtime-session",
-  "han-realtime-assessment",
-] as const;
-
-export type AiUsageFeature = (typeof AI_USAGE_FEATURES)[number];
-
 export const AI_USAGE_FAMILIES = ["TEXT", "STT", "TTS", "REALTIME"] as const;
-export type AiUsageFamily = (typeof AI_USAGE_FAMILIES)[number];
-
-export const AI_FEATURE_FAMILY: Record<AiUsageFeature, AiUsageFamily> = {
-  "ai-teacher-chat": "TEXT",
-  "learner-fact-extraction": "TEXT",
-  "vocabulary-lookup": "TEXT",
-  "mission-chat": "TEXT",
-  "mission-report": "TEXT",
-  "speaking-feedback": "TEXT",
-  "speaking-scenario": "TEXT",
-  "lesson-reflection": "TEXT",
-  "writing-feedback": "TEXT",
-  "placement-grading": "TEXT",
-  "free-topic-feedback": "TEXT",
-  "handwritten-writing": "TEXT",
-  "welcome-audio": "TTS",
-  "dialogue-audio": "TTS",
-  "grammar-audio": "TTS",
-  "vocabulary-audio": "TTS",
-  "placement-listening-audio": "TTS",
-  "han-speech": "TTS",
-  "han-teacher-transcribe": "STT",
-  "speaking-transcribe": "STT",
-  "han-realtime-session": "REALTIME",
-  // This is a text-model assessment made after Realtime transcript turns.
-  "han-realtime-assessment": "TEXT",
-};
 
 const MICROUSD_PER_USD = 1_000_000;
 export const DEFAULT_GLOBAL_DAILY_BUDGET_USD = 5;
 
 /**
- * Conservative maximum exposure authorized before one provider operation.
+ * Preventive exposure estimate authorized before one provider operation.
  * These are intentionally round safety allowances, not pricing claims or a
- * substitute for the provider invoice. Realtime authorizes one live session.
+ * substitute for the provider invoice or guaranteed maximum spend. Realtime
+ * authorizes the user-approved US$0.05 estimate for one live session.
  */
 export const AI_FAMILY_AUTHORIZATION_USD: Record<AiUsageFamily, number> = {
   TEXT: 0.02,
   STT: 0.03,
   TTS: 0.08,
-  REALTIME: 0.25,
+  REALTIME: REALTIME_SESSION_ESTIMATE_USD,
 };
 
 export interface TrackAiOperationInput {
@@ -86,6 +57,7 @@ export interface TrackAiOperationInput {
   feature: AiUsageFeature;
   provider?: string;
   model?: string;
+  experience?: AiExperience;
   /** Multi-provider workflows may perform their single cap check before any step. */
   capAlreadyChecked?: boolean;
 }
@@ -195,6 +167,7 @@ function safeLatencyMs(startedAt: number): number {
 async function recordAiOperationBestEffort(input: {
   userId: string;
   feature: AiUsageFeature;
+  experience?: AiExperience;
   provider?: string;
   model?: string;
   outcome: "SUCCESS" | "FAILURE" | "BLOCKED_CAP";
@@ -207,6 +180,7 @@ async function recordAiOperationBestEffort(input: {
       data: {
         userId: input.userId,
         feature: input.feature,
+        experience: recordedAiExperience(input.feature, input.experience),
         provider: input.provider ?? null,
         model: input.model ?? null,
         outcome: input.outcome,
@@ -233,6 +207,7 @@ export async function trackAiOperation<T>(
     await checkDailyUsageCap(input.userId, input.feature, {
       provider: input.provider,
       model: input.model,
+      experience: input.experience,
     });
   }
   const startedAt = Date.now();
@@ -261,6 +236,7 @@ export async function trackAiOperation<T>(
 interface RecordAiUsageInput {
   userId: string;
   feature: AiUsageFeature;
+  experience?: AiExperience;
   provider: string;
   model: string;
   inputTokens?: number;
@@ -347,13 +323,21 @@ export function buildAiUsageCostMetadata(
 }
 
 /** Called after a real paid call succeeds - never on a cache hit or a mock-provider response. */
-export async function recordAiUsage(input: RecordAiUsageInput): Promise<void> {
+export async function recordAiUsage(
+  input: RecordAiUsageInput,
+): Promise<string> {
   const metadata = buildAiUsageCostMetadata(input);
+  const experience =
+    AI_FEATURE_FAMILY[input.feature] &&
+    !["ai-teacher-chat", "han-realtime-session"].includes(input.feature)
+      ? resolveAiExperience(input.feature, input.experience)
+      : null;
 
-  await db.aiUsageLog.create({
+  const log = await db.aiUsageLog.create({
     data: {
       userId: input.userId,
       feature: input.feature,
+      experience,
       provider: input.provider,
       model: input.model,
       inputTokens: input.inputTokens ?? null,
@@ -362,6 +346,7 @@ export async function recordAiUsage(input: RecordAiUsageInput): Promise<void> {
       ...metadata,
     },
   });
+  return log.id;
 }
 
 function startOfTodayUtc(): Date {
@@ -371,7 +356,7 @@ function startOfTodayUtc(): Date {
 }
 
 /**
- * Per-user, per-feature daily spend cap (2026-09-05 cost audit) - a second,
+ * Per-user, per-experience daily estimated spend cap - a second,
  * slower-but-broader layer on top of each feature's existing 5-minute
  * in-memory burst limiter. The burst limiter stops a fast, accidental spike
  * (a bug looping, a fat-fingered spam-click); this stops the same account
@@ -382,16 +367,49 @@ function startOfTodayUtc(): Date {
 export async function checkDailyUsageCap(
   userId: string,
   feature: AiUsageFeature,
-  identity: { provider?: string; model?: string } = {},
+  identity: {
+    provider?: string;
+    model?: string;
+    experience?: AiExperience;
+  } = {},
   options: DailyUsageCapOptions = {},
 ): Promise<void> {
+  const experience = resolveAiExperience(feature, identity.experience);
+  const limitKey = experienceLimitKey(experience);
+  const policyMigration = EXPERIENCE_BUDGET_MIGRATION;
+  if (policyMigration) {
+    // Fail closed until the one-time experience policy copy is deployed. Missing new rows
+    // must not silently replace a previous per-user block with the default cap.
+    const [migration] = await db.$queryRaw<{ applied: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM "_prisma_migrations"
+        WHERE "migration_name" = ${policyMigration}
+          AND "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+      ) AS applied
+    `;
+    if (!migration?.applied) {
+      throw new DailyUsageCapExceededError(
+        "This AI experience is temporarily unavailable while its shared budget is being configured.",
+      );
+    }
+  }
   const [userCap, cap, usage, policy] = await Promise.all([
     db.aiUsageUserCap.findUnique({
-      where: { userId_feature: { userId, feature } },
+      where: { userId_feature: { userId, feature: limitKey } },
     }),
-    db.aiUsageCap.findUnique({ where: { feature } }),
+    db.aiUsageCap.findUnique({ where: { feature: limitKey } }),
     db.aiUsageLog.aggregate({
-      where: { userId, feature, createdAt: { gte: startOfTodayUtc() } },
+      where: {
+        userId,
+        createdAt: { gte: startOfTodayUtc() },
+        OR: [
+          { experience },
+          {
+            experience: null,
+            feature: { in: fixedFeaturesForExperience(experience) },
+          },
+        ],
+      },
       _sum: { estimatedCostUsd: true },
     }),
     getGlobalBudgetPolicy(),
@@ -405,7 +423,16 @@ export async function checkDailyUsageCap(
   const limit =
     userCap?.dailyLimitUsd ?? cap?.dailyLimitUsd ?? fallbackDailyLimitUsd;
   const spentToday = usage._sum.estimatedCostUsd ?? 0;
-  if (spentToday >= limit) {
+  // Include the next session's estimate, using integer microdollars to avoid
+  // rounding away an exact US$0.05 daily allowance.
+  const exceedsSessionLimit =
+    isRealtimeUsageFeature(feature) &&
+    usdToMicrousd(spentToday) + usdToMicrousd(REALTIME_SESSION_ESTIMATE_USD) >
+      usdToMicrousd(limit);
+  if (
+    usdToMicrousd(spentToday) >= usdToMicrousd(limit) ||
+    exceedsSessionLimit
+  ) {
     const errorCode = userCap
       ? limit === 0
         ? "user_feature_blocked"

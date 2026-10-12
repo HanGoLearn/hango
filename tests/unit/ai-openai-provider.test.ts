@@ -44,6 +44,8 @@ describe("OpenAiProvider", () => {
       content: "You are a tutor.",
     });
     expect(body.messages[1]).toEqual({ role: "user", content: "Hi" });
+    expect(body).not.toHaveProperty("response_format");
+    expect(result).not.toHaveProperty("outputStatus");
   });
 
   it("uses the configured beta model by default", async () => {
@@ -145,4 +147,88 @@ describe("OpenAiProvider", () => {
       provider.complete({ systemPrompt: "x", messages: [] }),
     ).rejects.toMatchObject({ code: "unavailable" });
   });
+
+  it("opts into a strict JSON schema without changing model or reasoning effort", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        choices: [{ message: { content: "{}" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 12, completion_tokens: 8 },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const schema = {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    };
+    const result = await new OpenAiProvider("test").complete({
+      systemPrompt: "Return JSON",
+      messages: [],
+      structuredOutput: { name: "test_judgment", schema },
+      retry: false,
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toMatchObject({
+      model: "gpt-5-mini",
+      reasoning_effort: "minimal",
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "test_judgment", schema, strict: true },
+      },
+    });
+    expect(result.outputStatus).toBe("complete");
+  });
+
+  it.each([
+    [{ content: null, refusal: "Cannot evaluate" }, "stop", "refused"],
+    [{ content: '{"dimensions":' }, "length", "incomplete"],
+    [{ content: null }, "stop", "incomplete"],
+    [{ content: "{}" }, "content_filter", "incomplete"],
+  ])(
+    "preserves usage for an unusable structured completion (%s)",
+    async (message, finish, status) => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse({
+          choices: [{ message, finish_reason: finish }],
+          usage: { prompt_tokens: 120, completion_tokens: 30 },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const result = await new OpenAiProvider("test").complete({
+        systemPrompt: "Return JSON",
+        messages: [],
+        structuredOutput: { name: "test", schema: {} },
+        retry: false,
+      });
+      expect(result).toMatchObject({
+        outputStatus: status,
+        inputTokens: 120,
+        outputTokens: 30,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    new TypeError("network"),
+    new DOMException("timeout", "AbortError"),
+    "http",
+  ])(
+    "does not silently retry a single-dispatch request (%s)",
+    async (error) => {
+      const fetchMock =
+        error === "http"
+          ? vi.fn().mockResolvedValue(jsonResponse({ error: "server" }, 500))
+          : vi.fn().mockRejectedValue(error);
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        new OpenAiProvider("test").complete({
+          systemPrompt: "Return JSON",
+          messages: [],
+          retry: false,
+        }),
+      ).rejects.toBeInstanceOf(AiProviderError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 });

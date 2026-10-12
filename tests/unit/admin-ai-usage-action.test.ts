@@ -136,7 +136,7 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
 
     const result = await updateUserAiUsageCapAction(
       "learner-1",
-      "han-speech",
+      "experience:HAN_TUTOR",
       "CUSTOM",
       0.25,
     );
@@ -144,7 +144,7 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
     expect(result).toEqual({ ok: true });
     expect(setUserAiUsageCapMock).toHaveBeenCalledWith({
       userId: "learner-1",
-      feature: "han-speech",
+      feature: "experience:HAN_TUTOR",
       mode: "CUSTOM",
       dailyLimitUsd: 0.25,
     });
@@ -188,7 +188,7 @@ describe("updateDailyUsageCapAction (2026-09-05, admin-only)", () => {
 
     const result = await updateUserAiUsageCapAction(
       "learner-1",
-      "han-speech",
+      "experience:HAN_TUTOR",
       "EVERYONE",
       0.25,
     );

@@ -20,6 +20,12 @@
  * learner's name unless the scene itself establishes it.
  */
 import { hskLevelForPoints, hskNumberForPoints } from "@/lib/points-system";
+import { isIntroductionSpeakingScene } from "@/lib/speaking-scene";
+import { buildJourneySpeakingPolicy } from "@/lib/journey-speaking-policy";
+import {
+  renderJourneySpeakingBanks,
+  type JourneySpeakingBanks,
+} from "@/lib/content/journey-speaking-bank-contract";
 import {
   classifyHanPronunciationRequestLength,
   isExplicitPronunciationRequest,
@@ -140,6 +146,9 @@ export interface AiTeacherContext {
    * instruction. Legacy untagged, non-role-play messages belong to Tutor.
    */
   hanConversationSurface?: HanConversationSurface;
+  /** Experience routing: cost attribution and Journey's explicit speaking contract;
+   * never a shared conversation-history or learner-memory boundary. */
+  speakingSurface?: "JOURNEY" | "SPEAKING_LAB" | "PLACEMENT";
   /**
    * Which top-level page the learner is on right now (2026-08-21), e.g.
    * "Dashboard", "Progress", "Settings" - resolveCurrentPageName in
@@ -156,6 +165,10 @@ export interface AiTeacherContext {
   onDemandAppContext?: string;
   scenarioName?: string;
   lessonTitle?: string;
+  /** Stable current lesson identity, never an exposure/mastery claim. */
+  lessonId?: string;
+  /** Server-resolved for this Journey session; never trusted from a browser. */
+  journeySpeakingBanks?: JourneySpeakingBanks;
   lessonStepType?: string;
   selectedDialogueLine?: DialogueLineContext;
   selectedVocabulary?: VocabularyContext;
@@ -236,6 +249,9 @@ function modeInstructions(
   mode: AiTeacherMode,
   context: AiTeacherContext,
 ): string {
+  if (context.rolePlay && context.speakingSurface === "JOURNEY") {
+    return "Mode: Journey character conversation. Follow the scene's learning contract, not Han Tutor's teaching template. Never turn a request for a small hint into Context, How to use it, Examples, China note or an unsolicited pronunciation exercise.";
+  }
   return mode === "PRACTICE" && !context.rolePlay
     ? HAN_PRACTICE_IMMERSION_INSTRUCTIONS
     : MODE_INSTRUCTIONS[mode];
@@ -740,6 +756,8 @@ export function buildSystemPrompt(
 function buildRealtimeRolePlaySection(
   rolePlay: RolePlayContext,
   generalLevelPoints: number | null | undefined,
+  journeyPractice = false,
+  banks?: JourneySpeakingBanks,
 ): string {
   // Free-topic Speaking Lab practice ("use my profile level") sets neither
   // an explicit level nor a lesson HSK - previously fell through to a flat
@@ -769,20 +787,18 @@ function buildRealtimeRolePlaySection(
         freeTopicHskLevel !== null &&
         freeTopicHskLevel > 0 &&
         freeTopicHskLevel <= 2);
-  const rolePlayDescription = `${rolePlay.aiRole} ${rolePlay.scenarioContext} ${rolePlay.objective}`;
-  const isMutualIntroduction =
-    /\b(?:new classmate|meet(?:ing)? (?:someone|a person|a classmate) new|meet(?:ing)? for the first time|exchange names?|introduc(?:e|ing|tion)|ask(?:s|ing)? (?:for )?(?:their|your|someone'?s) name)\b/iu.test(
-      rolePlayDescription,
-    );
-  const vocabularyLine = isEarlyBeginner
-    ? `- Use ONLY words and grammar already present in this lesson: vocabulary ${rolePlay.lessonVocabulary?.join(", ") || "the words taught in this lesson"}; studied sentence bank ${rolePlay.lessonPhrases?.join(" / ") || "not provided"}. You may recombine these familiar building blocks naturally, but never introduce an unstudied word or replay the reference dialogue as a sequence.`
-    : `- Lesson vocabulary (prefer these words): ${rolePlay.lessonVocabulary?.join(", ") || "not provided"}.`;
+  const isMutualIntroduction = isIntroductionSpeakingScene(rolePlay);
+  const vocabularyLine =
+    isEarlyBeginner && !journeyPractice
+      ? `- Use ONLY words and grammar already present in this lesson: vocabulary ${rolePlay.lessonVocabulary?.join(", ") || "the words taught in this lesson"}; studied sentence bank ${rolePlay.lessonPhrases?.join(" / ") || "not provided"}. You may recombine these familiar building blocks naturally, but never introduce an unstudied word or replay the reference dialogue as a sequence.`
+      : `- Lesson vocabulary (prefer these words): ${rolePlay.lessonVocabulary?.join(", ") || "not provided"}.`;
 
   return [
     "Live role play:",
     `- You are ${rolePlay.aiRole}; the learner is ${rolePlay.learnerRole}.`,
     `- Scenario: ${rolePlay.scenarioContext}.`,
     `- Goal: ${rolePlay.objective}.`,
+    "- The learner role above is the starting scenario frame, not evidence of their occupation or identity. A later explicit learner self-description applies to the learner, never to your character. Accept it without forcing the expected role or asking for the same fact again. Answer or react to the latest learner turn first; the scene objective never outranks an unanswered learner question.",
     rolePlay.isFreeTopic
       ? "- The learner-authored topic and details are a binding scene contract, not a loose conversation theme. Resolve the roles once before speaking: in the learner's setup, second-person references such as 'you', 'eres', or 你 describe your character, while first-person references such as 'I', 'yo', or 我 describe the learner. If the learner selected an explicit character role, that selected role remains authoritative."
       : null,
@@ -792,8 +808,12 @@ function buildRealtimeRolePlaySection(
     rolePlay.isFreeTopic
       ? "- Advance one causal story. Respond to what just happened and add one logical next beat. Once an event has happened - for example, introductions were exchanged or the class began - never announce, propose, or begin that same event again, and never reset the scene."
       : null,
-    vocabularyLine,
-    `- Lesson sentence patterns (prefer these patterns): ${rolePlay.lessonGrammar?.join("; ") || "not provided"}.`,
+    journeyPractice && banks
+      ? renderJourneySpeakingBanks(banks)
+      : vocabularyLine,
+    journeyPractice && banks
+      ? null
+      : `- Lesson sentence patterns (prefer these patterns): ${rolePlay.lessonGrammar?.join("; ") || "not provided"}.`,
     "- Keep each turn grounded in this exact scenario and goal. Ask or say only one manageable thing per turn so the learner always has a clear way to respond.",
     "- If the goal assigns a specific action or message to the learner - such as asking where something is, ordering a dish, or requesting a service - never produce that specific learner-owned content yourself. This does NOT ban your character from asking other new, relevant questions. Use character-side questions to sustain the scene, provided they do not repeat known facts or say the learner's target line for them.",
     "- Treat the exchange as a real conversation, not an objective checklist. React to what the learner actually said before moving forward. Use short everyday acknowledgements only when they sound natural; never fall back to generic lines such as 'please continue' when a more human response is available.",
@@ -818,7 +838,7 @@ function buildRealtimeRolePlaySection(
     "- Never ask a question you already asked earlier in this same conversation, and never request information the learner has already supplied, unless the learner explicitly asks you to repeat it. Treat 你呢？ as a real question: first resolve what fact it asks for from your preceding sentence, then omit it whenever that learner fact is already known. Keep track of what has happened and always move the scene forward with something new.",
     rolePlay.isFreeTopic
       ? "- When the learner asks the character a question, answer that exact question directly on the next turn. Do not ignore it, redirect to a different objective, answer only with a generic acknowledgement, or replace the answer with another question. The scene cannot end while a learner question is still unanswered."
-      : "- When the learner asks the character a question, answer that exact question directly first. Then, while the timed lesson remains active, return one short relevant question that continues the same thread and is safe for the learner's level. Never replace or evade the answer, and never use the follow-up to perform an objective action assigned to the learner. The scene cannot end while a learner question is still unanswered.",
+      : "- When the learner asks the character a question, answer that exact question directly first. A brief direct answer is enough: add at most one short relevant question only when it is genuinely new, its answer is unknown, and it continues the same thread safely at the learner's level. Never replace or evade the answer, and never use the follow-up to perform an objective action assigned to the learner. The scene cannot end while a learner question is still unanswered.",
     "- Prioritize conversational meaning over perfect pronunciation. If the learner's Mandarin is understandable from the audio plus this scene despite a minor tone or pronunciation error, respond naturally to the intended meaning and keep the scene moving; preserve the issue for end-of-session feedback instead of pretending the pronunciation was perfect.",
     "- If a pronunciation ambiguity would materially change the meaning, ask one short in-character clarification. Never silently reinterpret a clearly different word, and never derail an understandable attempt into a correction drill.",
     rolePlay.level === "Pre-HSK"
@@ -840,7 +860,9 @@ function buildRealtimeRolePlaySection(
     "- Allow a brief natural detour when the learner changes topic, then gently steer the conversation back toward the goal without sounding controlling.",
     rolePlay.correctionMode === "tutor"
       ? "- This is a tutoring conversation, not a strict immersion scene: reply in-character in Mandarin first each turn, then, only when the learner's last turn had a clear pronunciation, tone, grammar, or word-choice mistake, briefly switch to the required explanation language and give one short, specific correction (what they said, what's correct, how to say it). Skip the correction when there was no clear mistake - never invent one."
-      : "- Speak Mandarin Chinese only for the entire live role-play. Never use English, Spanish, pinyin, translations, explanations, corrections, pronunciation feedback, or tutor commentary; all feedback belongs in Reflection after the session.",
+      : journeyPractice
+        ? "- Stay in character in Mandarin by default. Saying no entiendo, no entendí, I don't understand or asking for Spanish/English help pauses immersion: explain the previous line briefly in that help language and wait for the learner. Do not ignore the request, bury the explanation under a new Mandarin question, or move to another topic. Resume the same scene when they are ready. Do not interrupt understandable speech for correction or pronunciation drills; detailed feedback belongs in Reflection."
+        : "- Speak Mandarin Chinese only for the entire live role-play. Never use English, Spanish, pinyin, translations, explanations, corrections, pronunciation feedback, or tutor commentary; all feedback belongs in Reflection after the session.",
     "- Speak standard Mainland Mandarin (Putonghua) with natural Mandarin tones and rhythm. Never speak Korean, never imitate Korean pronunciation or intonation, and never pronounce Chinese syllables with Korean phonology.",
     rolePlay.isFreeTopic
       ? "- Match the persona, relationship, and emotional energy requested in the learner's scenario. Make it audible: an argument or disagreement may sound firm, terse, impatient, or annoyed rather than cheerful and neutral. Stay in character while remaining non-abusive and safe."
@@ -850,9 +872,11 @@ function buildRealtimeRolePlaySection(
       : null,
     "- Open with one short conversational move and then stop. It may be a greeting plus one concise functional question, or one brief fact plus a reciprocal cue, but never a greeting, name, occupation, nationality, and question all together. Save every additional detail for later turns.",
     "- Use at most two very short sentences per turn at the target level: one simple response and, when useful, one short question. Never give a speech, list several facts about yourself, or offer several alternatives at once.",
-    rolePlay.isFreeTopic
-      ? "- This is timed open practice. Continue naturally until the application asks for the closing line; never conclude early merely because one topic feels complete."
-      : `- This is timed lesson practice. Continue naturally until the application asks for the closing line. Objective completion does not end the session: use the remaining time to create one natural opportunity at a time for unused lesson vocabulary or grammar, without naming or coaching the target.`,
+    journeyPractice
+      ? buildJourneySpeakingPolicy()
+      : rolePlay.isFreeTopic
+        ? "- This is timed open practice. Continue naturally until the application asks for the closing line; never conclude early merely because one topic feels complete."
+        : `- This is timed lesson practice. Continue naturally until the application asks for the closing line. Objective completion does not end the session: use the remaining time to create one natural opportunity at a time for unused lesson vocabulary or grammar, without naming or coaching the target.`,
     "- You, the scenario character, speak first as soon as the live session connects. Open the scene naturally instead of waiting for the learner to greet you.",
     "- A greeting such as nihao or 你好 starts the scene. Answer in character and move into the scenario; never respond with a generic tutoring greeting such as asking how you can help or what the learner wants to practice.",
   ]
@@ -891,7 +915,9 @@ export function buildRealtimeSystemPrompt(
         ].join(" "),
     !context.rolePlay ? buildHanAppKnowledgeSection(context) : null,
     "This is a natural conversation, not a sequence of recorded voice notes or a scripted lesson.",
-    OFF_TOPIC_GUARDRAIL,
+    context.rolePlay && context.speakingSurface === "JOURNEY"
+      ? "Keep the active scene coherent, but allow a brief understandable everyday detour initiated by the learner. Respond with familiar language before returning naturally, not through a forced checklist. If audio or meaning is unclear, ask one concise clarification; never invent what the learner meant."
+      : OFF_TOPIC_GUARDRAIL,
     MANDARIN_TARGET_GUARDRAIL,
     isHanImmersionPractice
       ? "Use the learner's current HanGo tier as the session level and adapt continuously to demonstrated comprehension. Never describe or label the learner with an HSK level."
@@ -954,6 +980,10 @@ export function buildRealtimeSystemPrompt(
       ? buildRealtimeRolePlaySection(
           context.rolePlay,
           learner.generalLevelPoints,
+          context.speakingSurface === "JOURNEY",
+          context.speakingSurface === "JOURNEY"
+            ? context.journeySpeakingBanks
+            : undefined,
         )
       : null,
     modeInstructions(mode, context),

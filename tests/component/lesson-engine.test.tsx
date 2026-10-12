@@ -14,8 +14,16 @@
  */
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+const answerGuard = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/es/lesson/test-lesson",
@@ -47,9 +55,16 @@ vi.mock("@/components/lesson/steps/dialogue-step", () => ({
 vi.mock("@/components/lesson/steps/comprehension-step", () => ({
   ComprehensionStep: () => null,
 }));
-vi.mock("@/components/lesson/steps/vocabulary-step", () => ({
-  VocabularyStep: () => null,
-}));
+vi.mock("@/components/lesson/steps/vocabulary-step", async () => {
+  const { useLessonLeaveGuard } =
+    await import("@/components/lesson/lesson-save-barrier");
+  return {
+    VocabularyStep: ({ onContinue }: { onContinue: () => void }) => {
+      useLessonLeaveGuard(answerGuard);
+      return <button onClick={onContinue}>Finish vocabulary</button>;
+    },
+  };
+});
 vi.mock("@/components/lesson/steps/grammar-step", () => ({
   GrammarStep: () => null,
 }));
@@ -84,7 +99,10 @@ import type { LessonWithContent } from "@/lib/content/lesson-data";
 import type { AppLocale } from "@/i18n/config";
 
 afterEach(cleanup);
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  answerGuard.mockReset().mockResolvedValue(undefined);
+});
 
 function buildLesson(): LessonWithContent {
   return {
@@ -106,12 +124,12 @@ function buildLesson(): LessonWithContent {
   } as unknown as LessonWithContent;
 }
 
-function renderLesson() {
+function renderLesson(lesson = buildLesson()) {
   render(
     <LessonMessagesProvider messages={spanishMessages.lesson}>
       <AiTeacherProvider initialMessages={[]}>
         <LessonEngine
-          lesson={buildLesson()}
+          lesson={lesson}
           initialCurrentStepId="step-current"
           initialCompletedStepIds={["step-completed"]}
           locale={"es" as AppLocale}
@@ -122,6 +140,57 @@ function renderLesson() {
 }
 
 describe("LessonEngine step-navigation failure handling", () => {
+  it.each(["navigation", "continue"])(
+    "waits for graded answers before %s",
+    async (operation) => {
+      let resolve!: () => void;
+      answerGuard.mockImplementationOnce(
+        () =>
+          new Promise<void>((done) => {
+            resolve = done;
+          }),
+      );
+      vi.mocked(goToLessonStepAction).mockResolvedValue(undefined);
+      vi.mocked(advanceLessonStepAction).mockResolvedValue({
+        completedAt: null,
+      });
+      const lesson = buildLesson();
+      lesson.steps[1]!.type = "VOCABULARY";
+      renderLesson(lesson);
+      fireEvent.click(
+        screen.getByRole("button", {
+          name:
+            operation === "navigation" ? /completado/i : "Finish vocabulary",
+        }),
+      );
+      expect(goToLessonStepAction).not.toHaveBeenCalled();
+      expect(advanceLessonStepAction).not.toHaveBeenCalled();
+      await act(async () => resolve());
+      await waitFor(() =>
+        expect(
+          operation === "navigation"
+            ? goToLessonStepAction
+            : advanceLessonStepAction,
+        ).toHaveBeenCalledTimes(1),
+      );
+    },
+  );
+  it("a failed answer save cannot advance progress", async () => {
+    answerGuard.mockRejectedValueOnce(new Error("offline"));
+    const lesson = buildLesson();
+    lesson.steps[1]!.type = "VOCABULARY";
+    renderLesson(lesson);
+    fireEvent.click(screen.getByRole("button", { name: "Finish vocabulary" }));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "No pudimos guardar eso",
+      ),
+    );
+    expect(advanceLessonStepAction).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText("Finish vocabulary")).toBeEnabled(),
+    );
+  });
   it("does not crash the lesson when jumping to a step the server rejects, and reverts", async () => {
     const user = userEvent.setup();
     vi.mocked(goToLessonStepAction).mockRejectedValue(
