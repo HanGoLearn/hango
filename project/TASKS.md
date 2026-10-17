@@ -2,6 +2,29 @@
 
 Status: Active
 
+## Aislamiento de reconocimiento incierto — 17 de octubre de 2026
+
+- [x] Segundo fallo real identificado: `invalid_evidence` con diagnóstico
+  `Uncertain recognition cannot certify production or an error`. Cinco turnos
+  claros y uno de baja confianza; el fragmento dudoso invalidaba todo el juicio.
+  La publicación anterior no resolvió esta causa; conversación original preservada.
+- [x] Exclusión de turnos USER inciertos antes de construir prompt/esquema de
+  referencias. No reconstruirlos desde respuestas del personaje. Validador conserva
+  citas exactas, autoría, banco y duplicados; descarta afirmaciones basadas en texto
+  incierto y deja sin nivel un criterio que dependía de él, sin inventar reemplazo.
+- [x] Limitación de reconocimiento informativa si los cuatro criterios tienen
+  evidencia clara. Captura incompleta/interferencia siguen bloqueando nota completa.
+  Sin evidencia clara sustantiva no se llama al proveedor ni se inventa nota cero.
+  Revisión de política guardada para no reinterpretar notas históricas; aviso ES/EN.
+- [x] Recuperación explícita adicional solo para el rechazo antiguo exacto con
+  dos solicitudes consumidas. Sin reset de contador; límite general de dos intacto,
+  exclusión de fallos nuevos, mismas guardas de concurrencia/usuario/consumo.
+- [x] 1.439 unitarias y 216 componentes pasan. Pruebas nuevas: aislamiento,
+  no mutación del intento, informe histórico, citas falsas y recuperación acotada.
+- [ ] Integraciones, tipos/lint/build y CI remoto; publicación GitHub/Vercel.
+- [ ] Usuario autoriza UNA evaluación real adicional del intento ya guardado.
+  Ejecutarla únicamente tras publicar, comprobar resultado y no repetir si falla.
+
 ## Corrección de reflexión/Speaking — 17 de octubre de 2026
 
 - [x] Incidente real de producción: conversación de 13 turnos preservada;

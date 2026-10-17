@@ -45,6 +45,8 @@ export const journeyReportMessages = {
     grammar: "Gramática",
     comprehension: "Comprensión y práctica",
     speaking: "Conversación",
+    clearTurnsOnly:
+      "Evaluamos tus intervenciones claras; los fragmentos con reconocimiento dudoso quedan fuera de la nota.",
     quizComplete: "Todas las respuestas evaluadas",
     quizPartial: "Faltan respuestas por evaluar",
     quizMissing: "Sin respuestas registradas",
@@ -129,6 +131,8 @@ export const journeyReportMessages = {
     grammar: "Grammar",
     comprehension: "Comprehension and practice",
     speaking: "Conversation",
+    clearTurnsOnly:
+      "We assess your clear turns; fragments with uncertain recognition are excluded from the score.",
     quizComplete: "All answers assessed",
     quizPartial: "Some answers still need assessment",
     quizMissing: "No answers recorded",

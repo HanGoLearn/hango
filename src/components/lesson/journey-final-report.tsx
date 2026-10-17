@@ -89,6 +89,10 @@ export function JourneyFinalReport({
               ? "—"
               : `${report.speaking.score}/100`}
           </CardTitle>
+          {report.speaking.report?.evaluationPolicy &&
+            report.speaking.report.limitations.some(
+              (item) => item.kind === "recognition_uncertain",
+            ) && <Caption>{text.clearTurnsOnly}</Caption>}
           {!feedback && (
             <Body>
               {report.speaking.reason === "TECHNICAL_CAPTURE"

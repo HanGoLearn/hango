@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { canRecoverJourneyEvaluation } from "@/lib/journey-evaluation-recovery";
+import { JOURNEY_EVALUATION_POLICY } from "@/lib/journey-evaluation-policy";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
 import {
   DailyUsageCapExceededError,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/journey-speaking-attempt-contract";
 import {
   buildJourneyEvaluationPrompt,
+  getJourneyEvaluableContext,
   hasSubstantiveJourneyTurn,
   journeyJudgmentOutputSchema,
   validateJourneyJudgment,
@@ -145,6 +147,7 @@ export async function evaluateJourneySpeakingAttempt(
               // provider output. Useful diagnostics must survive a rejected result.
               report: {
                 kind: "validation_failure",
+                evaluationPolicy: JOURNEY_EVALUATION_POLICY,
                 errors: validationErrors.slice(0, 20),
               },
             }
@@ -156,7 +159,7 @@ export async function evaluateJourneySpeakingAttempt(
     // No paid call for an abandoned attempt or merely greeting/empty capture.
     if (
       attempt.status === "CANCELLED" ||
-      !hasSubstantiveJourneyTurn(context.turns)
+      !hasSubstantiveJourneyTurn(getJourneyEvaluableContext(context).turns)
     ) {
       await db.journeySpeakingEvaluation.updateMany({
         where: claimWhere,
