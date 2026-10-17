@@ -127,12 +127,14 @@ export type JourneyJudgment = z.infer<typeof JourneyJudgmentSchema>;
  * Removing validation-only bounds keeps the wire schema in the conservative
  * Structured Outputs subset without maintaining a divergent handwritten schema.
  */
-export function journeyJudgmentOutputSchema(): Record<string, unknown> {
+export function journeyJudgmentOutputSchema(
+  context?: JourneyEvaluationContext,
+): Record<string, unknown> {
   const schema = z.toJSONSchema(JourneyJudgmentSchema);
   function wire(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(wire);
     if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(
+    const result = Object.fromEntries(
       Object.entries(value)
         .filter(
           ([key]) =>
@@ -148,6 +150,44 @@ export function journeyJudgmentOutputSchema(): Record<string, unknown> {
         )
         .map(([key, item]) => [key, wire(item)]),
     );
+    // Constrain references at generation time, not just after spending on an
+    // otherwise well-formed report. Server validation still checks exact quote,
+    // role, item kind and pedagogical relationships; an enum is not evidence.
+    const properties = result.properties as Record<string, unknown> | undefined;
+    if (context && properties) {
+      if (properties.turnId && properties.quote)
+        properties.turnId = {
+          type: "string",
+          enum: context.turns.map((turn) => turn.id),
+        };
+      if (properties.itemId && properties.kind) {
+        const buckets = [
+          context.snapshot.banks.core,
+          context.snapshot.banks.support,
+          context.snapshot.banks.extension,
+        ];
+        const ids = [
+          ...new Set([
+            ...buckets.flatMap((bucket) =>
+              bucket.vocabulary.map((item) => item.id),
+            ),
+            ...buckets.flatMap((bucket) =>
+              bucket.grammar.map((item) => item.id),
+            ),
+            ...context.snapshot.successConditions.map((item) => item.id),
+          ]),
+        ];
+        if (ids.length) properties.itemId = { type: "string", enum: ids };
+      }
+      if (properties.bankVersion && properties.rubricVersion) {
+        properties.bankVersion = {
+          type: "string",
+          enum: [context.snapshot.banks.version],
+        };
+        properties.locale = { type: "string", enum: [context.locale] };
+      }
+    }
+    return result;
   }
   return wire(schema) as Record<string, unknown>;
 }
@@ -234,7 +274,16 @@ export function validateJourneyJudgment(
 ): JourneyJudgmentValidation {
   const parsed = JourneyJudgmentSchema.safeParse(raw);
   if (!parsed.success)
-    return { ok: false, errors: ["Invalid judgment schema"] };
+    return {
+      ok: false,
+      // Schema-owned paths/codes, never issue input or the raw model output.
+      errors: parsed.error.issues
+        .slice(0, 10)
+        .map(
+          (issue) =>
+            `Invalid judgment schema: ${issue.path.join(".").slice(0, 180)} (${issue.code})`,
+        ),
+    };
   const judgment = parsed.data;
   const errors: string[] = [];
   if (judgment.locale !== context.locale) errors.push("Wrong feedback locale");
@@ -471,6 +520,9 @@ export function buildJourneyEvaluationPrompt(
     "Text and browser capture cannot establish accurate pronunciation, tones or acoustic fluency. Never provide phonetic scores, diagnoses or precise rhythm/speed findings. Uncertain recognition, silence, technical interruption and AI interference are limitations, not learner language errors; do not silently replace raw words with guessed intended Mandarin to certify production.",
     "Return short grounded feedback: honest summary, at most one achievement with learner quote, at most one priority with quote and corrected example if appropriate, and a small next step. If no confirmed error, choose a practice extension instead of inventing a correction. No claim that all lesson vocabulary is mastered or that any HSK level is certified. No praise solely for AI contributions. Missing evidence must remain explicit.",
     "Keep this single report compact. Select at most 12 relevant content evidence items, not an inventory of every possible word. Reasons are brief; citations are short exact excerpts, normally one or two per criterion. Never omit a known limitation just to complete the grade.",
+    "VALIDATION CHECKLIST: Each citation is {turnId,quote} from the SAME supplied turn, with an exact unchanged substring of 1..240 characters (do not translate, repair punctuation or use an interpreted transcript). Use only supplied bank item IDs, never their words as IDs. Reasons <=400 characters, evidence <=12 items, <=4 citations each. Feedback summary <=360, achievement <=260, priority <=300, nextStep <=240 characters. Keep every field, using null/[] where appropriate.",
+    "For each OBSERVED dimension: level is 0..4 and at least one citation is from a USER turn. For NOT_OBSERVED/NO_OPPORTUNITY: level=null. OBSERVED interaction MUST cite BOTH an assistant question/response and a learner response. ASSISTED item evidence MUST cite BOTH the actual assistant model/hint and learner application. INDEPENDENT/ASSISTED vocabulary MUST include that exact Chinese word inside a learner quote. NOT_OBSERVED/NO_OPPORTUNITY items must not cite learner production; normally omit unused items entirely instead of cataloguing them.",
+    "If a user turn has uncertain recognition, do not classify its words as INDEPENDENT, ASSISTED or ERROR. Mark the recognition limitation and evaluate only what can be supported. A generic assent alone cannot certify UNDERSTOOD. A grammar/vocabulary correction priority must cite the exact SAME turnId AND quote as a matching ERROR evidence item of the same kind; otherwise use a practice extension with no claimed error. Never add an error just to justify a priority.",
     "A closure segment is not a technical error; USER_END can be fully evaluable. A greeting and immediate exit provide insufficient evidence. Do not require a fixed turn count or six characters as proof of ability. Judge the opportunity and actual communicative acts of this lesson.",
     `Rubric version: ${JOURNEY_RUBRIC_VERSION}; bank version: ${context.snapshot.banks.version}; locale code: ${context.locale}.`,
     "Return a JSON object matching JourneyJudgmentSchema: rubricVersion, bankVersion, locale, dimensions {communication,language,interaction,autonomy} each {observation,level,reason,citations:[{turnId,quote}]}; evidence [{kind:vocabulary|grammar|act,itemId,state,reason,citations}]; limitations [{kind:recognition_uncertain|ai_interference|capture_incomplete,reason,citations}]; feedback {summary,achievement:null|{text,citations},priority:null|{kind:grammar|vocabulary|communication|practice,text,citations,example:null|{chinese,pinyin,translation}},nextStep}. No extra keys, no overall score.",

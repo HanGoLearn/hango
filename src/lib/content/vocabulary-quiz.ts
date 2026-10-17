@@ -301,6 +301,8 @@ export interface VocabularyQuestionPlan {
  * Avoid running vocabulary-editing scripts against lessons with recent
  * learner activity.
  */
+export const VOCABULARY_QUICK_TEST_PASS_THRESHOLD = 0.8;
+
 export function planVocabularyQuestions(
   vocabularyItemId: string,
   lessonId: string,

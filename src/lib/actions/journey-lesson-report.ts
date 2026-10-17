@@ -56,6 +56,21 @@ export async function evaluateJourneyLessonReportAction(
   });
 }
 
+/** Explicit, bounded recovery of the same selected conversation. This may
+ * incur a new AI charge; never called on mount, polling or save retry. */
+export async function recoverJourneyLessonReportAction(
+  input: unknown,
+): Promise<Result> {
+  return execute(input, async (userId, lessonId) => {
+    await evaluateJourneyLessonReport(userId, lessonId, {
+      recoverFailed: true,
+    });
+    const report = await persistJourneyLessonReport(userId, lessonId);
+    refresh();
+    return report;
+  });
+}
+
 /** Retry ONLY saving a returned result; cannot spend on another AI request. */
 export async function saveJourneyLessonReportAction(
   input: unknown,

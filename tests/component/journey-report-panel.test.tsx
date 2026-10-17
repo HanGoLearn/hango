@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   evaluate: vi.fn(),
+  recover: vi.fn(),
   save: vi.fn(),
   legacy: vi.fn(),
   redo: vi.fn(),
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/actions/journey-lesson-report", () => ({
   getJourneyLessonReportAction: mocks.read,
   evaluateJourneyLessonReportAction: mocks.evaluate,
+  recoverJourneyLessonReportAction: mocks.recover,
   saveJourneyLessonReportAction: mocks.save,
 }));
 vi.mock("@/lib/actions/reflection", () => ({
@@ -69,6 +71,55 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("Journey report action boundary", () => {
+  it("can leave a failed report without paying for recovery or resetting the lesson", async () => {
+    const failed = report();
+    failed.speaking = {
+      state: "FAILED",
+      score: null,
+      report: null,
+      canRetry: true,
+    };
+    mocks.read.mockResolvedValue({ ok: true, report: failed });
+    const exit = vi.fn();
+    render(<JourneyReportPanel lessonId="lesson" locale="es" onExit={exit} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Volver a la ruta" }),
+    );
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(mocks.redo).not.toHaveBeenCalled();
+  });
+  it("recovers saved speech only after an explicit press and discloses extra AI usage", async () => {
+    const failed = report();
+    failed.speaking = {
+      state: "FAILED",
+      score: null,
+      report: null,
+      canRetry: true,
+    };
+    mocks.read.mockResolvedValue({ ok: true, report: failed });
+    mocks.recover.mockResolvedValue({
+      ok: true,
+      report: { ...failed, speaking: { ...failed.speaking, canRetry: false } },
+    });
+    render(<JourneyReportPanel lessonId="lesson" locale="es" />);
+    const recover = await screen.findByRole("button", {
+      name: "Recuperar evaluación",
+    });
+    expect(screen.getByText(/consumo adicional/)).toBeInTheDocument();
+    expect(mocks.recover).not.toHaveBeenCalled();
+    fireEvent.click(recover);
+    fireEvent.click(recover);
+    await waitFor(() =>
+      expect(mocks.recover).toHaveBeenCalledExactlyOnceWith({
+        lessonId: "lesson",
+      }),
+    );
+    expect(mocks.evaluate).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Recuperar evaluación" }),
+    ).not.toBeInTheDocument();
+  });
   it("Reflection mounts only the new reader and provides explicit redo recovery", async () => {
     const lesson = {
       id: "lesson",

@@ -2,6 +2,35 @@
 
 Status: Active
 
+## Corrección de reflexión/Speaking — 17 de octubre de 2026
+
+- [x] Incidente real de producción: conversación de 13 turnos preservada;
+  juicio rechazado por `invalid_evidence`, no falta de conversación. Prueba
+  rápida de vocabulario 9/10 aprobada se interpretaba erróneamente como cuatro
+  preguntas de refuerzo faltantes. Ningún borrado ni nueva llamada IA en diagnóstico.
+- [x] Umbral compartido con UI; prueba rápida aprobada conserva todas sus
+  respuestas reales (incluidos errores). Compatibilidad de snapshots antiguos
+  mediante lectura de primeras respuestas del mismo usuario/lección/ventana
+  original; no reescribe la conversación ni reevalúa con currículo modificado.
+- [x] Referencias del juicio limitadas al intento/banco/idioma en el esquema;
+  prompt explicita reglas de citas y límites. Validador íntegro, diagnósticos
+  acotados persistidos sin respuesta cruda. Una recuperación explícita del mismo
+  intento, máximo dos dispatches totales, bloqueo por concurrencia y mismos
+  límites/medición de IA. Abrir/guardar no reintenta; UI informa consumo adicional
+  y permite salir sin pagar ni reiniciar. Rechazos de seguridad no se reintentan.
+- [x] Reflexión ES/EN: tarjetas de resultados, una nota pedagógica, una mejora
+  y siguiente paso; si falla IA muestra avance verificado sin elogios inventados.
+  Criterios/recuentos y explicación técnica de recompensas quedan plegados.
+- [x] 1.435 unitarias y 214 componentes pasan; tipos, lint y build de 70 páginas
+  pasan. QA visual local de estados completo/parcial a 390px, sin desbordamiento.
+  Vista de QA usa datos de ejemplo, no certifica una evaluación real de OpenAI.
+- [x] Regresión integral: 380 integraciones y un smoke pasan en Postgres
+  temporal desechable; sin OpenAI pagado, secretos revisados. Total 2.030 pruebas.
+- [ ] Publicar con autorización recibida del usuario. Verificar después en
+  Vercel su 90/100 de vocabulario y la recuperación
+  disponible, SIN pulsarla ni consumir IA hasta petición explícita.
+
+
 ## Entrega de Speaking en producción — 16 de octubre de 2026
 
 - [x] Destinos comprobados por identificadores de administrador/lección y sesión

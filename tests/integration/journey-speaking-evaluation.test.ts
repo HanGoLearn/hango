@@ -138,6 +138,76 @@ async function capture(
 }
 
 describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
+  it("one explicit concurrent recovery reuses saved speech, meters both calls, and cannot dispatch a third", async () => {
+    complete.mockImplementationOnce(async (request) => {
+      const result = response(request);
+      const raw = JSON.parse(result.content);
+      raw.dimensions.language.citations[0].quote = "invented";
+      return { ...result, content: JSON.stringify(raw) };
+    });
+    const { userId, attemptId } = await capture();
+    const before = await getJourneySpeakingAttempt(userId, attemptId, lessonId);
+    const failed = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+    );
+    expect(failed).toMatchObject({
+      status: "FAILED",
+      failureCode: "invalid_evidence",
+      requestCount: 1,
+    });
+    await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
+    expect(complete).toHaveBeenCalledTimes(1);
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        evaluateJourneySpeakingAttempt(userId, attemptId, lessonId, {
+          recoverFailed: true,
+        }),
+      ),
+    );
+    const recovered = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+      { recoverFailed: true },
+    );
+    expect(recovered).toMatchObject({
+      status: "COMPLETE",
+      score: 75,
+      requestCount: 2,
+      failureCode: null,
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(await db.aiUsageLog.count({ where: { userId } })).toBe(2);
+    const after = await getJourneySpeakingAttempt(userId, attemptId, lessonId);
+    expect(after.turns).toEqual(before.turns);
+    expect(after.captureHash).toBe(before.captureHash);
+    expect(after.snapshotHash).toBe(before.snapshotHash);
+  });
+  it("a failed recovery remains ungraded and cannot be retried endlessly", async () => {
+    complete.mockImplementation(async (request) => ({
+      ...response(request),
+      content: "{bad",
+    }));
+    const { userId, attemptId } = await capture();
+    await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
+    await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId, {
+      recoverFailed: true,
+    });
+    const final = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+      { recoverFailed: true },
+    );
+    expect(final).toMatchObject({
+      status: "FAILED",
+      score: null,
+      requestCount: 2,
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
   it("recognition and capture quality stored by the browser cannot be ignored to award a complete grade", async () => {
     const userId = (
       await db.user.create({
@@ -307,10 +377,18 @@ describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
       expect(failed).toMatchObject({
         status: "FAILED",
         score: null,
-        report: null,
         failureCode,
         requestCount: 1,
       });
+      if (failureCode === "invalid_evidence") {
+        expect(failed.report).toMatchObject({
+          kind: "validation_failure",
+          errors: expect.arrayContaining(["Unbacked citation: language"]),
+        });
+        expect(JSON.stringify(failed.report)).not.toContain(
+          "an invented learner sentence",
+        );
+      } else expect(failed.report).toBeNull();
       expect(await db.aiUsageLog.count({ where: { userId } })).toBe(1);
       await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
       expect(complete).toHaveBeenCalledTimes(1);

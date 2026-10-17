@@ -41,6 +41,7 @@ import {
   buildSentenceOrderQuestion,
   seededRandom,
   planVocabularyQuestions,
+  VOCABULARY_QUICK_TEST_PASS_THRESHOLD,
   type VocabularyQuestionPlan,
   type VocabularyQuizField,
   type VocabularyQuizItem,
@@ -89,7 +90,7 @@ const DEFAULT_HAN_VOICE = "cedar";
  *    their own `:quicktest` questionKey suffix (never `:meaning`), so they
  *    can never collide with or double-count against a walkthrough attempt.
  */
-const QUICK_TEST_PASS_THRESHOLD = 0.8;
+const QUICK_TEST_PASS_THRESHOLD = VOCABULARY_QUICK_TEST_PASS_THRESHOLD;
 
 type VocabularyMode = "choose" | "quick-test" | "walkthrough";
 

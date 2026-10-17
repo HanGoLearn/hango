@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { REFLECTION_WEIGHTS, starsForScore } from "@/lib/points-system";
 import type { JourneyEvaluationReport } from "@/lib/journey-speaking-evaluation";
+import { VOCABULARY_QUICK_TEST_PASS_THRESHOLD } from "@/lib/content/vocabulary-quiz";
 
 export const JOURNEY_LESSON_REPORT_VERSION = "journey-lesson-2026-10-11-v2";
 // Explicit versioned provenance in the existing optional report JSON column.
@@ -92,6 +93,30 @@ export function selectJourneyQuestionEvidence(
   }));
 }
 
+/** The walkthrough is skipped after a complete, passing quick test. Keep its
+ * actual incorrect answers (90%, not 100%); never invent remedial questions.
+ * Inputs must be server-graded first answers from this run, before capture. */
+export function passedJourneyQuickTestEvidence(
+  wordIds: readonly string[],
+  attempts: readonly { id: string; key: string; isCorrect: boolean | null }[],
+): JourneyQuestionEvidence[] | null {
+  const ids = [...new Set(wordIds)];
+  if (!ids.length) return null;
+  const evidence = selectJourneyQuestionEvidence(
+    ids.map((id) => `${id}:quicktest`),
+    attempts,
+  );
+  if (
+    evidence.some((entry) => entry.attemptId === null || entry.result === null)
+  )
+    return null;
+  return evidence.filter((entry) => entry.result === true).length /
+    ids.length >=
+    VOCABULARY_QUICK_TEST_PASS_THRESHOLD
+    ? evidence
+    : null;
+}
+
 export function summarizeJourneyQuiz(
   entries: readonly JourneyQuestionEvidence[],
 ): JourneyQuizSummary {
@@ -140,6 +165,7 @@ export type JourneyLessonReportView = {
     comprehension: JourneyQuizSummary;
   };
   speaking: {
+    canRetry?: boolean;
     reason?: "TECHNICAL_CAPTURE" | "NO_SPEECH" | "EVALUATION_FAILED";
     state: JourneySpeakingReportState;
     score: number | null;
