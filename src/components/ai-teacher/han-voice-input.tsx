@@ -28,9 +28,11 @@ export function HanVoiceInput({
   context,
   pronunciationTarget,
   onTranscript,
+  experience = "HAN_TUTOR",
 }: {
   disabled: boolean;
   context: AiTeacherContext;
+  experience?: "HAN_TUTOR" | "HAN_COMPANION";
   pronunciationTarget: HanPronunciationTarget | null;
   onTranscript: (
     transcript: string,
@@ -123,6 +125,7 @@ export function HanVoiceInput({
     });
     const formData = new FormData();
     formData.append("audio", blob, "han-message.webm");
+    formData.set("experience", experience);
     try {
       const [result, pronunciationAttempt] = await Promise.all([
         transcribeHanMessageAction(formData),

@@ -132,6 +132,7 @@ export function SpeakingTestHarness({
       </Card>
 
       <SpeakingStep
+        lessonId={lesson.id}
         mission={lesson.mission}
         vocabulary={lesson.vocabulary}
         grammar={lesson.grammar}

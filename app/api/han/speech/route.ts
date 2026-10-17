@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { resolveAiExperience } from "@/lib/ai-experiences";
 import { getAiProvider } from "@/lib/ai";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import {
@@ -79,6 +80,7 @@ export async function POST(request: Request): Promise<Response> {
     voice?: unknown;
     responseLanguage?: unknown;
     delivery?: unknown;
+    experience?: unknown;
   } | null;
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   const voice = typeof body?.voice === "string" ? body.voice : "cedar";
@@ -91,6 +93,20 @@ export async function POST(request: Request): Promise<Response> {
   const speechStyle: HanSpeechStyle =
     body?.delivery === "companion" ? "companion" : "tutor";
   const conversational = body?.delivery === "conversation";
+  let experience;
+  try {
+    experience = resolveAiExperience(
+      "han-speech",
+      body?.experience ??
+        (speechStyle === "companion"
+          ? "HAN_COMPANION"
+          : conversational
+            ? "JOURNEY_SPEAKING"
+            : "HAN_TUTOR"),
+    );
+  } catch {
+    return Response.json({ error: "Invalid speech origin" }, { status: 400 });
+  }
 
   if (!text || text.length > MAX_SPEECH_CHARACTERS || !HAN_VOICES.has(voice)) {
     return Response.json({ error: "Invalid speech request" }, { status: 400 });
@@ -128,7 +144,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   try {
-    await checkDailyUsageCap(session.user.id, "han-speech");
+    await checkDailyUsageCap(session.user.id, "han-speech", { experience });
   } catch (error) {
     if (error instanceof DailyUsageCapExceededError) {
       return Response.json({ error: error.message }, { status: 429 });
@@ -143,6 +159,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         userId: session.user.id,
         feature: "han-speech",
+        experience,
         provider: provider.name,
         capAlreadyChecked: true,
       },
@@ -160,6 +177,7 @@ export async function POST(request: Request): Promise<Response> {
     await recordAiUsage({
       userId: session.user.id,
       feature: "han-speech",
+      experience,
       provider: oralScript.provider,
       model: oralScript.model,
       inputTokens: oralScript.inputTokens,
@@ -182,6 +200,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         userId: session.user.id,
         feature: "han-speech",
+        experience,
         provider: "openai",
         model: "gpt-4o-mini-tts",
         capAlreadyChecked: true,
@@ -231,6 +250,7 @@ export async function POST(request: Request): Promise<Response> {
   await recordAiUsage({
     userId: session.user.id,
     feature: "han-speech",
+    experience,
     provider: "openai",
     model: "gpt-4o-mini-tts",
     estimatedCostUsd: estimateTtsCostUsd(spokenText),

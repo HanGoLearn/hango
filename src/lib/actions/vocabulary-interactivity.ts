@@ -103,7 +103,7 @@ export async function recordVocabularyWordSeenAction(
 }
 
 /**
- * Fire-and-forget from the client, once per word left (not once per
+ * Acknowledged before leaving the step, once per word left (not once per
  * question - 2026-08-19, project/learning-journey-optimization.md Facet C
  * follow-up). The Vocabulary Step buffers a word's answers and flushes
  * them together via this one call instead of one call per question.
@@ -113,6 +113,6 @@ export async function recordVocabularyQuizAttemptsAction(
   attempts: VocabularyQuizAttemptInput[],
 ): Promise<void> {
   const session = await auth();
-  if (!session?.user?.id) return;
+  if (!session?.user?.id) throw new Error("Not authenticated");
   await recordVocabularyQuizAttempts(session.user.id, lessonId, attempts);
 }

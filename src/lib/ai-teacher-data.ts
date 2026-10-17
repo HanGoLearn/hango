@@ -4,6 +4,8 @@ import { getAiProvider } from "@/lib/ai";
 import { AiProviderError, type AiMessageInput } from "@/lib/ai/provider";
 import { estimateCostUsd } from "@/lib/ai/cost";
 import { recordAiUsage, trackAiOperation } from "@/lib/ai-usage";
+import { resolveHanTextUsageFeature } from "@/lib/ai-feature-catalog";
+import { speakingExperience } from "@/lib/ai-experiences";
 import {
   buildSystemPrompt,
   detectHanResponseLanguage,
@@ -534,8 +536,12 @@ export async function sendAiTeacherMessage(
   );
 
   const provider = getAiProvider();
+  const feature = resolveHanTextUsageFeature(mode, context);
+  const experience = context.rolePlay
+    ? speakingExperience(context.speakingSurface, context.rolePlay.isFreeTopic)
+    : undefined;
   const result = await trackAiOperation(
-    { userId, feature: "ai-teacher-chat", provider: provider.name },
+    { userId, feature, experience, provider: provider.name },
     () =>
       provider.complete({
         systemPrompt,
@@ -546,7 +552,8 @@ export async function sendAiTeacherMessage(
 
   await recordAiUsage({
     userId,
-    feature: "ai-teacher-chat",
+    feature,
+    experience,
     provider: result.provider,
     model: result.model,
     inputTokens: result.inputTokens,

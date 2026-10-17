@@ -11,7 +11,7 @@ import {
   InvalidUserAiUsageCapError,
   type UserAiUsageCapMode,
 } from "@/lib/admin-ai-usage";
-import { AI_USAGE_FEATURES, type AiUsageFeature } from "@/lib/ai-usage";
+import { normalizeAiLimitKey } from "@/lib/ai-experiences";
 
 export type UpdateDailyCapResult = { ok: true } | { ok: false; error: string };
 
@@ -43,13 +43,14 @@ export async function updateDailyUsageCapAction(
 ): Promise<UpdateDailyCapResult> {
   await requireAdministrator();
 
-  if (!AI_USAGE_FEATURES.includes(feature as AiUsageFeature)) {
+  if (!normalizeAiLimitKey(feature)) {
     return { ok: false, error: "Función desconocida." };
   }
 
   try {
-    await setDailyUsageCap(feature as AiUsageFeature, dailyLimitUsd);
+    await setDailyUsageCap(feature, dailyLimitUsd);
     revalidatePath("/admin/limits");
+    revalidatePath("/admin/analytics");
     return { ok: true };
   } catch (error) {
     if (error instanceof InvalidDailyCapError) {
@@ -67,7 +68,7 @@ export async function updateUserAiUsageCapAction(
 ): Promise<UpdateDailyCapResult> {
   await requireAdministrator();
 
-  if (!AI_USAGE_FEATURES.includes(feature as AiUsageFeature)) {
+  if (!normalizeAiLimitKey(feature)) {
     return { ok: false, error: "Función desconocida." };
   }
   if (
@@ -81,12 +82,14 @@ export async function updateUserAiUsageCapAction(
   try {
     await setUserAiUsageCap({
       userId,
-      feature: feature as AiUsageFeature,
+      feature,
       mode: mode as UserAiUsageCapMode,
       dailyLimitUsd,
     });
     revalidatePath(`/admin/users/${userId}`);
     revalidatePath("/admin/operations");
+    revalidatePath("/admin/analytics");
+    revalidatePath("/admin/limits");
     return { ok: true };
   } catch (error) {
     if (error instanceof InvalidUserAiUsageCapError) {

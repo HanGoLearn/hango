@@ -36,6 +36,9 @@ import type { StreakResult } from "@/lib/study-streak";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 import { useLessonMessages } from "@/components/lesson/lesson-messages";
 import { formatMessage } from "@/i18n/format";
+import type { AppLocale } from "@/i18n/config";
+import { JourneyReportPanel } from "@/components/lesson/journey-report-panel";
+import { LessonRedoControl } from "@/components/lesson/lesson-redo-control";
 
 const DEFAULT_HAN_VOICE = "cedar";
 
@@ -50,6 +53,37 @@ type ReportState =
  * src/lib/reflection.ts. Generated once per (learner, lesson), cached.
  */
 export function ReflectionStep({
+  journeyReport = false,
+  locale = "en",
+  onExit,
+  ...props
+}: {
+  lesson: LessonWithContent;
+  onContinue: () => void;
+  journeyReport?: boolean;
+  locale?: AppLocale;
+  onExit?: () => void;
+}) {
+  if (journeyReport)
+    return (
+      <div className="flex flex-col gap-4">
+        <JourneyReportPanel
+          lessonId={props.lesson.id}
+          locale={locale}
+          onContinue={props.onContinue}
+          onExit={onExit}
+        />
+        <LessonRedoControl
+          lessonId={props.lesson.id}
+          lessonSlug={props.lesson.slug}
+          scenarioSlug={props.lesson.scenarioLevel.scenario.slug}
+        />
+      </div>
+    );
+  return <LegacyReflectionStep {...props} />;
+}
+
+function LegacyReflectionStep({
   lesson,
   onContinue,
 }: {
@@ -699,6 +733,7 @@ export function ReflectionReport({
           <div className="ml-auto">
             <HanSpeechButton
               text={report.hanNarrative}
+              experience="LESSON_REFLECTION"
               voice={DEFAULT_HAN_VOICE}
               responseLanguage="English"
             />

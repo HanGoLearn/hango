@@ -2,6 +2,57 @@
 
 Status: Active
 
+## Entrega de Speaking en producción — 16 de octubre de 2026
+
+- [x] Destinos comprobados por identificadores de administrador/lección y sesión
+  publicada: Prisma **HanGo Desarrollo** y **HanGo Producción** son bases distintas.
+  Nombres de proyecto aclarados en Console; sin cambiar conexiones de la app.
+- [x] Producción: respaldo lógico completo cifrado y descifrado/hash verificados
+  antes del borrado. Eliminada una cuenta no administradora; permanece únicamente
+  `hango.learn@gmail.com`. 164 lecciones y 41 escenarios preservados. Dos audios
+  privados en outbox de eliminación, no audio compartido. Respaldo y resumen de
+  consumo privados en `.codex-tmp/db-backups/production-1792203624260`.
+- [x] Cinco migraciones aditivas aplicadas y comprobadas en producción, sin
+  pendientes: separación de límites/experiencias IA y evidencia/calidad Speaking.
+  Primera lección tiene seis preguntas gramaticales y cinco de práctica reales.
+  No se modificaron datos ni configuración de desarrollo en esta operación.
+- [x] Modo de activación explícito por entorno: `local` solo en development,
+  `production` solo en producción; falta de tablas no cae a evaluación antigua.
+  Variable de Vercel añadida únicamente a Production. Administrador conservado
+  por identidad exacta y rol; no se alteró su verificación de correo ni auth.
+- [x] Verificación del código: 1.613 pruebas unitarias/componentes, tipos,
+  lint dirigido, formato, secretos y build de 70 páginas pasan. Las 376
+  integraciones y smoke del lote anterior ya estaban verificadas; no se
+  repitieron contra producción ni se usó OpenAI de pago.
+- [ ] Publicación en master/Vercel detenida por seguridad: excepción de Prisma
+  vencida el 16/10; auditoría actual informa 13 altas, una crítica (Next 16.3.5)
+  y una moderada. No prorrogar excepción ni bajar controles automáticamente.
+  Estado inicial superado por el lote de seguridad descrito debajo. Base/flag
+  preparados; publicación y aceptación oral todavía no certificadas.
+- [x] Conexión temporal vPaY revocada con confirmación explícita del usuario;
+  seis conexiones originales preservadas y archivo privado temporal retirado.
+- [x] Parches autorizados: Next/ESLint 16.3.8, Prisma/Client/Adapter 7.10.1,
+  Sharp 0.35.5, music-metadata 11.16.1 y transitivas corregidas. Cliente
+  regenerado sin migrar bases. Auditoría runtime: cero avisos; retirada la
+  antigua excepción de Prisma. Build de 70 páginas, 1.613 pruebas existentes
+  y 15 pruebas nuevas de la política pasan. Sin API pagada.
+- [x] Excepción nueva autorizada expresamente solo para GHSA-vfj7-8cjw-p6xm
+  de braces y su cadena dev de ESLint, sin parche publicado. Vigente hasta
+  finalizar el 23/10 en Bogotá; después bloquea CI. Nodos/versiones/causas
+  exactos, ninguna crítica exceptuada; runtime exige cero avisos. Patrones
+  rootDir de ESLint prohibidos mientras exista esa excepción. No anunciar
+  cero vulnerabilidades totales: quedan cinco avisos de una sola causa dev.
+- [x] Integraciones/smoke repetidos con parches: 376 + 1 pasan en Postgres
+  desechable, retirado al finalizar. Comparación de prueba de importes usa
+  precisión micro-USD del ledger, sin modificar tarifas/límites. Primer CI
+  remoto rechazó cinco suites por puerto/nombre de su Postgres desechable;
+  alineado servicio CI al destino permitido sin relajar barreras de pruebas.
+- [ ] Terminar CI remota, integrar entrega y confirmar Vercel Ready/alias/
+  recorrido real antes de solicitar prueba oral.
+
+Estas comprobaciones sustituyen los bloqueos históricos de EV-04D/EV-05 al final
+del archivo; no reinterpretan informes antiguos como evidencia nueva.
+
 **This is the only file to read for current status.** Everything closed
 out (FASE 0-16, the full visual redesign) lives in one frozen file,
 [`TASKS_ARCHIVE.md`](TASKS_ARCHIVE.md) — open it only if you need the
@@ -6124,3 +6175,439 @@ limited to ownership, provenance, persistence and authorization.
   tie-breaking fixed it and all 22 tests in the three affected suites passed on
   retry. Smoke passes. Secret scanner passes for 36 commits and the non-ignored
   worktree. No schema migrations added; temporary databases were removed.
+- [x] 2026-10-09 local follow-up after c88f4ea: the reported 明纲 meaning
+  question exposed gaps in Tutor intent handling and Spanish practice cues.
+  Meaning requests now pause drills, preserve exact learner-supplied characters,
+  clarify uncertain recognition and forbid unsolicited repetition invitations.
+  Recognize "quieres intentar decirlo" and preserve the explanation language
+  while an identified practice target remains closed, not only on scored turns.
+  Add lexical third-tone guidance and a component regression for the complete
+  reported sequence. 184 focused tests pass; ten session tests rechecked after
+  narrowing meaning detection. Real-model conversational acceptance pending.
+  These follow-up changes are local; publication requires a new user request.
+- [x] 2026-10-09 local Speaking Lab correction: the three beta stations now
+  open live in-character conversations instead of ConversationShadowing. Each
+  uses its own lesson mission, localized roles/objective, HSK level and language
+  bank, with the same timed push-to-talk engine as Journey Speaking. Pinyin and
+  translation remain optional help. Preserve station unlocking and keep Lab
+  transcripts out of Tutor state and Journey lesson-title/reflection tracking;
+  finishing/retrying never completes a Journey lesson. Role-play turns no longer
+  receive Tutor pronunciation-drill instructions. Typecheck, targeted lint and
+  109 focused tests pass; published missions for all three lessons confirmed
+  read-only in the local database. A further no-shadowing-dialogue regression
+  added. Real voice acceptance pending; these changes remain local.
+- [x] 2026-10-09 Speaking Lab access follow-up: all three curated stations are
+  available immediately. Remove the lesson-progress lookup, unlocked field,
+  server-side station prerequisite and locked UI/copy. Journey progression
+  remains independent. Seven station-data/component tests, typecheck and
+  targeted lint pass. Local only.
+- [x] 2026-10-09 Speaking Lab navigation follow-up: remove the administrator/
+  FULL-scope legacy SpeakingLabHome branch from the page. Every account now
+  returns to the same three-station screen, including from direct station links
+  and old lessonId URLs. App-layout authentication remains in force. Nine
+  route/data/component tests, typecheck and targeted lint pass. Local only.
+- [x] 2026-10-10 local Han Tutor pronunciation state: register the exact target,
+  established explanation language and available lexical reference explicitly;
+  active targets cannot be replaced by a later mistaken assistant transcript.
+  Treat 吗/吗?/吗？ as attempts inside the drill, clarify ambiguous ba before
+  establishing a character, and require a clearly announced next target after
+  closure. Preserve long-phrase chunks, prioritize new meaning/grammar requests
+  and reset target/language on a fresh live session. Recognition similarity is
+  flow control, never proof of tone accuracy. Tutor-only; no persistent memory,
+  database changes or additional AI calls. 216 focused unit/component tests pass;
+  real-model oral acceptance remains pending. Local only, not published.
+- [x] 2026-10-10 local admin analytics display: replace the historical-rate
+  column with estimated cost per interaction. Show user-approved planning
+  references of US$0.0007 per new HanVocabulary lookup and US$0.05 per short
+  Han Tutor voice session; other features show the recorded period average.
+  Label references versus accumulated estimates explicitly and preserve rate
+  evidence on the method label. No changes to usage records, authorization
+  allowances, user caps or any conversation system. Twenty focused tests pass.
+  Local only; the real Realtime session cost collector remains pending.
+- [x] 2026-10-10 local Realtime accounting separation implemented: Tutor,
+  Companion, Journey Speaking, Speaking Lab and placement now select separate
+  usage/cap keys. One US$0.05 planning estimate drives new successful session
+  logs, the projected feature cap check and global preventive authorization.
+  Old shared logs remain explicitly historical, without invented attribution
+  or retroactive repricing. Admin analytics includes the five references even
+  with zero usage; limits and recent usage identify the independent products.
+  The additive migration copies existing general/user policies once, preserving
+  zero blocks and never overwriting new settings. New sessions fail closed until
+  that migration is applied. 57 unit/component and 17 isolated integration tests,
+  typecheck and targeted lint pass. No paid provider calls, commit or deployment.
+- [x] Apply `20261010120000_separate_realtime_usage_limits` to the persistent
+  Prisma database used by localhost: after the earlier auto-review rejection,
+  the user explicitly authorized that destination on 2026-10-10 and migrate
+  deploy successfully applied the single pending voice policy migration.
+  The migration was tested twice on disposable Postgres before this application.
+  See [Realtime costs and limits](REALTIME_COSTOS_Y_LIMITES.md). Publishing and
+  production policy migration remain a separately authorized step.
+- [x] 2026-10-10 admin cost taxonomy audit and local implementation: one
+  closed catalogue supplies accounting keys, labels, families and limit editors.
+  New text calls separate Tutor, Companion and character role-play; Companion's
+  category never reads Tutor/role-play/legacy logs. Tutor appears once in the
+  interactive report, with written-token costs in its expandable breakdown and
+  independent voice/text limits. TTS is labelled as reading written responses,
+  Reflection or examples (not duplicate Realtime output). Shared vocabulary,
+  dialogue, grammar, introduction and placement-listening generation is shown
+  separately; cached plays create no new AI charge. Historic mixed data remains
+  visible and unchanged. All recorded models/keys contribute exactly once,
+  removing the former top-20 truncation. Financial analytics explicitly include
+  administrator costs while learner engagement excludes owner testing; budget
+  alerts respect individual overrides and UTC. Product summaries use only
+  unambiguous ownership (generic role-play assessment is not Companion).
+  Sixty-seven focused unit/component and 58 isolated integration tests pass;
+  additional final analytics/component regressions rechecked. Typecheck, targeted
+  lint and local production compilation pass. No paid OpenAI calls or deployment.
+- [x] 2026-10-10 voice and text policy migrations applied to the authorized
+  persistent development Prisma database used by localhost. Both are additive,
+  preserve zero blocks and do not overwrite independent limits. A read-only
+  live audit (`scripts/audit-ai-cost-mapping.ts`) confirms 30 catalogue keys,
+  no unknown logged feature, both completed migrations and exact internal cost
+  reconciliation. Old costs and daily budget counters were not rewritten.
+  GitHub/Vercel publication and production policy updates remain pending user
+  authorization. See [mapping and cache evidence](REALTIME_COSTOS_Y_LIMITES.md).
+- [x] 2026-10-10 shared AI experience budgets implemented locally. One
+  catalogue maps 30 operation keys to ten experience budgets. General and
+  per-user editors, runtime checks, user costs, analytics and UTC budget alerts
+  use identical attribution and policy keys. Tutor, Companion, Journey Speaking
+  and Speaking Lab remain separate conversations; each budget combines its own
+  voice/text/recognition/assessment/reading calls. Shared route sources are
+  explicit and validated. Technical caps remain a read-only archive. The new
+  additive migration copies the strictest explicit child policy, preserves zero
+  blocks and new independent settings; only unequivocal historical source
+  attribution is backfilled, never old amounts. Global reservations are unchanged.
+  62 unit/component tests pass; 67/68 isolated integration tests initially passed
+  and the sole rounding expectation was repaired, with all four new budget and
+  five back-office tests passing on retry. Typecheck, lint and production build
+  pass. No paid OpenAI calls, commit, push or deployment.
+- [x] Apply `20261010140000_shared_ai_experience_budgets` to the persistent
+  development database used by localhost, then run the read-only accounting
+  audit (2026-10-10). The earlier authorization-review usage limit was resolved;
+  status confirmed this was the only pending migration and deploy applied it.
+  Audit confirms all three policy migrations, ten experience budgets, no unknown
+  or invalid source keys, and unchanged 93 cost records totaling US$5.8075195.
+  Reconciliation passes. Regenerated Prisma Client and restarted only the
+  verified HanGo Next.js processes on localhost:3000. The reported validation
+  error came from yesterday's in-memory client, which lacked `experience`;
+  the missing database migration would have caused a subsequent column error.
+  Real 30-day analytics queries pass and the authenticated browser visibly
+  renders Analytics without the error, including all ten budgets and history.
+  No paid AI calls, data reset, commit, push or Vercel/production update. See the
+  updated [cost and budget mapping](REALTIME_COSTOS_Y_LIMITES.md).
+- [x] 2026-10-10 user-requested analytics cleanup: remove the historical
+  mixed-source section and its rows from the cost report. Preserve database
+  records, totals and all budgets; clarify that the total includes prior
+  consumption when applicable. 21 focused tests, typecheck and targeted lint
+  pass; authenticated localhost Analytics checked. No paid AI calls,
+  data deletion, commit or publication.
+- [x] 2026-10-10 remove the grammar-point "Ask AI" shortcut at the user's
+  request, including unused ES/EN labels. Keep explanations, example audio,
+  practice, grading and independent Han access unchanged. Seven component
+  tests, typecheck and targeted lint pass. Real localhost Grammar checked;
+  no audio played or exercise submitted. Original Speaking position verified
+  in the database (read-only) and after reload. Local only, no paid AI or publication.
+- [ ] Investigate the transient lesson-navigation save warning seen during
+  this visual check: returning from Grammar showed an error toast, but the
+  original Speaking position was persisted and rendered correctly on reload.
+  No navigation logic changed in the grammar-shortcut removal.
+- [x] 2026-10-10 local Journey Speaking correction: shared ES/EN/Chinese
+  introduction detection keeps the session and opening guards consistent;
+  Saludos y presentaciones opens with only 你好. Journey hides redundant
+  microphone status/hint text and preserves the latest character caption
+  through hold/release, analysis and discarded silent turns. Direct role-play
+  replies carry speaker-specific occupation evidence across the whole session,
+  prioritize the latest learner turn and never force an already-known student
+  status or mandatory follow-up. Character identity remains independent;
+  no new persistent Tutor memory, provider call or budget change. 207 focused
+  unit/component tests, typecheck and targeted lint pass. Local QA screen
+  checked without microphone/start or Journey progress changes. Real oral
+  acceptance remains pending; no commit, push or Vercel update.
+
+- [x] 2026-10-10 CUR-01: auditoría curricular de solo lectura y matriz
+  provisional de los diez niveles personales, sin modificar puntos ni Han.
+  41 escenarios/164 lecciones; 1592 registros de vocabulario (1304 formas)
+  y 480 registros de gramática (464 estructuras literales). Fichas exactas,
+  pinyin, ES/EN, IDs, diálogos y candidatos a repaso. Todas las comprobaciones
+  estructurales seleccionadas pasan; no certifica corrección lingüística ni
+  dominio individual. Ver [matriz y plan](MATRIZ_CURRICULAR_NIVELES_HANGO.md)
+  y [captura completa](curriculum-audit-2026-10-10/final/informe.md).
+  101 pruebas focalizadas, typecheck y lint pasan; las 164 fichas y 1646
+  frases del informe cuadran con la captura JSON. Sin llamadas de IA,
+  migraciones, cambios de conversaciones, commit o publicación.
+- [ ] CUR-02–07: revisar familias/prerrequisitos y cortes; integrar bancos
+  de Journey por evidencia individual; separar diálogo/evaluación; revisar
+  rúbrica, niveles avanzados y refinamiento. No implementados en CUR-01.
+- [x] 2026-10-10 contrato conversacional aprobado y añadido a la matriz
+  (7.1–7.6): ficha por lección, núcleo/apoyo/ampliación, turnos breves y
+  preguntas accesibles para principiantes, desviaciones naturales sin
+  cuestionario, ayuda ES/EN, adaptación por comprensión y ritmo pausado
+  inicial. Velocidad, complejidad y extensión se ajustan por separado; no
+  se aceleran automáticamente por puntos o lección. Incluye casos de
+  aceptación y límites de evidencia. Solo documentación: integración,
+  revisión de bancos y prueba de voz real siguen pendientes. Han Tutor,
+  Companion, Speaking Lab, datos, puntos y voces existentes no modificados.
+- [x] 2026-10-10 ampliación aprobada de la matriz (7.7–7.10): ayuda
+  progresiva, uso tras la ayuda, reciclaje significativo, respuestas de
+  principiante, feedback final acotado y fallos técnicos separados de
+  evaluación. Journey reduce 45 s por ventana: 75/115/195/255 s, reserva
+  independiente de 12 s. Preparar cierre dentro de los últimos 15–20 s;
+  despedida breve contextual, End inmediato y último turno protegido dentro
+  del margen de seguridad. Documentados conflictos del prompt actual y
+  riesgos del temporizador. Solo plan: código de tiempos, voz y rúbrica
+  siguen sin aplicar esta ampliación; las otras experiencias no cambian.
+- [ ] Revisar por separado la ponderación de escenarios con dificultades
+  mixtas: los denominadores por lección y presupuestos por escenario dan
+  1512.6612 puntos nominales frente a 1500 declarados. No se cambió la fórmula
+  ni se recalcularon puntos. Reading Lab tiene 150 puntos aún no ganables;
+  no existe un camino completo verificado al nivel de 2000.
+- [x] 2026-10-10 aplicación local del contrato de Journey Speaking:
+  ventanas 75/115/195/255 s y reserva de 12 s; Speaking Lab conserva sus
+  tiempos anteriores aunque comparte el helper. Contrato único para sesión
+  y turnos de Journey: ayuda progresiva ES/EN mínima, intentos comprensibles,
+  desvíos breves y sin rellenar tiempo o forzar vocabulario pendiente; se
+  excluye la plantilla genérica de Practice de seis secciones. Últimos 20 s
+  sin nuevos temas/preguntas. Cierre espera turno presionado/transcripción y
+  reproducción, responde la pregunta pendiente y no fabrica acuerdos/éxito.
+  End inmediato; límite finito y revisión al despertar una pestaña suspendida.
+  Historial, puntos, rúbrica, presupuestos y restantes sistemas independientes
+  sin cambios. 281 pruebas focalizadas en 12 suites con proveedor/audio
+  simulados, typecheck, lint dirigido y diff-check pasan; no llamadas pagadas,
+  migraciones, commit, push o publicación. Ver matriz actualizada.
+- [ ] CUR-04 aceptación oral real: comprobar comprensión, ritmo natural,
+  ayuda ES/EN, último turno y despedidas con micrófono/modelo reales. Los
+  tests simulados verifican instrucciones y coordinación, no obediencia del
+  modelo ni precisión acústica. CUR-02/03 (bancos/prerrequisitos/evidencia
+  individual) y CUR-05 (rúbrica/feedback final acotado) siguen pendientes.
+- [x] 2026-10-10 CUR-02/03 primer lote autorizado de Journey: seis lecciones
+  (Saludos, Números/hora/fechas y cuatro de Compras básicas). Selección revisada
+  núcleo/apoyo/ampliación, familias y prerrequisitos sugeridos sin nuevos
+  bloqueos. Los 60 registros léxicos y 18 gramaticales conservan IDs, significados
+  y pinyin; 号 de fecha/talla no se mezcla, 惠顾 no se exige al principiante.
+  Aperturas específicas y bancos comunes para sesión, turno y despedida.
+  Servidor resuelve exposición por pasos de la cuenta autenticada, descarta
+  bancos del cliente, no usa puntos como conocimiento y no crea memoria de Han.
+  Apoyo acotado de este piloto; el resto del currículo no queda integrado por
+  inferencia. 308 pruebas focalizadas y tres de integración en Postgres
+  desechable pasan; typecheck, lint dirigido y diff-check pasan. Sin llamadas
+  pagadas, cambios de notas/puntos/límites,
+  migraciones nuevas, escrituras a bases reales, commit, push o publicación.
+  Ver [detalle del lote](BANCOS_SPEAKING_JOURNEY_PILOTO.md).
+- [ ] CUR-02/03 resto: revisar selección/familias/prerrequisitos y extender
+  el banco individual más allá de las seis lecciones. El registro disponible
+  prueba exposición indirecta por paso, no dominio ni versión vista de cada
+  ítem. CUR-04 oral y CUR-05 rúbrica/feedback final siguen pendientes antes
+  de declarar la matriz completa o cambiar resultados históricos.
+- [x] 2026-10-10 CUR-02/03 ampliación autorizada: Fundamentos 60/60,
+  conservando las seis selecciones piloto y añadiendo 54 fichas editoriales
+  de núcleo/apoyo/ampliación, apertura y andamiaje por escena. Los 600 registros
+  léxicos y 180 gramaticales se preservan con IDs, significados y pinyin.
+  Mantiene dos dificultades intermedias dentro de este capítulo y los accesos
+  actuales; no genera nuevos bloqueos, puntos, memoria o cambios de rúbrica.
+  Consulta solo lección actual y hasta ocho candidatas publicadas; progreso
+  filtrado por cuenta y paso real, sin caché global ni escrituras. Contrato
+  de voz separado del catálogo para no importar las 60 selecciones en navegador.
+  434 pruebas focalizadas en 14 suites y tres integraciones que resuelven
+  las 60 fichas en Postgres desechable pasan; tipos y lint dirigido pasan.
+  Sin API pagada, migraciones nuevas, escrituras a bases persistentes, commit,
+  push o publicación. Skills Prisma Client API/CLI y OpenAI Docs; ver
+  [detalle y fichas](BANCOS_SPEAKING_JOURNEY_FUNDAMENTOS.md).
+- [ ] CUR-02/03 otros capítulos: 104 lecciones de Vida cotidiana y
+  Situaciones avanzadas todavía sin bancos editoriales integrados. CUR-04
+  aceptación oral real, CUR-05 rúbrica/feedback y CUR-07 cortes/puntuación y
+  refinamiento siguen pendientes. Fundamentos aplicado no equivale a matriz
+  completa ni a comportamiento real certificado por tests simulados.
+- [x] 2026-10-10 CUR-03/06 Vida cotidiana: 60/60 fichas en 15 escenarios,
+  552 registros léxicos y 168 gramaticales preservados por ID/significado/pinyin;
+  total integrado con Fundamentos 120/164. Núcleo/apoyo/ampliación y apertura
+  editorial por personaje; relaciones de reciclaje por pasos propios reales,
+  no por orden o puntos. Conserva selecciones previas, dificultades mixtas,
+  accesos, modelo, tiempos, puntuación, rúbrica y sistemas independientes.
+  Orientaciones explícitas de simulación para salud, seguro, renta, compras
+  y trámites; se documentan problemas del contenido fuente sin reescribirlo.
+  558 pruebas focalizadas en 15 suites y cuatro integraciones que verifican
+  las 120 fichas y todos sus IDs en Postgres desechable pasan. Tipos y lint
+  dirigido pasan; sin API
+  pagada, migraciones nuevas, bases persistentes, commit, push o publicación.
+  Skills Prisma Client API, Prisma CLI y OpenAI Docs; ver
+  [detalle de Vida cotidiana](BANCOS_SPEAKING_JOURNEY_VIDA_COTIDIANA.md).
+- [ ] CUR-03/06 restantes: 44 lecciones de Situaciones avanzadas. CUR-04
+  voz real/adaptación, CUR-05 rúbrica/evidencia/feedback y CUR-07 cortes de
+  puntos/refinamiento siguen pendientes. Revisar por separado el total
+  incoherente del diálogo de supermercado y las afirmaciones clínicas del
+  contenido fuente; los bancos no certifican seguridad u obediencia real.
+- [x] 2026-10-11 CUR-03/06 Situaciones avanzadas: 44/44 fichas editoriales,
+  11 escenarios; 440 registros léxicos y 132 gramaticales conservados con IDs,
+  significados y pinyin. Cobertura de bancos completa: 164/164 (1592/480
+  registros), sin reemplazar las 120 selecciones anteriores. Aperturas por
+  personaje; mediación no confunde miembro de equipo con mediador. Reciclaje
+  solo por cuenta/paso real, no por puntos ni disponibilidad. Límites de
+  simulación médica/legal/financiera, consentimiento, fuentes no verificadas
+  y cierre de escena sin End automático; hallazgos fuente documentados, no
+  reescritos o certificados. Mantiene accesos de beta, modelos, tiempos,
+  rúbrica, notas, puntos, tarifas y los otros sistemas de IA independientes.
+  651 pruebas focalizadas en 16 suites y cinco integraciones reales sobre
+  las 164 fichas en Postgres desechable pasan; cada ID actual, aislamiento
+  por cuenta/paso y ausencia de escrituras de progreso comprobados. Tipos,
+  lint y formato dirigidos pasan. Sin API pagada, migraciones nuevas, datos
+  persistentes, commit, push o publicación. Skills Prisma Client API, Prisma
+  CLI y OpenAI Docs; ver
+  [fichas y límites](BANCOS_SPEAKING_JOURNEY_SITUACIONES_AVANZADAS.md).
+- [ ] Estado vigente tras cubrir los tres lotes: CUR-05 rúbrica/feedback por
+  evidencia, CUR-04 aceptación oral/adaptación/ritmo/cierre con voz real,
+  cortes CUR-02 y CUR-07 puntos/refinamiento siguen pendientes. Revisar
+  contenido especializado y cifras/fuentes/afirmaciones del material
+  publicado por separado. 164/164 bancos no equivale a toda la matriz ni
+  autoriza recalcular resultados históricos, desbloquear beta o publicar.
+- [x] 2026-10-11 CUR-05 EV-01/02 base local: intentos propios de Journey,
+  banco/objetivo/versiones del servidor y captura sellada por usuario/lección;
+  no mezcla por título ni consulta a la conversación global de Han. Cierre
+  concurrente idempotente, topes de captura e integridad SHA-256 canónica.
+  Contrato nuevo: comunicación 40/idioma 30/interacción 20/autonomía 10, seis
+  estados de evidencia, cita/autor/IDs verificados; faltantes/fallo técnico
+  dejan nota nula, sin multiplicadores de cobertura o nota acústica inventada.
+  Tres tablas/enums y migración aditiva preparada, cliente regenerado.
+  746 pruebas en 19 suites y 13 integraciones en Postgres desechable pasan;
+  tipos, lint y validación de esquema pasan. Runner fija también DIRECT_URL
+  al destino temporal. Sin activación en voz/Reflection, API pagada,
+  migración persistente, cambios de notas/puntos, commit, push o publicación.
+  Skills Prisma Client API/CLI y OpenAI Docs; ver
+  [reestructuración y pendientes](REESTRUCTURACION_EVALUACION_FINAL_JOURNEY.md).
+- [x] EV-03 backend preparado (11 de octubre): evaluación conjunta estructurada
+  y feedback en una llamada máxima por intento; reclamación atómica/caché,
+  dueño/lección/versiones/citas validados. Ocho lectores concurrentes no
+  duplican llamadas; fallos/rechazo/truncamiento/worker vencido quedan explícitos
+  sin notas ficticias ni reintentos pagados automáticos. Consumo enlazado a
+  usageLogId bajo LESSON_REFLECTION, incluso respuesta devuelta inutilizable.
+  794 pruebas en 27 suites y 40 integraciones en 4 archivos pasan; tipos/lint
+  pasan. Solo respuestas simuladas y Postgres temporal. Guías Prisma Client
+  API/CLI y OpenAI Docs. Sin conexión a UI, API pagada, migración persistente,
+  modificación de notas/recompensas/cuentas, commit/push/despliegue.
+- [x] EV-03 cableado de captura (11 de octubre): acciones autenticadas y vínculo
+  de intento en handshake Realtime; identidad/roles/bancos del servidor.
+  Original STT separado de hipótesis/confianza, limitaciones persistidas y
+  hash sellado; incertidumbre/audio incompleto impiden nota completa.
+  End/natural/técnico/abandono, expiración de activos offline, máximo 30 nuevos
+  intentos por cuenta/10 minutos sin contar replay y reintento de
+  guardado idempotente. Modalidad nueva no escribe el hilo general de Han ni
+  genera revisión silenciosa extra. QA sin retención de historia/intentos.
+  813 pruebas en 29 suites y 46 integraciones en 5 archivos pasan; tipos/lint/
+  esquema y build completo pasan. Skill Prisma Client API/CLI + OpenAI Docs. Segundo SQL aditivo
+  solo probado en base temporal. **Modalidad apagada por defecto**, aún sin
+  activación en página real, migración persistente, API pagada o datos borrados.
+- [x] EV-04A (11 de octubre): snapshot versionado de ejercicios antes de voz,
+  primer intento propio/recorrido; correctos, incorrectos, pendientes y faltantes
+  separados. ID de Speaking validado al avanzar, lector ligado al paso exacto;
+  caché/citas/nota recalculados sin regenerar IA. Nota global 20/20/30/30 y
+  estrellas solo con evidencia completa. Informe ES/EN preparado, con pinyin,
+  un logro/prioridad/siguiente paso, sin audio automático ni nota acústica.
+  837 pruebas en 31 suites y 63 integraciones en 7 archivos, tipos/lint/build
+  pasan. Solo Postgres temporal y respuestas simuladas. Sin API pagada,
+  escritura persistente, cuentas borradas o publicación. Skills Prisma Client
+  API/CLI y OpenAI Docs. **Informe no montado y recompensas NOT_SETTLED**;
+  verificar guardado de ejercicios previo a voz antes de activar.
+- [x] EV-04B (11 de octubre): persistencia v2 preparada en el informe existente,
+  procedencia versionada por intento/recorrido sin nueva migración. Guardado,
+  monedas de lección, evidencia Speaking, logros de nota/nivel y General Level
+  atómicos; concurrentes/replays/redo no acumulan. Fórmula y pesos intactos.
+  Informe parcial no premia ni completa escenario; cero legítimo distinto de nulo.
+  Lectores antiguos bloquean regeneración de v2; acciones autenticadas separan
+  leer/evaluar/guardar sin aceptar notas/identidad del cliente. ES/EN distingue
+  pendiente/procesado sin prometer otro pago. 155 pruebas en nueve suites y 103
+  integraciones en once archivos pasan, tipos/lint/formato/build (68 páginas).
+  Login local ES/EN HTTP 200; informe nuevo aún sin aceptación visual/oral.
+  Base temporal y IA
+  simulada; sin API pagada, migración persistente, datos reales, GitHub o despliegue.
+  Skills Prisma Client API/CLI. **Todavía no montado/activado en página real**.
+- [x] EV-04C (11 de octubre): informe/acciones montados condicionalmente en
+  Reflection/resultados para recorridos v2; leer/reabrir no genera IA ni audio.
+  Barrera espera los guardados de ejercicios antes de avanzar/navegar hacia
+  voz; lotes de vocabulario conservados al fallar y reintento sin duplicarlos.
+  Sin micrófono permite guardar resultado parcial y volver a la ruta, no
+  completar/premiar/desbloquear. Finalización exige informe íntegro y SETTLED
+  también en servidor; selección v2 no puede degradarse a evaluación antigua.
+  Redo explícito con confirmación disponible en Reflection y resultados;
+  respuestas tardías no cruzan lecciones/recorridos. General Level y monedas
+  muestran aporte/saldo confirmado, no premios nuevos por visitar. 193 pruebas
+  en 17 suites y 91 integraciones en diez archivos pasan; tipos/lint/formato y
+  build completo de Next (68 páginas) pasan. Postgres desechable eliminado,
+  proveedores simulados. Skills Prisma Client API/CLI. Sin API pagada,
+  migraciones persistentes, borrado de cuentas, GitHub o despliegue.
+- [ ] EV-04 restante: activar captura/informe para lecciones nuevas de forma
+  coherente tras comprobar migraciones, destinos y disponibilidad de preguntas
+  reales. Aceptación visual/oral, calibración semántica humana y recorrido de
+  cierre de escenario con UI real pendientes. La navegación interna espera
+  guardado; cierre abrupto de pestaña no garantiza entrega de lotes pendientes
+  (no calificarlos como incorrectos). Integración condicional preparada no
+  significa rúbrica activa para todos ni reestructuración completa.
+- [ ] EV-05 reinicio autorizado explícitamente por el usuario en **local y
+  producción**, conservando administrador. La nueva autorización sustituye
+  conservar notas antiguas para esa operación concreta; no resetear currículo
+  ni infraestructura. Solo preflight local de lectura realizado: 29 usuarios,
+  un admin verificado hango.learn@gmail.com. Producción/destinos/respaldo,
+  cascadas/grabaciones/invitaciones y preservación de gastos reales por
+  verificar. Ninguna cuenta o puntaje borrado, respaldo aún no realizado.
+- [x] EV-04D código de transición local y correcciones del diálogo (11 de
+  octubre): bancos ya no sustituyen el bloque de dificultad/gramática.
+  Conversación flexible con ancla temática, sin cuestionario; ayuda al decir
+  no entiendo/no entendí o pedir ES/EN pausa inmersión y no añade pregunta
+  china. El idioma de ayuda sobrevive preguntas chinas, incluido el cierre;
+  el evaluador no trata ayuda ES/EN ni dificultad impuesta por IA como error.
+  Informe compacto único con detalle desplegable y motivo técnico/sin habla,
+  sin nulo convertido en cero. Ruta real preparada con opt-in exclusivamente
+  development, comprobación de tablas y aviso de redo confirmado para informes
+  antiguos (sin regenerar/etiquetar la historia como nueva). Producción ignora
+  el modo local. Scripts de activación fijan huella del destino y permiten solo
+  las dos migraciones previstas, sin reset/seed ni credenciales exportadas.
+  Preflight de lectura: localhost utiliza Prisma en nube, huella
+  9a6e66deb06483ee, 29 cuentas, 46 informes, administrador original conservado;
+  primera lección HSK 1: 10 palabras/3 estructuras, seis preguntas gramaticales
+  y cinco de práctica publicadas. Skills OpenAI Docs y Prisma Client API/CLI.
+  251 pruebas en doce suites y 91 integraciones en diez archivos pasan;
+  tipos/lint dirigidos y build de 68 páginas pasan. Postgres temporal retirado.
+- [ ] EV-04D activación real **bloqueada por seguridad del destino**, no por
+  falta de código: comprobación automática rechazó aplicar migraciones porque
+  no se demostró separación de esta base y Vercel. Exportar configuración de
+  producción también fue rechazado; no se copiaron secretos ni se buscó un
+  atajo. Confirmar separación o autorización exacta del destino antes de
+  migrar/poner HANGO_JOURNEY_EVALUATION_V2=local. **Flag aún apagado y ambas
+  migraciones reales pendientes**. No volver a pedir prueba de la medición
+  completa hasta habilitar y comprobar la ruta; sin API pagada, borrados,
+  cambios de base persistente, commit/push o despliegue en este bloque.
+- [x] EV-04E vista previa local (11 de octubre): el usuario **no autorizó**
+  migrar la base y aclaró que solo quiere ver Speaking/resultado/feedback.
+  Respetar esa negativa; no reintentar activación persistente por continuidad.
+  `/es/speaking-preview` y EN solo en development, fuera del shell de Han,
+  sin cuentas/lectura de registros/voz/API/acciones/guardados. Ejemplo marcado
+  como sintético, botón mantener/soltar recorre frases preparadas, ayuda ES/EN
+  de ejemplo y mismo componente de informe nuevo: completo 93/100 (Speaking
+  75, resto 100), o captura ausente sin nota global. No premios reales.
+  15 pruebas en tres suites y tipos/lint pasan; vista abierta/verificada en
+  navegador local. **Esto no activa ni certifica evaluación real de su voz**.
+  No migraciones, borrados de cuentas/puntajes, API pagada o publicación.
+- [x] 2026-10-11 EV-04/05 autorización posterior específica: el usuario
+  autorizó añadir las tablas y después confirmó borrar todas las cuentas
+  salvo hango.learn@gmail.com en local y producción, con respaldo previo.
+  Base configurada en .env.local: respaldo lógico completo cifrado AES-256-GCM,
+  descifrado/hash verificados; las dos migraciones aditivas aplicadas.
+  Eliminadas 28 cuentas no administradoras con cascadas de datos propios,
+  administrador verificado conservado; 164 lecciones/41 escenarios intactos.
+  Tokens asociados retirados e invitaciones asociadas revocadas; 13 grabaciones
+  privadas en outbox de eliminación, no eliminación de audio compartido.
+  Gastos anteriores conservados en respaldo y resumen privado, no reasignados
+  al administrador. HANGO_JOURNEY_EVALUATION_V2=local activado en configuración
+  ignorada por Git: requiere aceptación oral real, no certificada por el demo.
+  Guías Prisma CLI/Client API usadas para revisar migraciones y preservación.
+- [ ] Producción EV-05 sigue sin verificar: descarga temporal de configuración
+  de Vercel autorizada explícitamente, pero el servicio devuelve DATABASE_URL
+  y DIRECT_URL como [SENSITIVE]. No inferir destino ni afirmar separación
+  física a partir de localhost. Falta conexión explícita, respaldo, preflight y
+  mantenimiento de producción; no se ejecutó borrado con configuración Vercel.
+  El borrado anterior afecta a la base configurada en local: si producción
+  compartiera esa base, sus datos también se verían afectados. Verificarlo.
+- [x] Verificación del lote para GitHub: 1.612 pruebas unitarias/componentes,
+  376 integraciones y smoke aislado pasan; tipos/lint/secretos y build de 70
+  páginas pasan. Smoke no comparte lock/cache con servidor de usuario y anula
+  claves de proveedores; base temporal eliminada. Credenciales y respaldos
+  permanecen ignorados. Rama de entrega codex/journey-speaking-release-20261011
+  preparada para no reemplazar producción antes de verificar sus migraciones.

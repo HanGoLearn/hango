@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverEnv } from "@/lib/env/server";
 import { getCompetencyProgress } from "@/lib/progress-data";
+import { getJourneySpeakingBanks } from "@/lib/content/journey-speaking-bank-data";
+import { getJourneyRealtimeBinding } from "@/lib/journey-speaking-realtime-binding";
 import { buildAdaptiveLearnerSummary } from "@/lib/ai-learner-adaptation";
 import {
   buildRealtimeSystemPrompt,
@@ -22,11 +24,14 @@ import {
   realtimeVadConfig,
 } from "@/lib/speech/realtime-vad";
 import {
-  AI_FAMILY_AUTHORIZATION_USD,
   checkDailyUsageCap,
   DailyUsageCapExceededError,
   recordAiUsage,
 } from "@/lib/ai-usage";
+import {
+  REALTIME_SESSION_ESTIMATE_USD,
+  resolveRealtimeUsageFeature,
+} from "@/lib/realtime-usage";
 
 const REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
 const VOICES = new Set([
@@ -116,10 +121,40 @@ export async function POST(request: Request) {
   // A live Realtime session hears its own audio and must not inherit stale or
   // browser-supplied pronunciation scores from another surface.
   delete context.pronunciationAttempt;
+  // This is authenticated, server-owned exposure evidence, never client data.
+  delete context.journeySpeakingBanks;
+  const feature = resolveRealtimeUsageFeature(
+    mode,
+    context,
+    url.searchParams.get("surface"),
+  );
+  if (!feature)
+    return new Response("Invalid voice conversation surface", { status: 400 });
+  const attemptId = request.headers.get("x-hango-journey-attempt-id");
+  let boundAttemptId: string | null = null;
+  if (attemptId !== null) {
+    if (
+      feature !== "journey-speaking-realtime-session" ||
+      typeof context.lessonId !== "string"
+    )
+      return new Response("Invalid Journey attempt surface", { status: 400 });
+    try {
+      const binding = await getJourneyRealtimeBinding(
+        session.user.id,
+        attemptId,
+        context.lessonId,
+      );
+      context.rolePlay = binding.rolePlay;
+      context.journeySpeakingBanks = binding.banks;
+      boundAttemptId = binding.attemptId;
+    } catch {
+      return new Response("Journey attempt unavailable", { status: 403 });
+    }
+  }
   try {
     await checkDailyUsageCap(
       session.user.id,
-      "han-realtime-session",
+      feature,
       {
         provider: "openai",
         model: "gpt-realtime-mini",
@@ -139,6 +174,14 @@ export async function POST(request: Request) {
       return Response.json({ error: error.message }, { status: 429 });
     }
     throw error;
+  }
+  if (feature === "journey-speaking-realtime-session") {
+    context.speakingSurface = "JOURNEY";
+    if (!boundAttemptId && typeof context.lessonId === "string") {
+      context.journeySpeakingBanks =
+        (await getJourneySpeakingBanks(session.user.id, context.lessonId)) ??
+        undefined;
+    }
   }
   const [profile, competencyProgress, recentEvidence, learnerFacts] =
     await Promise.all([
@@ -235,7 +278,9 @@ export async function POST(request: Request) {
           ...(noiseReduction ? { noise_reduction: noiseReduction } : {}),
           transcription: {
             ...buildRealtimeSttConfig(
-              context.rolePlay ? "mandarin" : "han-multilingual",
+              context.rolePlay && context.speakingSurface !== "JOURNEY"
+                ? "mandarin"
+                : "han-multilingual",
               [
                 ...(context.rolePlay?.lessonVocabulary ?? []),
                 ...contextualSttVocabulary,
@@ -266,19 +311,24 @@ export async function POST(request: Request) {
   if (openAiResponse.ok) {
     // The browser talks directly to Realtime after this handshake, so the
     // server never receives provider usage totals. Record the same explicit,
-    // conservative session allowance used by the global authorization gate.
+    // user-approved session estimate used by the global authorization gate.
+    // This is not provider-reported billing and does not rewrite old sessions.
     await recordAiUsage({
       userId: session.user.id,
-      feature: "han-realtime-session",
+      feature,
       provider: "openai",
       model: "gpt-realtime-mini",
-      estimatedCostUsd: AI_FAMILY_AUTHORIZATION_USD.REALTIME,
+      estimatedCostUsd: REALTIME_SESSION_ESTIMATE_USD,
     });
     return Response.json({
       sdp: body,
       instructions: realtimeInstructions,
       speechSpeed,
       rolePlayLevel: resolvedRolePlayLevel ?? null,
+      ...(boundAttemptId ? { journeyAttemptId: boundAttemptId } : {}),
+      ...(feature === "journey-speaking-realtime-session"
+        ? { journeySpeakingBanks: context.journeySpeakingBanks ?? null }
+        : {}),
     });
   }
   return new Response(body, {

@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { hskNumberForPoints, starsForScore } from "@/lib/points-system";
 import {
   ACHIEVEMENTS,
@@ -19,11 +20,13 @@ import { createTtlCache } from "@/lib/ttl-cache";
  * site) - this file only ever adds recognition, it never recomputes
  * anything the app didn't already compute for another reason.
  *
- * Every exported function swallows its own errors: an achievement-unlock
+ * Legacy calls swallow their own errors: an achievement-unlock
  * failure must never break the real action it's attached to (lesson
  * completion, Reflection scoring, General Level recompute, etc.) - those
  * are real-data paths, and a missed badge is a far smaller problem than a
- * broken one.
+ * broken one. Journey v2 may supply a transaction to the grade/level checks:
+ * errors then propagate so the entire settlement rolls back, without a false
+ * rewards-confirmed marker.
  */
 async function safely(label: string, run: () => Promise<void>): Promise<void> {
   try {
@@ -42,20 +45,37 @@ async function safely(label: string, run: () => Promise<void>): Promise<void> {
  * whose coin grant failed on a previous call) are retried for free and
  * simply no-op via each table's own unique constraint.
  */
-async function unlock(userId: string, keys: string[]): Promise<void> {
+async function unlock(
+  userId: string,
+  keys: string[],
+  tx?: Prisma.TransactionClient,
+): Promise<void> {
   if (keys.length === 0) return;
+  const achievementData = keys.map((key) => ({ userId, key }));
+  const coinData = keys.map((key) => ({
+    userId,
+    amount: ACHIEVEMENTS_BY_KEY.get(key)?.coins ?? 0,
+    reason: "achievement_unlocked",
+    sourceKey: `achievement:${key}`,
+  }));
+  if (tx) {
+    await tx.achievement.createMany({
+      data: achievementData,
+      skipDuplicates: true,
+    });
+    await tx.coinLedgerEntry.createMany({
+      data: coinData,
+      skipDuplicates: true,
+    });
+    return;
+  }
   await db.$transaction([
     db.achievement.createMany({
-      data: keys.map((key) => ({ userId, key })),
+      data: achievementData,
       skipDuplicates: true,
     }),
     db.coinLedgerEntry.createMany({
-      data: keys.map((key) => ({
-        userId,
-        amount: ACHIEVEMENTS_BY_KEY.get(key)?.coins ?? 0,
-        reason: "achievement_unlocked",
-        sourceKey: `achievement:${key}`,
-      })),
+      data: coinData,
       skipDuplicates: true,
     }),
   ]);
@@ -90,30 +110,36 @@ export async function checkStreakAchievements(
 export async function checkLevelAchievements(
   userId: string,
   generalLevelPoints: number,
+  tx?: Prisma.TransactionClient,
 ): Promise<void> {
-  await safely("checkLevelAchievements", async () => {
+  const run = async () => {
     const level = hskNumberForPoints(generalLevelPoints);
     const keys = Array.from({ length: level }, (_, i) => `level_tier_${i + 1}`);
-    await unlock(userId, keys);
-  });
+    await unlock(userId, keys, tx);
+  };
+  if (tx) await run();
+  else await safely("checkLevelAchievements", run);
 }
 
 export async function checkReflectionAchievements(
   userId: string,
   totalScore: number,
+  tx?: Prisma.TransactionClient,
 ): Promise<void> {
-  await safely("checkReflectionAchievements", async () => {
+  const run = async () => {
     const keys: string[] = [];
     if (totalScore === 100) keys.push("reflection_perfect");
     if (starsForScore(totalScore) === 3) {
-      const threeStarCount = await db.lessonReflectionReport.count({
+      const threeStarCount = await (tx ?? db).lessonReflectionReport.count({
         where: { userId, totalScore: { gte: 90 } },
       });
       if (threeStarCount >= 5) keys.push("reflection_three_star_5");
       if (threeStarCount >= 25) keys.push("reflection_three_star_25");
     }
-    await unlock(userId, keys);
-  });
+    await unlock(userId, keys, tx);
+  };
+  if (tx) await run();
+  else await safely("checkReflectionAchievements", run);
 }
 
 export async function checkLessonCompletionAchievements(
@@ -153,39 +179,40 @@ interface ChapterContent {
   lessonIds: string[];
 }
 
-const getChapterContent = createTtlCache(async (): Promise<
-  Record<JourneyChapter, ChapterContent>
-> => {
-  const scenarios = await db.scenario.findMany({
-    select: {
-      id: true,
-      levels: {
-        select: {
-          difficulty: true,
-          lessons: { where: { status: "PUBLISHED" }, select: { id: true } },
+const getChapterContent = createTtlCache(
+  async (): Promise<Record<JourneyChapter, ChapterContent>> => {
+    const scenarios = await db.scenario.findMany({
+      select: {
+        id: true,
+        levels: {
+          select: {
+            difficulty: true,
+            lessons: { where: { status: "PUBLISHED" }, select: { id: true } },
+          },
         },
       },
-    },
-  });
+    });
 
-  const content: Record<JourneyChapter, ChapterContent> = {
-    BEGINNER: { scenarioIds: [], lessonIds: [] },
-    INTERMEDIATE: { scenarioIds: [], lessonIds: [] },
-    ADVANCED: { scenarioIds: [], lessonIds: [] },
-  };
-  for (const scenario of scenarios) {
-    const chapter = resolveJourneyChapter(
-      scenario.levels.map((level) => level.difficulty),
-    );
-    content[chapter].scenarioIds.push(scenario.id);
-    for (const level of scenario.levels) {
-      for (const lesson of level.lessons) {
-        content[chapter].lessonIds.push(lesson.id);
+    const content: Record<JourneyChapter, ChapterContent> = {
+      BEGINNER: { scenarioIds: [], lessonIds: [] },
+      INTERMEDIATE: { scenarioIds: [], lessonIds: [] },
+      ADVANCED: { scenarioIds: [], lessonIds: [] },
+    };
+    for (const scenario of scenarios) {
+      const chapter = resolveJourneyChapter(
+        scenario.levels.map((level) => level.difficulty),
+      );
+      content[chapter].scenarioIds.push(scenario.id);
+      for (const level of scenario.levels) {
+        for (const lesson of level.lessons) {
+          content[chapter].lessonIds.push(lesson.id);
+        }
       }
     }
-  }
-  return content;
-}, CHAPTER_CONTENT_TTL_MS);
+    return content;
+  },
+  CHAPTER_CONTENT_TTL_MS,
+);
 
 const CHAPTER_ACHIEVEMENT_KEY: Record<JourneyChapter, string> = {
   BEGINNER: "chapter_completed_beginner",
@@ -220,7 +247,8 @@ export async function checkChapterCompletionAchievements(
     if (reports.length < content.lessonIds.length) return;
 
     const scores = reports.map((report) => report.totalScore ?? 0);
-    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    const average =
+      scores.reduce((sum, score) => sum + score, 0) / scores.length;
     if (average <= 70) return;
 
     await unlock(userId, [CHAPTER_ACHIEVEMENT_KEY[chapter]]);
@@ -261,7 +289,9 @@ export async function checkGraduateAchievement(userId: string): Promise<void> {
  * path (handwritten-writing-data.ts) - so this is called from all 3 instead
  * of trying to force them through one shared function.
  */
-export async function checkSpeakingLabAchievements(userId: string): Promise<void> {
+export async function checkSpeakingLabAchievements(
+  userId: string,
+): Promise<void> {
   await safely("checkSpeakingLabAchievements", async () => {
     const count = await db.speakingSession.count({
       where: { userId, completionState: "COMPLETED" },
@@ -270,7 +300,9 @@ export async function checkSpeakingLabAchievements(userId: string): Promise<void
   });
 }
 
-export async function checkWritingLabAchievements(userId: string): Promise<void> {
+export async function checkWritingLabAchievements(
+  userId: string,
+): Promise<void> {
   await safely("checkWritingLabAchievements", async () => {
     const count = await db.writingAttempt.count({
       where: { userId, submittedAt: { not: null } },

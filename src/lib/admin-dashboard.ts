@@ -3,6 +3,11 @@ import "server-only";
 import { ACHIEVEMENTS_BY_KEY } from "@/lib/achievements-catalog";
 import { ADMIN_EMAIL } from "@/lib/admin-identity";
 import { FEATURE_LABELS } from "@/lib/admin-ai-usage";
+import {
+  AI_EXPERIENCES,
+  recordedAiExperience,
+  experienceLimitKey,
+} from "@/lib/ai-experiences";
 import { db } from "@/lib/db";
 import { hskLevelForPoints } from "@/lib/points-system";
 import { getStudyStreak } from "@/lib/dashboard-data";
@@ -469,6 +474,7 @@ export async function getAdminUserDetail(userId: string) {
       where: { userId, createdAt: { gte: thisMonth } },
       select: {
         feature: true,
+        experience: true,
         inputTokens: true,
         outputTokens: true,
         estimatedCostUsd: true,
@@ -488,6 +494,7 @@ export async function getAdminUserDetail(userId: string) {
       select: {
         id: true,
         feature: true,
+        experience: true,
         provider: true,
         model: true,
         inputTokens: true,
@@ -582,11 +589,17 @@ export async function getAdminUserDetail(userId: string) {
     }
   >();
   for (const row of aiMonthRows) {
-    const current = aiFeatureMap.get(row.feature) ?? {
-      feature: row.feature,
-      label:
-        FEATURE_LABELS[row.feature as keyof typeof FEATURE_LABELS] ??
-        row.feature,
+    const experience = recordedAiExperience(row.feature, row.experience);
+    const key = experience
+      ? experienceLimitKey(experience)
+      : `history:${row.feature}`;
+    const current = aiFeatureMap.get(key) ?? {
+      feature: key,
+      label: experience
+        ? AI_EXPERIENCES[experience].label
+        : "Histórico sin origen · " +
+          (FEATURE_LABELS[row.feature as keyof typeof FEATURE_LABELS] ??
+            row.feature),
       calls: 0,
       costUsd: 0,
       inputTokens: 0,
@@ -598,7 +611,7 @@ export async function getAdminUserDetail(userId: string) {
     current.inputTokens += row.inputTokens ?? 0;
     current.outputTokens += row.outputTokens ?? 0;
     current.durationSeconds += row.durationSeconds ?? 0;
-    aiFeatureMap.set(row.feature, current);
+    aiFeatureMap.set(key, current);
   }
   const aiByFeature = [...aiFeatureMap.values()].sort(
     (a, b) => b.costUsd - a.costUsd,
@@ -634,9 +647,9 @@ export async function getAdminUserDetail(userId: string) {
     recentCoins,
     recentAi: recentAi.map((entry) => ({
       ...entry,
-      label:
-        FEATURE_LABELS[entry.feature as keyof typeof FEATURE_LABELS] ??
-        entry.feature,
+      label: recordedAiExperience(entry.feature, entry.experience)
+        ? `${AI_EXPERIENCES[recordedAiExperience(entry.feature, entry.experience)!].label} · ${FEATURE_LABELS[entry.feature as keyof typeof FEATURE_LABELS] ?? entry.feature}`
+        : `Histórico sin origen · ${FEATURE_LABELS[entry.feature as keyof typeof FEATURE_LABELS] ?? entry.feature}`,
     })),
     activity: {
       lastActiveAt: activityAllTime._max.lastActiveAt,

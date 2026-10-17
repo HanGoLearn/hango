@@ -28,20 +28,24 @@ describe("per-user AI usage caps (integration, real database)", () => {
     ]);
     await setUserAiUsageCap({
       userId: restricted.id,
-      feature: "han-speech",
+      feature: "experience:HAN_TUTOR",
       mode: "BLOCKED",
     });
 
     await expect(
-      checkDailyUsageCap(restricted.id, "han-speech"),
+      checkDailyUsageCap(restricted.id, "han-speech", {
+        experience: "HAN_TUTOR",
+      }),
     ).rejects.toBeInstanceOf(DailyUsageCapExceededError);
     await expect(
-      checkDailyUsageCap(unaffected.id, "han-speech"),
+      checkDailyUsageCap(unaffected.id, "han-speech", {
+        experience: "HAN_TUTOR",
+      }),
     ).resolves.toBeUndefined();
 
     const restrictedLimits = await getUserAiUsageLimits(restricted.id);
     expect(
-      restrictedLimits.find((row) => row.feature === "han-speech"),
+      restrictedLimits.find((row) => row.feature === "experience:HAN_TUTOR"),
     ).toMatchObject({
       mode: "BLOCKED",
       customLimitUsd: 0,
@@ -58,7 +62,7 @@ describe("per-user AI usage caps (integration, real database)", () => {
       dailyLimitUsd: 0.25,
     });
     let row = (await getUserAiUsageLimits(learner.id)).find(
-      (item) => item.feature === "writing-feedback",
+      (item) => item.feature === "experience:WRITING_LAB",
     );
     expect(row).toMatchObject({
       mode: "CUSTOM",
@@ -72,7 +76,7 @@ describe("per-user AI usage caps (integration, real database)", () => {
       mode: "GENERAL",
     });
     row = (await getUserAiUsageLimits(learner.id)).find(
-      (item) => item.feature === "writing-feedback",
+      (item) => item.feature === "experience:WRITING_LAB",
     );
     expect(row).toMatchObject({ mode: "GENERAL", customLimitUsd: null });
     expect(row?.effectiveLimitUsd).toBe(row?.generalLimitUsd);

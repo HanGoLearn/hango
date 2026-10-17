@@ -253,6 +253,7 @@ export function AiTeacherChat({
                   voice={voice}
                   responseLanguage={message.responseLanguage}
                   speechStyle={mode === "TUTOR" ? "tutor" : "companion"}
+                  experience={mode === "TUTOR" ? "HAN_TUTOR" : "HAN_COMPANION"}
                   autoPlay={
                     autoPlayVoiceReplies &&
                     Boolean(message.autoPlayAudio) &&
@@ -339,6 +340,7 @@ export function AiTeacherChat({
           />
         </div>
         <HanVoiceInput
+          experience={mode === "TUTOR" ? "HAN_TUTOR" : "HAN_COMPANION"}
           disabled={sending || resetting || voiceConversationActive}
           context={activeContext}
           pronunciationTarget={pronunciationTarget}

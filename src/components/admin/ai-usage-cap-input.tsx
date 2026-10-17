@@ -8,9 +8,11 @@ import { Caption } from "@/components/ui/typography";
 
 export function AiUsageCapInput({
   feature,
+  label = feature,
   initialValue,
 }: {
   feature: string;
+  label?: string;
   initialValue: number;
 }) {
   const [value, setValue] = useState(String(initialValue));
@@ -42,7 +44,7 @@ export function AiUsageCapInput({
         <span className="text-text-muted">$</span>
         <Input
           type="number"
-          min="0.01"
+          min="0"
           step="0.01"
           value={value}
           onChange={(event) => {
@@ -50,7 +52,7 @@ export function AiUsageCapInput({
             setStatus("idle");
           }}
           className="w-24"
-          aria-label={`Límite diario para ${feature}`}
+          aria-label={`Límite diario para ${label}`}
         />
         <Button
           type="button"

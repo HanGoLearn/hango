@@ -11,6 +11,7 @@ import type {
   ExerciseSubmitResult,
 } from "@/lib/exercise-progress";
 import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { useTrackedLessonSave } from "@/components/lesson/lesson-save-barrier";
 
 /** Walks a list of exercises one at a time, used for the lesson's Comprehension/Guided Practice steps. */
 export function ExerciseSequence({
@@ -25,6 +26,7 @@ export function ExerciseSequence({
   feedbackMode?: "learning" | "assessment";
 }) {
   const messages = useLessonMessages();
+  const saveAnswer = useTrackedLessonSave();
   const [index, setIndex] = useState(0);
   const { setContext } = useAiTeacher();
 
@@ -36,7 +38,9 @@ export function ExerciseSequence({
   async function handleSubmit(
     answer: ExerciseAnswer,
   ): Promise<ExerciseSubmitResult> {
-    const result = await submitExerciseAttemptAction(exercise.id, answer);
+    const result = await saveAnswer(() =>
+      submitExerciseAttemptAction(exercise.id, answer),
+    );
     if (result.isCorrect !== null) {
       setContext({
         recentLearnerAnswer: {

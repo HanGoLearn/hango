@@ -21,7 +21,7 @@ sistema debe indicarlo explícitamente antes de implementarse.
 | Han Tutor lateral            | Tutor personal para explicar, enseñar y acompañar                      | No heredar automáticamente reglas del role-play              |
 | Han Companion                | Conversación visual con el orbe                                        | Mantener identidad, memoria y experiencia propias            |
 | Speaking de Learning Journey | Role-play curricular ligado a una lección y objetivos concretos        | Foco principal de este plan                                  |
-| Speaking Lab                 | Práctica independiente: estaciones guiadas, shadowing y práctica libre | No mezclar progreso ni evaluación con Learning Journey       |
+| Speaking Lab                 | Tres conversaciones con personaje, disponibles desde el primer acceso para todas las cuentas, también admin | No mezclar progreso ni evaluación con Learning Journey       |
 | Speaking del placement       | Evidencia para estimar nivel                                           | No convertirlo en tutor ni usar la puntuación de una lección |
 
 Algunas superficies comparten infraestructura Realtime, pero **compartir código
@@ -396,6 +396,41 @@ siguen siendo comprobaciones de producto pendientes después de la publicación.
       ajenos sin verificar.
 
 ## Registro de decisiones
+
+Corrección local de Speaking de Learning Journey aprobada el 2026-10-10:
+
+- La detección de presentaciones usa el mismo criterio en el prompt de sesión
+  y en el primer turno, y reconoce contenido localizado ES/EN/chino. En
+  «Saludos y presentaciones» la apertura es exactamente `你好。`, sin una
+  pregunta añadida ni `我们开始吧`. Las aperturas explícitas de examen y las
+  escenas libres conservan su propio contrato.
+- Solo en la pantalla de Journey, la instrucción de mantener presionado queda
+  en el botón: el estado accesible del micrófono no se repite visualmente y no
+  ocupa el espacio de la respuesta. El último texto del personaje permanece
+  hasta su siguiente respuesta, incluso durante captura, análisis o un turno
+  descartado. Reiniciar la sesión sí limpia el texto anterior.
+- La ocupación declarada por el alumno se conserva como evidencia literal,
+  afirmativa o negativa, dentro de esa sesión. No se toma de las frases del
+  personaje ni se pierde al recortar el diálogo reciente. `我是老师` describe
+  al alumno: no es una pregunta sobre el personaje ni obliga a insistir con
+  `你是学生吗`. El último mensaje y los datos ya establecidos tienen prioridad
+  sobre el rol inicial y el objetivo; no se fuerza una pregunta tras cada
+  respuesta. Esto no añade memoria persistente ni cambia Han Tutor/Companion.
+- 207 pruebas focalizadas pasan, además de typecheck y lint. La pantalla de
+  prueba local se revisó sin iniciar audio ni alterar el progreso de Journey.
+  El comportamiento del modelo real debe validarse con el usuario en una
+  sesión nueva; no se afirma una garantía de corrección a partir de mocks.
+
+Corrección local aprobada el 2026-10-10: el Tutor de voz conserva un estado
+temporal de práctica (objetivo exacto, idioma, referencia léxica disponible,
+intentos y cierre). Una repetición como `吗?` no es un cambio de idioma ni puede
+convertir `吗` en `妈`. Los objetivos ambiguos requieren aclaración; los cambios
+de palabra se anuncian explícitamente y los grupos de frases largas conservan
+la frase original. Preguntar el significado pausa el ejercicio sin heredar una
+palabra equivocada de Han. El estado se reinicia al comenzar otra sesión y no
+se comparte con Companion ni Speaking. El 80% sigue siendo coincidencia de
+transcripción para avanzar, no una nota de pronunciación. 216 pruebas pasan;
+falta aceptación oral con el modelo real. Sin nuevas llamadas de IA ni despliegue.
 
 | Fecha      | Decisión                                                                          | Estado      | Evidencia / nota                                                                    |
 | ---------- | --------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------- |

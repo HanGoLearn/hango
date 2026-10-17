@@ -315,13 +315,13 @@ describe("admin back-office (integration, real database)", () => {
     expect(detail?.aiByFeature).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          feature: "ai-teacher-chat",
+          feature: "history:ai-teacher-chat",
           calls: 1,
           inputTokens: 100,
           outputTokens: 50,
         }),
         expect.objectContaining({
-          feature: "speaking-transcribe",
+          feature: "experience:SPEAKING_LAB",
           calls: 1,
           durationSeconds: 60,
         }),

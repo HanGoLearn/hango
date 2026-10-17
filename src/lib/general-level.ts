@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { computeLabPoints } from "@/lib/lab-points";
 import { checkLevelAchievements } from "@/lib/achievements";
 import {
@@ -25,14 +26,15 @@ import {
  */
 export async function recomputeGeneralLevelPoints(
   userId: string,
+  client: Prisma.TransactionClient = db,
 ): Promise<void> {
   const [scenarioTotal, inProgressPoints, labPoints] = await Promise.all([
-    db.scenarioCompletion.aggregate({
+    client.scenarioCompletion.aggregate({
       where: { userId },
       _sum: { earnedPoints: true },
     }),
-    computeInProgressScenarioPoints(userId),
-    computeLabPoints(userId),
+    computeInProgressScenarioPoints(userId, client),
+    computeLabPoints(userId, client),
   ]);
   const generalLevelPoints =
     (scenarioTotal._sum.earnedPoints ?? 0) + inProgressPoints + labPoints.total;
@@ -41,11 +43,15 @@ export async function recomputeGeneralLevelPoints(
   // `update` throws when the row is absent. A learner with no profile row
   // has nothing to store; the next recompute writes the same derived total
   // once the row exists, since this never increments.
-  await db.learnerProfile.updateMany({
+  await client.learnerProfile.updateMany({
     where: { userId },
     data: { generalLevelPoints },
   });
-  await checkLevelAchievements(userId, generalLevelPoints);
+  await checkLevelAchievements(
+    userId,
+    generalLevelPoints,
+    client === db ? undefined : client,
+  );
 }
 
 /**
@@ -71,15 +77,16 @@ export async function recomputeGeneralLevelPoints(
  */
 async function computeInProgressScenarioPoints(
   userId: string,
+  client: Prisma.TransactionClient,
 ): Promise<number> {
   const [scenarios, completedRows, reports, chapterHskSums] = await Promise.all(
     [
       getPublishedScenarioWeights(),
-      db.scenarioCompletion.findMany({
+      client.scenarioCompletion.findMany({
         where: { userId },
         select: { scenarioId: true },
       }),
-      db.lessonReflectionReport.findMany({
+      client.lessonReflectionReport.findMany({
         where: { userId },
         select: { lessonId: true, totalScore: true },
       }),

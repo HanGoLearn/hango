@@ -16,6 +16,7 @@ import type {
 } from "@/lib/exercise-progress";
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 import { useLessonMessages } from "@/components/lesson/lesson-messages";
+import { useTrackedLessonSave } from "@/components/lesson/lesson-save-barrier";
 
 /** A stub ExerciseItem never actually calls in hideControls mode - its own Submit/Next buttons are hidden, so onSubmit/onNext are unreachable, but the props are still required. */
 async function unusedSubmit(): Promise<ExerciseSubmitResult> {
@@ -54,6 +55,7 @@ export function ComprehensionStep({
   onContinue: () => void;
 }) {
   const messages = useLessonMessages();
+  const saveAnswers = useTrackedLessonSave();
   const dialogue = dialogues.length === 1 ? dialogues[0] : null;
   const canListenFirst = Boolean(dialogue && dialogue.lines.length > 0);
   const [questionsRevealed, setQuestionsRevealed] = useState(!canListenFirst);
@@ -91,7 +93,9 @@ export function ComprehensionStep({
           entry.answer != null,
       );
     try {
-      const graded = await submitExerciseAttemptsAction(payload);
+      const graded = await saveAnswers(() =>
+        submitExerciseAttemptsAction(payload),
+      );
       setResults(graded);
     } catch {
       setError(messages.comprehension.error);

@@ -49,34 +49,35 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  accounts               Account[]
-  sessions               Session[]
-  learnerProfile         LearnerProfile?
-  lessonCompletions      LearnerLessonCompletion[]
-  lessonProgress         LearnerLessonProgress[]
-  exerciseAttempts       ExerciseAttempt[]
-  quizAttempts           QuizAttempt[]
-  aiConversation         AiConversation?
-  aiUsageLogs            AiUsageLog[]
-  aiUsageUserCaps        AiUsageUserCap[]
-  aiOperationLogs        AiOperationLog[]
-  activitySessions       LearnerActivitySession[]
-  speakingSessions       SpeakingSession[]
-  writingAttempts        WritingAttempt[]
-  missionAttempts        MissionAttempt[]
-  progressEvidence       ProgressEvidence[]
-  reviewCompletions      ReviewCompletion[]
-  reflectionReports      LessonReflectionReport[]
-  vocabularyInteractions LearnerVocabularyInteraction[]
-  vocabularyQuizAttempts VocabularyQuizAttempt[]
-  scenarioCompletions    ScenarioCompletion[]
-  placementSessions      PlacementSession[]
-  achievements           Achievement[]
-  avatar                 LearnerAvatar?
-  coinLedgerEntries      CoinLedgerEntry[]
-  accessoryOwnerships    LearnerAccessoryOwnership[]
-  equippedAccessories    LearnerEquippedAccessory[]
-  learnerFacts           LearnerFact[]
+  accounts                Account[]
+  sessions                Session[]
+  learnerProfile          LearnerProfile?
+  lessonCompletions       LearnerLessonCompletion[]
+  lessonProgress          LearnerLessonProgress[]
+  exerciseAttempts        ExerciseAttempt[]
+  quizAttempts            QuizAttempt[]
+  aiConversation          AiConversation?
+  aiUsageLogs             AiUsageLog[]
+  aiUsageUserCaps         AiUsageUserCap[]
+  aiOperationLogs         AiOperationLog[]
+  activitySessions        LearnerActivitySession[]
+  speakingSessions        SpeakingSession[]
+  writingAttempts         WritingAttempt[]
+  missionAttempts         MissionAttempt[]
+  progressEvidence        ProgressEvidence[]
+  reviewCompletions       ReviewCompletion[]
+  reflectionReports       LessonReflectionReport[]
+  journeySpeakingAttempts JourneySpeakingAttempt[]
+  vocabularyInteractions  LearnerVocabularyInteraction[]
+  vocabularyQuizAttempts  VocabularyQuizAttempt[]
+  scenarioCompletions     ScenarioCompletion[]
+  placementSessions       PlacementSession[]
+  achievements            Achievement[]
+  avatar                  LearnerAvatar?
+  coinLedgerEntries       CoinLedgerEntry[]
+  accessoryOwnerships     LearnerAccessoryOwnership[]
+  equippedAccessories     LearnerEquippedAccessory[]
+  learnerFacts            LearnerFact[]
 
   announcementsCreated    Announcement[]        @relation("AnnouncementCreator")
   announcementReceipts    AnnouncementReceipt[]
@@ -572,6 +573,7 @@ model Lesson {
   speakingSessions         SpeakingSession[]
   writingTasks             WritingTask[]
   reflectionReports        LessonReflectionReport[]
+  journeySpeakingAttempts  JourneySpeakingAttempt[]
   vocabularyQuizAttempts   VocabularyQuizAttempt[]
   translations             LessonTranslation[]
 
@@ -602,9 +604,9 @@ model LessonReflectionReport {
   comprehensionScore Int?
   grammarScore       Int?
   speakingScore      Int?
-  /// Full SpeakingConversationFeedback-shaped dimension breakdown (see
-  /// src/lib/reflection-prompt.ts) - extends Speaking Lab's rubric with
-  /// vocabularyUsageRatio/objectiveCompletionRatio.
+  /// Versioned JSON: legacy SpeakingConversationFeedback OR Journey v2
+  /// provenance (version, exact attempt and progress run). V2 criteria/citations
+  /// remain in the attempt evaluation, never fake acoustic dimensions.
   speakingDimensions Json?
   /// Points & Leveling System - the session score (0-100): Vocabulary(20) +
   /// Grammar(20) + Comprehension(30) + Speaking(30), Situation unscored.
@@ -629,6 +631,101 @@ model LessonReflectionReport {
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
+}
+
+// Journey v2 is independent of AiConversation, Speaking Lab and Placement.
+// No legacy transcript or score is backfilled into these attempts.
+enum JourneySpeakingCaptureStatus {
+  ACTIVE
+  SEALED
+  TECHNICAL_FAILURE
+  CANCELLED
+}
+
+enum JourneySpeakingCloseReason {
+  NATURAL
+  USER_END
+  TECHNICAL_FAILURE
+  ABANDONED
+}
+
+enum JourneySpeakingEvaluationStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  PARTIAL
+  INSUFFICIENT
+  FAILED
+}
+
+model JourneySpeakingAttempt {
+  id             String                       @id @default(cuid())
+  userId         String
+  lessonId       String
+  /// Client-generated idempotency key, always scoped to authenticated owner.
+  requestKey     String
+  rubricVersion  String
+  bankVersion    String
+  locale         String
+  /// Server-resolved lesson, mission and banks; immutable after creation.
+  snapshot       Json
+  snapshotHash   String
+  status         JourneySpeakingCaptureStatus @default(ACTIVE)
+  closeReason    JourneySpeakingCloseReason?
+  /// Digest includes close reason and ordered captured turns, not a grade.
+  captureHash    String?
+  /// Browser-reported capture limitations; never acoustic scores.
+  captureQuality Json?
+  /// WebRTC transcript is browser-captured, not provider-verified audio.
+  captureSource  String                       @default("browser-captured")
+  startedAt      DateTime                     @default(now())
+  finishedAt     DateTime?
+
+  user       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson     Lesson                     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  turns      JourneySpeakingTurn[]
+  evaluation JourneySpeakingEvaluation?
+
+  @@unique([userId, requestKey])
+  @@index([userId, lessonId, startedAt])
+  @@index([status, startedAt])
+}
+
+model JourneySpeakingTurn {
+  id          String        @id @default(cuid())
+  attemptId   String
+  sequence    Int
+  role        AiMessageRole
+  content     String        @db.Text
+  /// Original STT, contextual interpretation and optional ASR confidence.
+  recognition Json?
+  createdAt   DateTime      @default(now())
+
+  attempt JourneySpeakingAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, sequence])
+}
+
+model JourneySpeakingEvaluation {
+  id                  String                          @id @default(cuid())
+  attemptId           String                          @unique
+  rubricVersion       String
+  locale              String
+  status              JourneySpeakingEvaluationStatus @default(PENDING)
+  score               Int?
+  /// Validated evidence and feedback; no acoustics guessed from text.
+  report              Json?
+  processingStartedAt DateTime?
+  leaseToken          String?
+  requestCount        Int                             @default(0)
+  provider            String?
+  model               String?
+  usageLogId          String?
+  failureCode         String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+
+  attempt JourneySpeakingAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
 }
 
 /// Tracks which vocabulary words a learner has actually opened/listened to
@@ -1729,6 +1826,8 @@ model AiUsageLog {
   /// Which app feature made the call, e.g. "ai-teacher-chat",
   /// "welcome-audio", "handwritten-writing".
   feature                       String
+  /// Shared product budget responsible for the call. Null for mixed history.
+  experience                    String?
   provider                      String
   model                         String
   /// Only meaningful for token-billed calls (text/vision). Null for
@@ -1755,6 +1854,7 @@ model AiUsageLog {
   @@index([userId, createdAt])
   @@index([feature, createdAt])
   @@index([userId, feature, createdAt])
+  @@index([userId, experience, createdAt])
 }
 
 enum AiUsageCalculationMethod {
@@ -1783,15 +1883,16 @@ enum AiOperationOutcome {
 /// this separate table can also represent failures and cap blocks, which have
 /// no trustworthy cost row.
 model AiOperationLog {
-  id        String             @id @default(cuid())
-  userId    String
-  feature   String
-  provider  String?
-  model     String?
-  outcome   AiOperationOutcome
-  errorCode String?
-  latencyMs Int?
-  createdAt DateTime           @default(now())
+  id         String             @id @default(cuid())
+  userId     String
+  feature    String
+  experience String?
+  provider   String?
+  model      String?
+  outcome    AiOperationOutcome
+  errorCode  String?
+  latencyMs  Int?
+  createdAt  DateTime           @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

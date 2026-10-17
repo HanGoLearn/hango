@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   dedupeLabEvidence,
   computeLabSkillPoints,
@@ -40,8 +41,11 @@ interface WritingFeedbackShape {
  * `factor_volumen`), every Custom Writing submission is a genuinely
  * distinct piece of writing and should count as its own attempt.
  */
-async function getWritingEvidence(userId: string): Promise<LabEvidencePoint[]> {
-  const attempts = await db.writingAttempt.findMany({
+async function getWritingEvidence(
+  userId: string,
+  client: Prisma.TransactionClient,
+): Promise<LabEvidencePoint[]> {
+  const attempts = await client.writingAttempt.findMany({
     where: { userId, submittedAt: { not: null } },
     orderBy: { submittedAt: "desc" },
     take: ROLLING_WINDOW_RAW_LIMIT,
@@ -94,8 +98,9 @@ interface SpeakingFeedbackShape {
  */
 async function getSpeakingEvidence(
   userId: string,
+  client: Prisma.TransactionClient,
 ): Promise<LabEvidencePoint[]> {
-  const sessions = await db.speakingSession.findMany({
+  const sessions = await client.speakingSession.findMany({
     where: { userId, completionState: "COMPLETED", completedAt: { not: null } },
     orderBy: { completedAt: "desc" },
     take: ROLLING_WINDOW_RAW_LIMIT,
@@ -142,10 +147,11 @@ export interface LabPointsSummary {
 
 export async function computeLabPoints(
   userId: string,
+  client: Prisma.TransactionClient = db,
 ): Promise<LabPointsSummary> {
   const [writingEvidence, speakingEvidence] = await Promise.all([
-    getWritingEvidence(userId),
-    getSpeakingEvidence(userId),
+    getWritingEvidence(userId, client),
+    getSpeakingEvidence(userId, client),
   ]);
   const writing = computeLabSkillPoints(
     LAB_SKILL_BUDGET.WRITING,

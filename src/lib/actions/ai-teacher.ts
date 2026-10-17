@@ -1,4 +1,5 @@
 "use server";
+import { resolveAiExperience } from "@/lib/ai-experiences";
 
 import { auth } from "@/lib/auth";
 import {
@@ -195,11 +196,16 @@ export async function transcribeHanMessageAction(
 
   try {
     const stt = getSttProvider();
+    const experience = resolveAiExperience(
+      "han-teacher-transcribe",
+      formData.get("experience") ?? "HAN_TUTOR",
+    );
     const audioBuffer = Buffer.from(await audio.arrayBuffer());
     const result = await trackAiOperation(
       {
         userId: session.user.id,
         feature: "han-teacher-transcribe",
+        experience,
         provider: stt.name,
       },
       () => stt.transcribe(audioBuffer, audio.type, "han-multilingual"),
@@ -210,6 +216,7 @@ export async function transcribeHanMessageAction(
     await recordAiUsage({
       userId: session.user.id,
       feature: "han-teacher-transcribe",
+      experience,
       provider: result.provider,
       model: result.model,
       estimatedCostUsd: estimateSttCostUsd(estimatedDurationSeconds),

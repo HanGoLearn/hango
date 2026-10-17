@@ -135,7 +135,6 @@ export const messages = {
     ai: {
       ask: "Ask AI",
       aboutLine: "Ask AI about this line",
-      aboutGrammar: "Ask AI about this grammar point",
       practiceVocabulary: "Practice this with AI",
     },
     audio: {
@@ -286,6 +285,11 @@ export const messages = {
         "Choose one short phrase for your next turn. Adapt it to the conversation instead of reading the whole list.",
       testFinished: "Test conversation finished",
       saved: "Conversation saved",
+      captureSaving: "Saving this practice…",
+      captureFailed: "We couldn't save this practice yet.",
+      retrySave: "Retry saving",
+      captureUnavailable:
+        "This voice practice could not be prepared. No oral assessment was saved; you can continue the lesson.",
       testTurns:
         "{count} transcribed turns were captured for this test only. They were not added to Progress or Reflection.",
       reflectionTurns:
@@ -905,17 +909,31 @@ export const messages = {
       eyebrow: "Guided beta practice",
       title: "Practice one real situation at a time",
       description:
-        "Listen, follow the characters and pinyin, then repeat each line at your own pace.",
+        "Talk in Mandarin with a character in three simple situations. Use what you have learned to respond and ask your own questions.",
       station: "Station {current} of {total}",
       available: "Ready to practice",
-      locked: "Start the related lesson first",
       practiceNow: "Practice now",
-      goToLesson: "Start the lesson",
       backToStations: "Back to stations",
-      unlockRequirement: "Start “{lesson}” to open this station.",
       unavailableTitle: "This practice is being prepared",
       unavailableDescription:
         "The lesson content for this station isn't available right now.",
+      conversation: {
+        description:
+          "The character responds to what you say and the conversation develops with you. You do not need to repeat a fixed dialogue.",
+        character: "Your conversation partner",
+        yourRole: "Your character",
+        goal: "Your goal",
+        holdToTalk:
+          "Hold the red button to speak, then release it to send your turn.",
+        needHelp: "I need help",
+        hideHelp: "Hide help",
+        finished:
+          "Conversation finished. You can practice this situation again whenever you like.",
+        tryAgain: "Practice the conversation again",
+        unavailable:
+          "We could not start the voice conversation. Check your microphone and try again.",
+        retry: "Try again",
+      },
       stations: {
         INTRODUCTIONS: {
           title: "Say hello and introduce yourself",
@@ -926,13 +944,13 @@ export const messages = {
         NUMBERS_TIME: {
           title: "Numbers, time and dates",
           description:
-            "Build confidence saying numbers, a time and a short date.",
-          outcome: "Say a number, a time and a date clearly.",
+            "Ask and answer questions about numbers, times and dates with your conversation partner.",
+          outcome: "Exchange information about a time, a date or a number.",
         },
         PRICES: {
           title: "Ask the price and pay",
           description:
-            "Repeat the phrases you need to ask a price and understand the answer.",
+            "Talk with a salesperson, ask how much something costs and respond to their offer.",
           outcome: "Ask how much something costs and respond.",
         },
       },

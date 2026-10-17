@@ -138,7 +138,6 @@ export const messages = {
     ai: {
       ask: "Preguntar a la IA",
       aboutLine: "Preguntar a la IA sobre esta frase",
-      aboutGrammar: "Preguntar a la IA sobre este punto gramatical",
       practiceVocabulary: "Practicar esto con la IA",
     },
     audio: {
@@ -289,6 +288,11 @@ export const messages = {
         "Elige una frase corta para tu próximo turno y adáptala a la conversación en vez de leer toda la lista.",
       testFinished: "Conversación de prueba terminada",
       saved: "Conversación guardada",
+      captureSaving: "Guardando esta práctica…",
+      captureFailed: "Todavía no pudimos guardar esta práctica.",
+      retrySave: "Reintentar guardado",
+      captureUnavailable:
+        "No pudimos preparar esta práctica de voz. No se guardó una evaluación oral; puedes continuar la lección.",
       testTurns:
         "Se capturaron {count} turnos transcritos solo para esta prueba. No se añadieron a Progreso ni a Reflexión.",
       reflectionTurns:
@@ -916,17 +920,31 @@ export const messages = {
       eyebrow: "Práctica guiada de la beta",
       title: "Practica una situación real a la vez",
       description:
-        "Escucha, sigue los caracteres y el pinyin, y repite cada línea a tu ritmo.",
+        "Conversa en mandarín con un personaje en tres situaciones sencillas. Usa lo aprendido para responder y hacer tus propias preguntas.",
       station: "Estación {current} de {total}",
       available: "Lista para practicar",
-      locked: "Empieza primero la lección relacionada",
       practiceNow: "Practicar ahora",
-      goToLesson: "Empezar la lección",
       backToStations: "Volver a las estaciones",
-      unlockRequirement: "Empieza «{lesson}» para abrir esta estación.",
       unavailableTitle: "Estamos preparando esta práctica",
       unavailableDescription:
         "El contenido de la lección para esta estación no está disponible ahora.",
+      conversation: {
+        description:
+          "El personaje responde a lo que dices y la conversación avanza contigo. No necesitas repetir un diálogo fijo.",
+        character: "Tu interlocutor",
+        yourRole: "Tu personaje",
+        goal: "Tu objetivo",
+        holdToTalk:
+          "Mantén presionado el botón rojo para hablar y suéltalo para enviar tu turno.",
+        needHelp: "Necesito ayuda",
+        hideHelp: "Ocultar ayuda",
+        finished:
+          "Conversación terminada. Puedes volver a practicar esta situación cuando quieras.",
+        tryAgain: "Repetir la conversación",
+        unavailable:
+          "No pudimos iniciar la conversación de voz. Comprueba el micrófono y vuelve a intentarlo.",
+        retry: "Volver a intentar",
+      },
       stations: {
         INTRODUCTIONS: {
           title: "Saluda y preséntate",
@@ -937,13 +955,14 @@ export const messages = {
         NUMBERS_TIME: {
           title: "Números, hora y fecha",
           description:
-            "Gana confianza diciendo números, una hora y una fecha breve.",
-          outcome: "Di claramente un número, una hora y una fecha.",
+            "Pregunta y responde sobre números, horarios y fechas con tu interlocutor.",
+          outcome:
+            "Intercambia información sobre una hora, una fecha o un número.",
         },
         PRICES: {
           title: "Pregunta el precio y paga",
           description:
-            "Repite las frases necesarias para preguntar un precio y entender la respuesta.",
+            "Conversa con un vendedor, pregunta cuánto cuesta algo y responde a su propuesta.",
           outcome: "Pregunta cuánto cuesta algo y responde.",
         },
       },

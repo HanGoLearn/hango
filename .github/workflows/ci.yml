@@ -21,16 +21,19 @@ jobs:
         env:
           POSTGRES_USER: hango
           POSTGRES_PASSWORD: hango
-          POSTGRES_DB: hango_ci
+          POSTGRES_DB: hango_local_test
         ports:
-          - 5432:5432
+          - 54329:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U hango -d hango_local_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://hango:hango@localhost:5432/hango_ci
+      # Match the pinned disposable target accepted by the Journey suites.
+      # This service exists only for this job, never a shared app database.
+      DATABASE_URL: postgresql://hango:hango@127.0.0.1:54329/hango_local_test
+      DIRECT_URL: postgresql://hango:hango@127.0.0.1:54329/hango_local_test
       # Never a real secret - CI only needs *a* 32+ char value to satisfy
       # src/lib/env/server.ts's validation, nothing here reads real user
       # sessions.
@@ -92,10 +95,9 @@ jobs:
         env:
           NODE_ENV: production
       - run: npx prisma migrate status
-      # Blocks every unexpected high/critical finding. The only temporary
-      # exception is the exact Prisma CLI 7.10.0 chain documented in
-      # project/AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md; it expires and fails
-      # closed if its package, version or install path changes.
+      # Runtime audit must be clean. Owner-approved, dev-only braces/ESLint
+      # exception through Oct 23 Bogota: exact advisory, versions and paths;
+      # any new finding or expiry fails closed (see release 2026-10-16).
       - run: npm run security:audit
 
       - run: npm run test:unit

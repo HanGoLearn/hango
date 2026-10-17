@@ -93,6 +93,10 @@ async function main() {
   const childEnv: Record<string, string | undefined> = { ...process.env };
   delete childEnv.OPENAI_API_KEY;
   childEnv.DATABASE_URL = `postgresql://${USER}:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}`;
+  // prisma.config.ts prefers DIRECT_URL. Pin it too so an ambient or dotenv
+  // production connection can never receive this runner's migrations/seed.
+  const LOCAL_DATABASE_URL = childEnv.DATABASE_URL;
+  childEnv.DIRECT_URL = LOCAL_DATABASE_URL;
   childEnv.AUTH_SECRET = AUTH_SECRET;
   childEnv.NODE_ENV = "test";
   // Never let orphan-cleanup tests compare the throwaway database with the

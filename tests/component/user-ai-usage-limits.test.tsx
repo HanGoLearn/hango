@@ -18,8 +18,8 @@ describe("UserAiUsageLimits", () => {
         userId="learner-1"
         rows={[
           {
-            feature: "han-speech",
-            label: "Voz generada de Han",
+            feature: "experience:HAN_TUTOR",
+            label: "Han Tutor (burbuja)",
             mode: "BLOCKED",
             generalLimitUsd: 1,
             customLimitUsd: 0,
@@ -38,6 +38,6 @@ describe("UserAiUsageLimits", () => {
       screen.getByText(/afecta únicamente a este usuario/i),
     ).toBeInTheDocument();
     expect(screen.getByText("1 excepción")).toBeInTheDocument();
-    expect(screen.getByText("Voz generada de Han")).toBeInTheDocument();
+    expect(screen.getByText("Han Tutor (burbuja)")).toBeInTheDocument();
   });
 });

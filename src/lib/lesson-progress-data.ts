@@ -4,6 +4,13 @@ import { getLessonsForScenarioLevel } from "@/lib/content/lesson";
 import { resolveLessonAvailability } from "@/lib/content/learning-journey";
 import { resolveNextStepId, isLessonComplete } from "@/lib/lesson-progress";
 import { checkLessonCompletionAchievements } from "@/lib/achievements";
+import {
+  JourneySpeakingStepResponseSchema,
+  JourneyAssessmentSnapshotSchema,
+  hasJourneyReportProvenance,
+} from "@/lib/journey-lesson-report";
+import { getJourneyLessonReport } from "@/lib/journey-lesson-report-service";
+import { JOURNEY_RUBRIC_VERSION } from "@/lib/journey-speaking-attempt-contract";
 
 async function loadSiblingCompletionIds(
   userId: string,
@@ -118,7 +125,7 @@ export async function advanceLessonStep(
       const steps = await tx.lessonStep.findMany({
         where: { lessonId },
         orderBy: { order: "asc" },
-        select: { id: true, order: true },
+        select: { id: true, order: true, type: true },
       });
       const validStepIds = new Set(steps.map((step) => step.id));
       if (!validStepIds.has(stepId)) {
@@ -145,6 +152,56 @@ export async function advanceLessonStep(
         throw new Error("This is not the current step for this lesson.");
       }
 
+      // Optional v2 payload only; legacy steps are unchanged while rollout is
+      // off. Never store a foreign, active, cancelled, or previous-run attempt.
+      const previousResponse = (progress.responses as Record<string, unknown>)[
+        stepId
+      ];
+      if (
+        previousResponse &&
+        typeof previousResponse === "object" &&
+        "journeySpeakingAttemptId" in previousResponse &&
+        response !== undefined &&
+        !JourneySpeakingStepResponseSchema.safeParse(response).success
+      )
+        throw new Error(
+          "A Journey selection cannot fall back to legacy grading.",
+        );
+      if (
+        response &&
+        typeof response === "object" &&
+        "journeySpeakingAttemptId" in response
+      ) {
+        const selected = JourneySpeakingStepResponseSchema.parse(response);
+        if (steps.find((step) => step.id === stepId)?.type !== "SPEAKING")
+          throw new Error(
+            "A Journey attempt belongs only to the Speaking step.",
+          );
+        const attempt = await tx.journeySpeakingAttempt.findFirst({
+          where: {
+            id: selected.journeySpeakingAttemptId,
+            userId,
+            lessonId,
+            status: { in: ["SEALED", "TECHNICAL_FAILURE"] },
+            rubricVersion: JOURNEY_RUBRIC_VERSION,
+            finishedAt: { not: null },
+            startedAt: { gte: progress.startedAt },
+          },
+          select: { snapshot: true },
+        });
+        const snapshot = attempt?.snapshot as
+          { assessment?: unknown } | undefined;
+        const assessment = JourneyAssessmentSnapshotSchema.safeParse(
+          snapshot?.assessment,
+        );
+        if (
+          !assessment.success ||
+          assessment.data.progressId !== progress.id ||
+          assessment.data.progressStartedAt !== progress.startedAt.toISOString()
+        )
+          throw new Error("A sealed attempt for this lesson run is required.");
+      }
+
       const responses =
         response === undefined
           ? (progress.responses as Record<string, unknown>)
@@ -159,8 +216,41 @@ export async function advanceLessonStep(
       const complete = isLessonComplete(steps, completedStepIds);
       const nextStepId = resolveNextStepId(steps, stepId) ?? stepId;
 
+      if (complete) {
+        const projection = await tx.lessonReflectionReport.findUnique({
+          where: { userId_lessonId: { userId, lessonId } },
+          select: { speakingDimensions: true },
+        });
+        const selectedV2 = steps.some((step) => {
+          const saved = responses[step.id];
+          return (
+            step.type === "SPEAKING" &&
+            saved &&
+            typeof saved === "object" &&
+            "journeySpeakingAttemptId" in saved
+          );
+        });
+        if (
+          selectedV2 ||
+          hasJourneyReportProvenance(projection?.speakingDimensions)
+        ) {
+          const report = await getJourneyLessonReport(userId, lessonId, tx);
+          if (
+            !report.rewards.eligible ||
+            report.rewards.settlement !== "SETTLED"
+          )
+            throw new Error(
+              "A complete saved Journey report is required to finish this lesson.",
+            );
+        }
+      }
+
       const updated = await tx.learnerLessonProgress.update({
-        where: { userId_lessonId: { userId, lessonId } },
+        where: {
+          userId_lessonId: { userId, lessonId },
+          id: progress.id,
+          startedAt: progress.startedAt,
+        },
         data: {
           responses: responses as Prisma.InputJsonValue,
           completedStepIds: [...completedStepIds],

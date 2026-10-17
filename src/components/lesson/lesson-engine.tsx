@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LessonDisplayPrefsProvider } from "@/components/lesson/lesson-display-prefs";
 import { useAiTeacher } from "@/components/ai-teacher/ai-teacher-provider";
@@ -18,6 +18,10 @@ import { WritingStep } from "@/components/lesson/steps/writing-step";
 import { QuizStep } from "@/components/lesson/steps/quiz-step";
 import { MissionStep } from "@/components/lesson/steps/mission-step";
 import { ReflectionStep } from "@/components/lesson/steps/reflection-step";
+import {
+  LessonSaveBarrierProvider,
+  useLessonSaveBarrier,
+} from "@/components/lesson/lesson-save-barrier";
 import { resolveStepAvailability } from "@/lib/lesson-progress";
 import {
   advanceLessonStepAction,
@@ -31,20 +35,34 @@ export interface LessonEngineProps {
   initialCurrentStepId: string;
   initialCompletedStepIds: string[];
   locale: AppLocale;
+  journeyEvidenceCapture?: boolean;
+  journeyReport?: boolean;
 }
 
-export function LessonEngine({
+export function LessonEngine(props: LessonEngineProps) {
+  return (
+    <LessonSaveBarrierProvider>
+      <LessonEngineContent key={props.lesson.id} {...props} />
+    </LessonSaveBarrierProvider>
+  );
+}
+
+function LessonEngineContent({
   lesson,
   initialCurrentStepId,
   initialCompletedStepIds,
   locale,
+  journeyEvidenceCapture = false,
+  journeyReport = false,
 }: LessonEngineProps) {
   const router = useRouter();
+  const saveBarrier = useLessonSaveBarrier();
   const [currentStepId, setCurrentStepId] = useState(initialCurrentStepId);
   const [completedStepIds, setCompletedStepIds] = useState(
     new Set(initialCompletedStepIds),
   );
   const [isSaving, startSaving] = useTransition();
+  const navigationBusy = useRef(false);
   const [saveError, setSaveError] = useState(false);
 
   const steps = lesson.steps;
@@ -80,11 +98,13 @@ export function LessonEngine({
     // a step icon while a previous save is still in flight fires a second
     // action before `currentStepId` has caught up, sending a stale step id
     // that the server would otherwise reject.
-    if (isSaving) return;
+    if (isSaving || navigationBusy.current) return;
+    navigationBusy.current = true;
     const previousStepId = currentStepId;
-    setCurrentStepId(stepId);
     startSaving(async () => {
       try {
+        await saveBarrier?.wait();
+        setCurrentStepId(stepId);
         await goToLessonStepAction(lesson.id, stepId);
         setSaveError(false);
       } catch (error) {
@@ -99,6 +119,8 @@ export function LessonEngine({
         console.error("goToLessonStepAction failed:", error);
         setCurrentStepId(previousStepId);
         setSaveError(true);
+      } finally {
+        navigationBusy.current = false;
       }
     });
   }
@@ -121,7 +143,8 @@ export function LessonEngine({
    * is what stops the double-tap from ever reaching the network twice.
    */
   function handleAdvance(response: unknown = undefined) {
-    if (isSaving) return;
+    if (isSaving || navigationBusy.current) return;
+    navigationBusy.current = true;
     const previousCompleted = completedStepIds;
     const nextCompleted = new Set(completedStepIds);
     nextCompleted.add(currentStep.id);
@@ -129,6 +152,7 @@ export function LessonEngine({
 
     startSaving(async () => {
       try {
+        await saveBarrier?.wait();
         const result = await advanceLessonStepAction(
           lesson.id,
           currentStep.id,
@@ -157,6 +181,8 @@ export function LessonEngine({
         console.error("advanceLessonStepAction failed:", error);
         setCompletedStepIds(previousCompleted);
         setSaveError(true);
+      } finally {
+        navigationBusy.current = false;
       }
     });
   }
@@ -195,17 +221,47 @@ export function LessonEngine({
 
         <DisplayToggles />
 
-        {renderStep(currentStep.type, lesson, handleAdvance)}
+        <fieldset disabled={isSaving} className="min-w-0 border-0 p-0">
+          <LessonStep
+            key={currentStep.id}
+            type={currentStep.type}
+            lesson={lesson}
+            onContinue={handleAdvance}
+            onExit={() =>
+              router.push(
+                localePath(
+                  locale,
+                  `/learning-journey/${lesson.scenarioLevel.scenario.slug}`,
+                ),
+              )
+            }
+            locale={locale}
+            journeyEvidenceCapture={journeyEvidenceCapture}
+            journeyReport={journeyReport}
+          />
+        </fieldset>
       </div>
     </LessonDisplayPrefsProvider>
   );
 }
 
-function renderStep(
-  type: string,
-  lesson: LessonWithContent,
-  onContinue: (response?: unknown) => void,
-) {
+function LessonStep({
+  type,
+  lesson,
+  onContinue,
+  onExit,
+  locale,
+  journeyEvidenceCapture,
+  journeyReport,
+}: {
+  type: string;
+  lesson: LessonWithContent;
+  onContinue: (response?: unknown) => void;
+  onExit: () => void;
+  locale: AppLocale;
+  journeyEvidenceCapture: boolean;
+  journeyReport: boolean;
+}) {
   switch (type) {
     case "SITUATION":
     case "OBJECTIVE":
@@ -249,12 +305,15 @@ function renderStep(
     case "AI_CHALLENGE":
       return (
         <SpeakingStep
+          lessonId={lesson.id}
           mission={lesson.mission}
           vocabulary={lesson.vocabulary}
           grammar={lesson.grammar}
           dialogues={lesson.dialogues}
           hskReference={lesson.hskReference}
-          onContinue={() => onContinue()}
+          onContinue={(response) => onContinue(response)}
+          locale={locale}
+          evidenceCapture={journeyEvidenceCapture || journeyReport}
         />
       );
     case "WRITING":
@@ -268,7 +327,15 @@ function renderStep(
         <MissionStep mission={lesson.mission} onContinue={() => onContinue()} />
       );
     case "REFLECTION":
-      return <ReflectionStep lesson={lesson} onContinue={() => onContinue()} />;
+      return (
+        <ReflectionStep
+          lesson={lesson}
+          onContinue={() => onContinue()}
+          locale={locale}
+          journeyReport={journeyReport || journeyEvidenceCapture}
+          onExit={onExit}
+        />
+      );
     default:
       return null;
   }

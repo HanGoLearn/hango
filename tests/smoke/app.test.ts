@@ -49,7 +49,13 @@ describe("application smoke test", () => {
       // Vitest sets NODE_ENV=test, but Next.js intentionally skips loading
       // .env.local when NODE_ENV=test. Override it so the spawned dev
       // server loads local config the same way `npm run dev` does.
-      env: { ...process.env, NODE_ENV: "development" },
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        HANGO_SMOKE_TEST: "1",
+        OPENAI_API_KEY: "",
+        ANTHROPIC_API_KEY: "",
+      },
     });
     server.stdout?.on("data", appendServerOutput);
     server.stderr?.on("data", appendServerOutput);

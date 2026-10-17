@@ -1,13 +1,9 @@
-import {
-  getSpeakingPrompts,
-  getSpeakingLessonOptions,
-} from "@/lib/content/speaking-prompts";
-import { SpeakingLabHome } from "@/components/speaking/speaking-lab-home";
 import { isAppLocale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
-import { auth } from "@/lib/auth";
-import { hasFullBetaLearningAccess } from "@/lib/beta-learning-scope";
-import { getBetaSpeakingStations } from "@/lib/beta-speaking-stations";
+import {
+  getBetaSpeakingStations,
+  getBetaSpeakingStationConversation,
+} from "@/lib/beta-speaking-stations";
 import { BetaSpeakingStations } from "@/components/speaking/beta-speaking-stations";
 
 export default async function SpeakingLabPage({
@@ -19,49 +15,25 @@ export default async function SpeakingLabPage({
 }) {
   const { locale } = await params;
   if (!isAppLocale(locale)) return null;
-  const [dictionary, session] = await Promise.all([
-    getDictionary(locale),
-    auth(),
-  ]);
-  const { lessonId, station: requestedStation } = await searchParams;
-
-  if (!hasFullBetaLearningAccess(session!.user!.role)) {
-    const stations = await getBetaSpeakingStations(session!.user!.id!, locale);
-    const selectedStation =
-      stations.find(
-        (station) => station.id === requestedStation && station.unlocked,
-      ) ?? null;
-    const selectedPrompt = selectedStation
-      ? (await getSpeakingPrompts(selectedStation.lessonId)).SHADOWING
-      : null;
-
-    return (
-      <BetaSpeakingStations
-        locale={locale}
-        stations={stations}
-        selectedStation={selectedStation}
-        selectedPrompt={selectedPrompt}
-        messages={dictionary.speakingLab}
-      />
-    );
-  }
-
-  const [prompts, lessonOptions] = await Promise.all([
-    getSpeakingPrompts(lessonId),
-    getSpeakingLessonOptions(locale),
-  ]);
-  const activeLessonId = lessonId ?? lessonOptions[0]?.id ?? null;
+  // Authentication remains enforced by the app layout. Every account uses
+  // the same three-station Lab; returning without a query must not expose
+  // the retired full Lab, including for administrators or FULL beta scope.
+  const dictionary = await getDictionary(locale);
+  const { station: requestedStation } = await searchParams;
+  const stations = await getBetaSpeakingStations(locale);
+  const selectedStation =
+    stations.find((station) => station.id === requestedStation) ?? null;
+  const selectedConversation = selectedStation
+    ? await getBetaSpeakingStationConversation(selectedStation, locale)
+    : null;
 
   return (
-    <SpeakingLabHome
+    <BetaSpeakingStations
       locale={locale}
-      prompts={prompts}
-      lessonOptions={lessonOptions}
-      activeLessonId={activeLessonId}
-      showSpeakingTestMode={process.env.NODE_ENV === "development"}
+      stations={stations}
+      selectedStation={selectedStation}
+      selectedConversation={selectedConversation}
       messages={dictionary.speakingLab}
-      journeyMessages={dictionary.learningJourney}
-      levelMessages={dictionary.dashboard.levels}
     />
   );
 }

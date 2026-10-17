@@ -73,6 +73,37 @@ describe("AI Teacher conversation (integration, real database, mock provider)", 
     const usage = await db.aiUsageLog.findMany({ where: { userId: user.id } });
     expect(usage).toHaveLength(1);
     expect(usage[0]!.provider).toBe("mock");
+    expect(usage[0]!.feature).toBe("han-tutor-chat");
+  });
+
+  it("records only Companion text in the Companion category, excluding Tutor and role-play", async () => {
+    const user = await createTestUser(
+      `ai-teacher-cost-separation-${Date.now()}@hango.dev`,
+    );
+    await sendAiTeacherMessage(user.id, "Hola", {}, "TUTOR");
+    await sendAiTeacherMessage(user.id, "Hello", {}, "PRACTICE");
+    await sendAiTeacherMessage(
+      user.id,
+      "你好",
+      {
+        rolePlay: {
+          aiRole: "Friend",
+          learnerRole: "You",
+          scenarioContext: "Meet",
+          objective: "Introduce yourself",
+        },
+      },
+      "PRACTICE",
+    );
+    const usage = await db.aiUsageLog.findMany({ where: { userId: user.id } });
+    expect(usage.map((row) => row.feature).sort()).toEqual([
+      "han-companion-chat",
+      "han-tutor-chat",
+      "roleplay-chat",
+    ]);
+    expect(
+      usage.filter((row) => row.feature === "han-companion-chat"),
+    ).toHaveLength(1);
   });
 
   it("does not persist messages when conversation storage is disabled", async () => {

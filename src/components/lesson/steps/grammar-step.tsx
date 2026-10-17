@@ -13,7 +13,6 @@ import {
   Caption,
 } from "@/components/ui/typography";
 import { HanAvatar } from "@/components/ui/han-mascot";
-import { AskAiButton } from "@/components/lesson/ask-ai-button";
 import { AudioPlayButton } from "@/components/lesson/audio-play-button";
 import { ExerciseItem } from "@/components/exercise/exercise-item";
 import { StepContinueButton } from "@/components/lesson/step-continue-button";
@@ -27,6 +26,7 @@ import type {
 import type { LessonWithContent } from "@/lib/content/lesson-data";
 import { useLessonMessages } from "@/components/lesson/lesson-messages";
 import { formatMessage } from "@/i18n/format";
+import { useTrackedLessonSave } from "@/components/lesson/lesson-save-barrier";
 
 /** A stub ExerciseItem never actually calls in hideControls mode - its own Submit/Next buttons are hidden, so onSubmit/onNext are unreachable, but the props are still required. */
 async function unusedSubmit(): Promise<ExerciseSubmitResult> {
@@ -108,6 +108,7 @@ export function GrammarStep({
   onContinue: () => void;
 }) {
   const messages = useLessonMessages();
+  const saveAnswers = useTrackedLessonSave();
   const [answers, setAnswers] = useState<Record<string, ExerciseAnswer | null>>(
     {},
   );
@@ -191,7 +192,9 @@ export function GrammarStep({
           entry.answer != null,
       );
     try {
-      const graded = await submitExerciseAttemptsAction(payload);
+      const graded = await saveAnswers(() =>
+        submitExerciseAttemptsAction(payload),
+      );
       setResults(graded);
     } catch {
       setError(messages.comprehension.error);
@@ -377,18 +380,6 @@ function GrammarScreenCard({
           <Caption>{messages.grammar.noPractice}</Caption>
         )}
       </div>
-
-      {showExplanation && (
-        <AskAiButton
-          label={messages.ai.aboutGrammar}
-          contextPatch={{
-            selectedGrammarPoint: {
-              name: grammarPoint.name,
-              structure: grammarPoint.structure,
-            },
-          }}
-        />
-      )}
     </Card>
   );
 }

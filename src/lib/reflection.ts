@@ -35,8 +35,11 @@ import {
 import { checkReflectionAchievements } from "@/lib/achievements";
 import { grantCoins } from "@/lib/coins";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
+import { hasJourneySpeakingSelection } from "@/lib/journey-report-routing";
+import { hasJourneyReportProvenance } from "@/lib/journey-lesson-report";
 
 export class ReflectionNotFoundError extends Error {}
+export class JourneyReflectionRequiredError extends Error {}
 
 async function syncLessonSpeakingEvidence(
   userId: string,
@@ -441,6 +444,13 @@ export async function getOrGenerateLessonReflectionReport(
   const existing = await db.lessonReflectionReport.findUnique({
     where: { userId_lessonId: { userId, lessonId } },
   });
+  if (
+    hasJourneyReportProvenance(existing?.speakingDimensions) ||
+    (await hasJourneySpeakingSelection(userId, lessonId))
+  )
+    throw new JourneyReflectionRequiredError(
+      "This lesson requires the Journey v2 report reader.",
+    );
   const existingSpeaking = existing?.speakingDimensions as
     SpeakingConversationFeedback | null | undefined;
 
@@ -776,6 +786,13 @@ export async function getLessonScoreBreakdown(
     }),
   ]);
   if (!lesson) throw new ReflectionNotFoundError("Lesson not found.");
+  if (
+    hasJourneyReportProvenance(report?.speakingDimensions) ||
+    (await hasJourneySpeakingSelection(userId, lessonId))
+  )
+    throw new JourneyReflectionRequiredError(
+      "This lesson requires the Journey v2 report reader.",
+    );
 
   const scoredExercises = await db.exercise.findMany({
     where: { lessonId, status: "PUBLISHED" },

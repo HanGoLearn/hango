@@ -5,13 +5,20 @@ import { useLessonMessages } from "@/components/lesson/lesson-messages";
 export function StepContinueButton({
   onClick,
   label,
+  disabled = false,
 }: {
   onClick: () => void;
   label?: string;
+  disabled?: boolean;
 }) {
   const messages = useLessonMessages();
   return (
-    <Button type="button" onClick={onClick} className="mt-6 self-start">
+    <Button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="mt-6 self-start"
+    >
       {label ?? messages.common.continue}
       <ArrowRight className="size-4" aria-hidden="true" />
     </Button>

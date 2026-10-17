@@ -30,6 +30,65 @@ async function createTestUser(prefix: string) {
 }
 
 describe("admin analytics (integration, real database)", () => {
+  it("attributes new Tutor/Companion costs correctly without treating owner testing as learner engagement", async () => {
+    const admin = await createTestUser("admin-ai-products");
+    await db.aiUsageLog.createMany({
+      data: [
+        {
+          userId: admin.id,
+          feature: "han-tutor-realtime-session",
+          provider: "test-mock",
+          model: "test-model",
+          estimatedCostUsd: 0.05,
+        },
+        {
+          userId: admin.id,
+          feature: "han-companion-chat",
+          provider: "test-mock",
+          model: "test-model",
+          estimatedCostUsd: 0.002,
+        },
+        {
+          userId: admin.id,
+          feature: "han-realtime-assessment",
+          provider: "test-mock",
+          model: "test-model",
+          estimatedCostUsd: 0.003,
+        },
+      ],
+    });
+    const analytics = await getAdminAnalytics(7, admin.id, {
+      includeAdministratorAi: true,
+    });
+    expect(
+      analytics.systems.find((row) => row.key === "han-tutor"),
+    ).toMatchObject({ costUsd: 0.05, actions: 0, users: 0 });
+    expect(
+      analytics.systems.find((row) => row.key === "han-companion"),
+    ).toMatchObject({ costUsd: 0.002, actions: 0, users: 0 });
+  });
+  it("includes admin AI costs explicitly and reconciles more than 20 model buckets", async () => {
+    const admin = await createTestUser("admin-ai-cost-complete");
+    const marker = `admin-ai-cost-${randomUUID()}`;
+    await db.aiUsageLog.createMany({
+      data: Array.from({ length: 24 }, (_, index) => ({
+        userId: admin.id,
+        feature: "vocabulary-lookup",
+        provider: marker,
+        model: `model-${index}`,
+        estimatedCostUsd: 0.001,
+      })),
+    });
+    const analytics = await getAdminAnalytics(7, admin.id, {
+      includeAdministratorAi: true,
+    });
+    const rows = analytics.ai.rows.filter((row) => row.provider === marker);
+    expect(rows).toHaveLength(24);
+    expect(rows.reduce((sum, row) => sum + row.costUsd, 0)).toBeCloseTo(0.024);
+    expect(
+      analytics.ai.rows.reduce((sum, row) => sum + row.costUsd, 0),
+    ).toBeCloseTo(analytics.ai.totalCostUsd);
+  });
   it("returns coherent funnel, retention, system, cost, and alert metrics", async () => {
     const admin = await createTestUser("admin-analytics-shape");
     const analytics = await getAdminAnalytics(30, admin.id);

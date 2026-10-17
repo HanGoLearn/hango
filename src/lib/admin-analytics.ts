@@ -4,6 +4,12 @@ import { ADMIN_EMAIL } from "@/lib/admin-identity";
 import { db } from "@/lib/db";
 import { FEATURE_LABELS } from "@/lib/admin-ai-usage";
 import { DEFAULT_DAILY_CAP_USD } from "@/lib/ai-usage";
+import {
+  AI_EXPERIENCES,
+  experienceLimitKey,
+  recordedAiExperience,
+  type AiExperience,
+} from "@/lib/ai-experiences";
 const DAY_MS = 86_400_000;
 const BOGOTA_OFFSET_MS = 5 * 60 * 60 * 1000;
 
@@ -61,16 +67,24 @@ function median(values: number[]): number {
  * direct `db.user.findMany` cohort queries still filter by ADMIN_EMAIL - a
  * `{not: ...}` on User's own (small, uniquely-indexed) email column was
  * never the join-cost problem this pass targets.
+ * Financial pages explicitly opt in to includeAdministratorAi: paid owner
+ * testing still contributes to costs, without inflating learner engagement.
  */
 export async function getAdminAnalytics(
   period: AnalyticsPeriod,
   excludeUserId: string,
+  options: { includeAdministratorAi?: boolean } = {},
 ) {
   const now = new Date();
   const periodStart = dayStart(period - 1);
   const previousStart = dayStart(period * 2 - 1);
   const retentionStart = dayStart(120);
   const todayStart = dayStart(0);
+  const budgetDayStart = new Date(now);
+  budgetDayStart.setUTCHours(0, 0, 0, 0);
+  const aiUserFilter = options.includeAdministratorAi
+    ? {}
+    : { userId: { not: excludeUserId } };
   const fourteenDaysAgo = dayStart(13);
   const activityStart = new Date(
     Math.min(previousStart.getTime(), retentionStart.getTime()),
@@ -94,6 +108,7 @@ export async function getAdminAnalytics(
     aiByFeatureModel,
     aiTodayByUserFeature,
     aiCaps,
+    aiUserCaps,
     coinEntries,
     avatarOwners,
     accessoryOwners,
@@ -186,9 +201,11 @@ export async function getAdminAnalytics(
       select: { userId: true, createdAt: true },
     }),
     db.aiUsageLog.groupBy({
-      by: ["userId", "feature"],
+      by: ["userId", "feature", "experience"],
       where: {
         createdAt: { gte: periodStart },
+        // Feature engagement still excludes owner testing. Costs are derived
+        // independently from the complete financial model groups below.
         userId: { not: excludeUserId },
       },
       _sum: { estimatedCostUsd: true },
@@ -197,6 +214,7 @@ export async function getAdminAnalytics(
     db.aiUsageLog.groupBy({
       by: [
         "feature",
+        "experience",
         "provider",
         "model",
         "calculationMethod",
@@ -207,7 +225,7 @@ export async function getAdminAnalytics(
       ],
       where: {
         createdAt: { gte: periodStart },
-        userId: { not: excludeUserId },
+        ...aiUserFilter,
       },
       _sum: {
         estimatedCostUsd: true,
@@ -218,15 +236,16 @@ export async function getAdminAnalytics(
       _count: { _all: true },
     }),
     db.aiUsageLog.groupBy({
-      by: ["userId", "feature"],
+      by: ["userId", "feature", "experience"],
       where: {
-        createdAt: { gte: todayStart },
-        userId: { not: excludeUserId },
+        createdAt: { gte: budgetDayStart },
+        ...aiUserFilter,
       },
       _sum: { estimatedCostUsd: true },
       _count: { _all: true },
     }),
     db.aiUsageCap.findMany(),
+    db.aiUsageUserCap.findMany(),
     db.coinLedgerEntry.findMany({
       where: {
         createdAt: { gte: periodStart },
@@ -472,82 +491,63 @@ export async function getAdminAnalytics(
     ...vocabularyInteractions.map((row) => row.userId),
     ...vocabularyQuizAttempts.map((row) => row.userId),
   ]);
-  const featureUsers = new Map<string, Set<string>>();
-  const featureCalls = new Map<string, number>();
-  const featureCosts = new Map<string, number>();
+  const experienceUsers = new Map<AiExperience, Set<string>>();
+  const experienceCalls = new Map<AiExperience, number>();
+  const experienceCosts = new Map<AiExperience, number>();
   for (const row of aiByUserFeature) {
-    const users = featureUsers.get(row.feature) ?? new Set<string>();
+    const experience = recordedAiExperience(row.feature, row.experience);
+    if (!experience) continue;
+    const users = experienceUsers.get(experience) ?? new Set<string>();
     users.add(row.userId);
-    featureUsers.set(row.feature, users);
-    featureCalls.set(
-      row.feature,
-      (featureCalls.get(row.feature) ?? 0) + row._count._all,
-    );
-    featureCosts.set(
-      row.feature,
-      (featureCosts.get(row.feature) ?? 0) + (row._sum.estimatedCostUsd ?? 0),
+    experienceUsers.set(experience, users);
+    experienceCalls.set(
+      experience,
+      (experienceCalls.get(experience) ?? 0) + row._count._all,
     );
   }
-  const featureSetUsers = (features: string[]) =>
-    new Set(
-      features.flatMap((feature) => [...(featureUsers.get(feature) ?? [])]),
+  for (const row of aiByFeatureModel) {
+    const experience = recordedAiExperience(row.feature, row.experience);
+    if (!experience) continue;
+    experienceCosts.set(
+      experience,
+      (experienceCosts.get(experience) ?? 0) + (row._sum.estimatedCostUsd ?? 0),
     );
-  const featureSetCalls = (features: string[]) =>
-    features.reduce(
-      (total, feature) => total + (featureCalls.get(feature) ?? 0),
-      0,
-    );
-  const featureSetCost = (features: string[]) =>
-    features.reduce(
-      (total, feature) => total + (featureCosts.get(feature) ?? 0),
-      0,
-    );
-
-  const tutorFeatures = ["ai-teacher-chat", "han-teacher-transcribe"];
-  const companionFeatures = ["han-realtime-assessment"];
-  const vocabularyFeatures = ["vocabulary-lookup"];
+  }
+  const experienceCost = (experience: AiExperience) =>
+    experienceCosts.get(experience) ?? 0;
   const systemMetrics = [
     {
       key: "learning-journey",
       label: "Learning Journey",
       actions: lessonCompletions.length + scenarioCompletions.length,
       users: learningJourneyUsers.size,
-      costUsd: featureSetCost([
-        "welcome-audio",
-        "dialogue-audio",
-        "grammar-audio",
-        "vocabulary-audio",
-        "lesson-reflection",
-      ]),
+      costUsd:
+        experienceCost("JOURNEY_SPEAKING") +
+        experienceCost("LESSON_REFLECTION"),
       detail: `${lessonCompletions.length} lecciones · ${scenarioCompletions.length} escenarios`,
     },
     {
       key: "han-tutor",
       label: "Han Tutor",
-      actions: featureSetCalls(tutorFeatures),
-      users: featureSetUsers(tutorFeatures).size,
-      costUsd: featureSetCost(tutorFeatures),
-      detail: "Consultas y transcripciones del tutor lateral",
+      actions: experienceCalls.get("HAN_TUTOR") ?? 0,
+      users: experienceUsers.get("HAN_TUTOR")?.size ?? 0,
+      costUsd: experienceCost("HAN_TUTOR"),
+      detail: "Chat escrito y voz con atribución al Tutor",
     },
     {
       key: "han-companion",
       label: "Han Companion",
-      actions: featureSetCalls(companionFeatures),
-      users: featureSetUsers(companionFeatures).size,
-      costUsd: featureSetCost(companionFeatures),
-      detail: "Turnos evaluados de conversación libre",
+      actions: experienceCalls.get("HAN_COMPANION") ?? 0,
+      users: experienceUsers.get("HAN_COMPANION")?.size ?? 0,
+      costUsd: experienceCost("HAN_COMPANION"),
+      detail: "Chat, voz y memoria exclusivos de Companion",
     },
     {
       key: "speaking-lab",
       label: "Speaking Lab",
       actions: speakingCompletions.length,
       users: speakingUsers.size,
-      costUsd: featureSetCost([
-        "speaking-feedback",
-        "speaking-transcribe",
-        "speaking-scenario",
-        "free-topic-feedback",
-      ]),
+      costUsd: experienceCost("SPEAKING_LAB"),
       detail: "Sesiones de laboratorio completadas",
     },
     {
@@ -555,7 +555,7 @@ export async function getAdminAnalytics(
       label: "Writing Lab",
       actions: writingSubmissions.length,
       users: writingUsers.size,
-      costUsd: featureSetCost(["writing-feedback", "handwritten-writing"]),
+      costUsd: experienceCost("WRITING_LAB"),
       detail: "Entregas enviadas para evaluación",
     },
     {
@@ -563,15 +563,18 @@ export async function getAdminAnalytics(
       label: "Missions",
       actions: missionCompletions.length,
       users: missionUsers.size,
-      costUsd: featureSetCost(["mission-chat", "mission-report"]),
+      costUsd: experienceCost("MISSIONS"),
       detail: "Misiones de comunicación completadas",
     },
     {
       key: "han-vocabulary",
       label: "HanVocabulary",
       actions: vocabularyInteractions.length + vocabularyQuizAttempts.length,
-      users: unionSize(vocabularyUsers, featureSetUsers(vocabularyFeatures)),
-      costUsd: featureSetCost(vocabularyFeatures),
+      users: unionSize(
+        vocabularyUsers,
+        experienceUsers.get("HAN_VOCABULARY") ?? new Set<string>(),
+      ),
+      costUsd: experienceCost("HAN_VOCABULARY"),
       detail: `${vocabularyInteractions.length} palabras exploradas · ${vocabularyQuizAttempts.length} respuestas`,
     },
     {
@@ -579,10 +582,7 @@ export async function getAdminAnalytics(
       label: "Placement",
       actions: placementCompletions.length,
       users: placementUsers.size,
-      costUsd: featureSetCost([
-        "placement-grading",
-        "placement-listening-audio",
-      ]),
+      costUsd: experienceCost("PLACEMENT"),
       detail: "Evaluaciones de nivel completadas",
     },
   ];
@@ -644,6 +644,7 @@ export async function getAdminAnalytics(
   const costDetails = aiByFeatureModel
     .map((row) => ({
       feature: row.feature,
+      experience: row.experience,
       label:
         FEATURE_LABELS[row.feature as keyof typeof FEATURE_LABELS] ??
         row.feature,
@@ -670,16 +671,41 @@ export async function getAdminAnalytics(
   const capByFeature = new Map(
     aiCaps.map((cap) => [cap.feature, cap.dailyLimitUsd]),
   );
-  const nearCapRows = aiTodayByUserFeature
+  const overrideByUserFeature = new Map(
+    aiUserCaps.map((cap) => [
+      `${cap.userId}/${cap.feature}`,
+      cap.dailyLimitUsd,
+    ]),
+  );
+  const dailyExperienceCosts = new Map<
+    string,
+    { userId: string; experience: AiExperience; cost: number }
+  >();
+  for (const row of aiTodayByUserFeature) {
+    const experience = recordedAiExperience(row.feature, row.experience);
+    if (!experience) continue;
+    const key = `${row.userId}/${experienceLimitKey(experience)}`;
+    const current = dailyExperienceCosts.get(key) ?? {
+      userId: row.userId,
+      experience,
+      cost: 0,
+    };
+    current.cost += row._sum.estimatedCostUsd ?? 0;
+    dailyExperienceCosts.set(key, current);
+  }
+  const nearCapRows = [...dailyExperienceCosts.values()]
+    // Identical product key, source aggregation, override precedence and UTC day as the gate.
     .map((row) => {
-      const cap = capByFeature.get(row.feature) ?? DEFAULT_DAILY_CAP_USD;
-      const cost = row._sum.estimatedCostUsd ?? 0;
+      const feature = experienceLimitKey(row.experience);
+      const cap =
+        overrideByUserFeature.get(`${row.userId}/${feature}`) ??
+        capByFeature.get(feature) ??
+        DEFAULT_DAILY_CAP_USD;
       return {
-        userId: row.userId,
-        feature: row.feature,
-        cost,
+        ...row,
+        feature,
         cap,
-        ratio: cost / cap,
+        ratio: cap > 0 ? row.cost / cap : row.cost > 0 ? 1 : 0,
       };
     })
     .filter((row) => row.ratio >= 0.8)
@@ -721,7 +747,7 @@ export async function getAdminAnalytics(
           row.ratio >= 1
             ? "Límite diario alcanzado"
             : "Consumo cercano al límite",
-        detail: `${user?.learnerProfile?.displayName ?? user?.name ?? user?.email ?? "Usuario"} · ${FEATURE_LABELS[row.feature as keyof typeof FEATURE_LABELS] ?? row.feature} · ${Math.round(row.ratio * 100)}%`,
+        detail: `${user?.learnerProfile?.displayName ?? user?.name ?? user?.email ?? "Usuario"} · ${AI_EXPERIENCES[row.experience].label} · ${Math.round(row.ratio * 100)}%`,
         href: `/admin/users/${row.userId}`,
       };
     }),
@@ -806,7 +832,9 @@ export async function getAdminAnalytics(
       costPerActiveUser: activeUsers > 0 ? totalAiCost / activeUsers : 0,
       costPerCompletion:
         currentCompletions > 0 ? totalAiCost / currentCompletions : 0,
-      rows: costDetails.slice(0, 20),
+      // Reports must reconcile to the total; truncating at 20 silently drops
+      // lower-cost models/features from the visible accounting partition.
+      rows: costDetails,
     },
     comparison: {
       currentCompletions,

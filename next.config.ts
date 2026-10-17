@@ -26,6 +26,8 @@ export const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // A smoke server must never share the interactive dev server's lock/cache.
+  distDir: process.env.HANGO_SMOKE_TEST === "1" ? ".next-smoke" : ".next",
   // Dev-only. Without this, `next dev` returns 403 for its own JS chunks to
   // any origin that isn't localhost, so a phone on the LAN loads the
   // server-rendered HTML but never hydrates - the page looks right and

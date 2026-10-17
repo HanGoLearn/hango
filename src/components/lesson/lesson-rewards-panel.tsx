@@ -11,6 +11,8 @@ import { Body, Caption, CardTitle } from "@/components/ui/typography";
 import { localePath, type AppLocale } from "@/i18n/config";
 import { formatMessage } from "@/i18n/format";
 import type { LessonMessages } from "@/i18n/messages/types";
+import { getJourneyLessonReport } from "@/lib/journey-lesson-report-service";
+import { journeyReportMessages } from "@/i18n/journey-report";
 
 /**
  * The reward moment (2026-09-20). Rank, achievements and coins used to live
@@ -29,12 +31,22 @@ export async function LessonRewardsPanel({
   lessonId,
   locale,
   messages,
+  journeyReport = false,
 }: {
   userId: string;
   lessonId: string;
   locale: AppLocale;
   messages: LessonMessages["rewards"];
+  journeyReport?: boolean;
 }) {
+  const text = journeyReportMessages[locale];
+  // Old ledger entries can survive redo. Never present them as a new payout
+  // or expose a v2 point contribution before this run is verified/settled.
+  const verified = journeyReport
+    ? await getJourneyLessonReport(userId, lessonId).catch(() => null)
+    : null;
+  const confirmed =
+    !journeyReport || verified?.rewards.settlement === "SETTLED";
   const [coinsForLesson, report, avatar, rank, achievements] =
     await Promise.all([
       // The exact coins this lesson paid out, not just the balance - a real
@@ -43,10 +55,12 @@ export async function LessonRewardsPanel({
         where: { userId, sourceKey: `lesson:${lessonId}` },
         select: { amount: true },
       }),
-      db.lessonReflectionReport.findUnique({
-        where: { userId_lessonId: { userId, lessonId } },
-        select: { totalScore: true },
-      }),
+      journeyReport
+        ? Promise.resolve(null)
+        : db.lessonReflectionReport.findUnique({
+            where: { userId_lessonId: { userId, lessonId } },
+            select: { totalScore: true },
+          }),
       getAvatarPageData(userId),
       getLearnerRank(userId),
       getAchievementSummary(userId),
@@ -55,15 +69,16 @@ export async function LessonRewardsPanel({
   // This lesson's weighted General Level share. Until 2026-09-21 the running
   // total stayed at zero until the scenario's last lesson, which is exactly
   // why it is worth showing here now that lessons contribute one by one.
+  const score = journeyReport ? verified?.overall.score : report?.totalScore;
   const experienceEarned =
-    report?.totalScore === null || report?.totalScore === undefined
+    !confirmed || score === null || score === undefined
       ? 0
-      : await computeLessonEarnedPoints(lessonId, report.totalScore);
+      : await computeLessonEarnedPoints(lessonId, score);
 
   return (
     <section className="flex flex-col gap-2">
       <Caption className="font-semibold uppercase tracking-wide text-text-muted">
-        {messages.title}
+        {journeyReport ? text.accountSummary : messages.title}
       </Caption>
 
       {/* One horizontally scrollable band on a phone, a plain row once
@@ -72,10 +87,15 @@ export async function LessonRewardsPanel({
         {experienceEarned > 0 && (
           <RewardCard
             href={localePath(locale, "/progress")}
-            title={formatMessage(messages.experienceEarned, {
-              amount: Math.round(experienceEarned),
-            })}
-            detail={messages.experienceTitle}
+            title={formatMessage(
+              journeyReport
+                ? text.pointsContribution
+                : messages.experienceEarned,
+              {
+                amount: Math.round(experienceEarned),
+              },
+            )}
+            detail={journeyReport ? "General Level" : messages.experienceTitle}
             icon={<Gem className="size-5 text-accent-300" aria-hidden="true" />}
           />
         )}
@@ -83,10 +103,15 @@ export async function LessonRewardsPanel({
         <RewardCard
           href={localePath(locale, "/tienda")}
           title={
-            coinsForLesson
-              ? formatMessage(messages.coinsEarned, {
-                  amount: coinsForLesson.amount,
-                })
+            coinsForLesson && confirmed
+              ? formatMessage(
+                  journeyReport
+                    ? text.lessonCoinsRecorded
+                    : messages.coinsEarned,
+                  {
+                    amount: coinsForLesson.amount,
+                  },
+                )
               : messages.coinsNone
           }
           detail={formatMessage(messages.coinsBalance, {

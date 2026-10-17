@@ -180,12 +180,21 @@ export function resolveHanTutorConversationLanguage(
   learnerMessages: readonly string[],
   fallback: HanTutorLanguage,
   preferences: HanTutorSessionPreferences,
-  options: { latestIsPronunciationAttempt?: boolean } = {},
+  options: {
+    latestIsPronunciationAttempt?: boolean;
+    latestOnly?: boolean;
+  } = {},
 ): HanTutorLanguage {
   const latest = learnerMessages.at(-1);
   const explicitLatest = detectExplicitHanTutorLanguageRequest(latest);
   if (explicitLatest) return explicitLatest;
   if (preferences.language !== "auto") return preferences.language;
+  // Live Tutor already resolved each earlier turn. Replaying bare Mandarin
+  // attempts after a drill closes can retroactively overwrite its language.
+  if (options.latestOnly)
+    return detectHanTutorResponseLanguage(latest, fallback, {
+      pronunciationAttempt: options.latestIsPronunciationAttempt,
+    });
 
   let current = fallback;
   learnerMessages.forEach((message) => {
@@ -205,6 +214,7 @@ export const HAN_TUTOR_INTELLIGENT_CORRECTION_POLICY = [
   "CLARIFY with one short question when audio or meaning remains genuinely ambiguous. Never guess a specific pronunciation, tone, or grammar error from weak evidence.",
   "PRONUNCIATION PRACTICE only after an explicit request or accepted invitation. Use its dedicated one-cue/one-demonstration/one-action rules and stop the target at its acceptance threshold.",
   "During pronunciation practice, Mandarin repetitions are practice material, not a request to switch the explanation language. Keep coaching in the established Spanish or English language unless the learner explicitly requests a change. Preserve lexical tones: 被 is bèi, fourth tone, not a neutral-tone pause. Never invent a tone diagnosis from recognition text alone.",
+  "Verify lexical tones before explaining them. Third tone (such as bǐng in 饼) is low/dipping, often low before a following non-third-tone syllable; it is not simply the rising second tone. Preserve uncertainty about what the learner actually pronounced.",
   "Never stack corrections, produce a scorecard, summarize the turn as a report, or end with an unsolicited lesson recap. Han is the learner's on-demand helper, not an examiner.",
 ].join("\n");
 
@@ -223,6 +233,15 @@ function explicitMandarinStudyTopic(message: string): string[] {
   return [...new Set(message.match(/\p{Script=Han}{1,8}/gu) ?? [])];
 }
 
+export function isHanTutorMeaningRequest(message: string): boolean {
+  return (
+    /(?:qu[eé]\s+(?:es|significa)|significado|what\s+is\s+(?:this|that|it)\b|meaning\s+of|what.*\bmean\b|什么意思|是什么意思)/iu.test(
+      message,
+    ) ||
+    (/\p{Script=Han}/u.test(message) && /\bwhat\s+is\b/iu.test(message))
+  );
+}
+
 /**
  * Keeps Tutor grounded when speech recognition produces questionable HSK
  * options, and makes an explicit new grammar/vocabulary request override the
@@ -235,6 +254,15 @@ export function buildHanTutorTaskGroundingInstruction(
 ): string | null {
   const latest = latestMessage?.trim() ?? "";
   if (!latest) return null;
+  if (isHanTutorMeaningRequest(latest) && !/\bhan\b/iu.test(latest)) {
+    const exactItems = [...new Set(latest.match(/\p{Script=Han}+/gu) ?? [])];
+    return [
+      "HIGHEST-PRIORITY MEANING REQUEST: explain the meaning requested in the latest turn, in the established explanation language. This overrides a preceding pronunciation drill. Do not give a pronunciation-only answer, request repetition, or add an unsolicited invitation to pronounce it.",
+      exactItems.length
+        ? `Exact learner-supplied Mandarin: ${exactItems.join(", ")}. Preserve these characters; do not silently replace them with a familiar or similar-sounding word. If this is not a recognizable expression or the transcription is doubtful, say so and ask one brief clarification before teaching a candidate meaning.`
+        : "For a follow-up such as 'Pero ¿qué significa eso?', use the established item only if it was unambiguously identified; otherwise clarify which exact word they mean. Do not introduce a new word as if the learner supplied it.",
+    ].join(" ");
+  }
   const asksAboutHan =
     /(?:types?|kinds?|tipos?|clases?)\s+(?:of\s+|de\s+)?han\b/iu.test(latest) ||
     (/\bhan\s+tutor\b/iu.test(latest) &&
