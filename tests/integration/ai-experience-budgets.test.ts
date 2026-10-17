@@ -105,7 +105,11 @@ describe("shared experience budgets end-to-end (isolated Postgres)", () => {
     const globalRow = (await getAiExperienceUsageSummary()).find(
       (row) => row.experience === "HAN_TUTOR",
     );
-    expect(globalRow!.todayCostUsd).toBeGreaterThanOrEqual(limit!.todayCostUsd);
+    // SQL grouping/JS summation can order the same floats differently. Compare
+    // at the micro-USD precision used by the budget ledger, not binary residue.
+    expect(
+      Math.round(globalRow!.todayCostUsd * 1_000_000),
+    ).toBeGreaterThanOrEqual(Math.round(limit!.todayCostUsd * 1_000_000));
     const analytics = await getAdminAnalytics(7, "non-owner", {
       includeAdministratorAi: true,
     });
