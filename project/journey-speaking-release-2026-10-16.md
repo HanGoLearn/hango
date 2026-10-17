@@ -122,8 +122,19 @@ La revisión de metadatos se realizó en npm; no se usó `audit fix --force`, ni
 versión mayor de Next/Prisma/React, ni un fork ajeno para esconder el aviso.
 
 Verificados por ahora: compilación completa de 70 páginas, 1.613 pruebas
-unitarias/componentes existentes, 15 de política y typecheck. Integraciones,
-smoke y publicación se registrarán al terminar. Aviso de tooling: jsdom 30
+unitarias/componentes existentes, 15 de política y typecheck. Las 376
+integraciones y smoke (1) también pasan en PostgreSQL desechable; clúster
+retirado. Se corrigió una comparación de prueba que ordenaba flotantes de
+agrupaciones distintas: ahora compara micro-USD, igual que el ledger, sin
+cambiar tarifas, cálculos ni enforcement de la aplicación.
+
+El primer CI remoto del lote rechazó cinco suites de Journey antes de ejecutarlas:
+su servicio PostgreSQL usaba localhost:5432/hango_ci y las suites requieren
+127.0.0.1:54329/hango_local_test. Se alinearon nombre, puerto, ambas variables de
+conexión y healthcheck del servicio desechable de CI; no se relajaron los guards
+ni se cambiaron destinos persistentes. La publicación espera el CI repetido.
+
+Aviso de tooling: jsdom 30
 declara Node >=24.15 en esta línea; la PC tiene 24.14 y las pruebas pasan, pero
 se recomienda actualizar el runtime local a un parche soportado por separado.
 

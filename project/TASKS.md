@@ -42,8 +42,13 @@ Status: Active
   exactos, ninguna crítica exceptuada; runtime exige cero avisos. Patrones
   rootDir de ESLint prohibidos mientras exista esa excepción. No anunciar
   cero vulnerabilidades totales: quedan cinco avisos de una sola causa dev.
-- [ ] Integraciones/smoke repetidos con parches y CI remota; integrar entrega
-  y confirmar Vercel Ready/alias/recorrido real antes de solicitar prueba oral.
+- [x] Integraciones/smoke repetidos con parches: 376 + 1 pasan en Postgres
+  desechable, retirado al finalizar. Comparación de prueba de importes usa
+  precisión micro-USD del ledger, sin modificar tarifas/límites. Primer CI
+  remoto rechazó cinco suites por puerto/nombre de su Postgres desechable;
+  alineado servicio CI al destino permitido sin relajar barreras de pruebas.
+- [ ] Terminar CI remota, integrar entrega y confirmar Vercel Ready/alias/
+  recorrido real antes de solicitar prueba oral.
 
 Estas comprobaciones sustituyen los bloqueos históricos de EV-04D/EV-05 al final
 del archivo; no reinterpretan informes antiguos como evidencia nueva.
