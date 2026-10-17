@@ -142,7 +142,12 @@ function allowedCredentialExample(path, line) {
     (path === ".env.example" &&
       normalized.includes("postgres:postgres@localhost")) ||
     (path === ".github/workflows/ci.yml" &&
-      normalized.includes("hango:hango@localhost"))
+      (normalized.includes("hango:hango@localhost") ||
+        // Public fixture for the disposable CI service, not a real credential.
+        // Anchor the complete line: no other host/user/port/database is exempt.
+        /^\s*(?:database_url|direct_url): postgresql:\/\/hango:hango@127\.0\.0\.1:54329\/hango_local_test\s*$/.test(
+          normalized,
+        )))
   );
 }
 
