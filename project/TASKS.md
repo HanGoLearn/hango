@@ -26,9 +26,15 @@ Status: Active
   Vista de QA usa datos de ejemplo, no certifica una evaluación real de OpenAI.
 - [x] Regresión integral: 380 integraciones y un smoke pasan en Postgres
   temporal desechable; sin OpenAI pagado, secretos revisados. Total 2.030 pruebas.
-- [ ] Publicar con autorización recibida del usuario. Verificar después en
-  Vercel su 90/100 de vocabulario y la recuperación
-  disponible, SIN pulsarla ni consumir IA hasta petición explícita.
+- [x] Publicación autorizada: PR #4, merge `cfa24d0`, CI remoto completo verde
+  (run 39033403756). Producción `hango-7lbeilg9z-hangolearn.vercel.app` Ready,
+  dominio público asignado y health 200. Sesión real del admin verificada:
+  Vocabulario 90/100, Gramática 100/100, Comprensión 100/100; recuperación
+  disponible, salida sin pago y detalles plegados. Intento preservado, sin
+  pulsar recuperación, sin OpenAI pagado, sin migrar/borrar bases.
+- [ ] Aceptación real del juicio corregido: el usuario puede pulsar Recuperar
+  evaluación en su informe existente; cuesta una solicitud adicional de IA.
+  No certificar nota final/semántica hasta observar ese resultado real.
 
 
 ## Entrega de Speaking en producción — 16 de octubre de 2026
