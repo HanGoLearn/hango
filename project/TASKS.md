@@ -2,6 +2,41 @@
 
 Status: Active
 
+## Entrega de Speaking en producción — 16 de octubre de 2026
+
+- [x] Destinos comprobados por identificadores de administrador/lección y sesión
+  publicada: Prisma **HanGo Desarrollo** y **HanGo Producción** son bases distintas.
+  Nombres de proyecto aclarados en Console; sin cambiar conexiones de la app.
+- [x] Producción: respaldo lógico completo cifrado y descifrado/hash verificados
+  antes del borrado. Eliminada una cuenta no administradora; permanece únicamente
+  `hango.learn@gmail.com`. 164 lecciones y 41 escenarios preservados. Dos audios
+  privados en outbox de eliminación, no audio compartido. Respaldo y resumen de
+  consumo privados en `.codex-tmp/db-backups/production-1792203624260`.
+- [x] Cinco migraciones aditivas aplicadas y comprobadas en producción, sin
+  pendientes: separación de límites/experiencias IA y evidencia/calidad Speaking.
+  Primera lección tiene seis preguntas gramaticales y cinco de práctica reales.
+  No se modificaron datos ni configuración de desarrollo en esta operación.
+- [x] Modo de activación explícito por entorno: `local` solo en development,
+  `production` solo en producción; falta de tablas no cae a evaluación antigua.
+  Variable de Vercel añadida únicamente a Production. Administrador conservado
+  por identidad exacta y rol; no se alteró su verificación de correo ni auth.
+- [x] Verificación del código: 1.613 pruebas unitarias/componentes, tipos,
+  lint dirigido, formato, secretos y build de 70 páginas pasan. Las 376
+  integraciones y smoke del lote anterior ya estaban verificadas; no se
+  repitieron contra producción ni se usó OpenAI de pago.
+- [ ] Publicación en master/Vercel detenida por seguridad: excepción de Prisma
+  vencida el 16/10; auditoría actual informa 13 altas, una crítica (Next 16.3.5)
+  y una moderada. No prorrogar excepción ni bajar controles automáticamente.
+  Parches candidatos disponibles: Next/ESLint 16.3.8, Prisma 7.10.1, Sharp
+  0.35.5; cadenas transitivas aún requieren revisión (braces sigue en 3.0.3).
+  La base/flag están preparados, pero el nuevo Speaking NO está desplegado.
+  Hace falta resolver la seguridad, publicar y aceptar la conversación real.
+- [x] Conexión temporal vPaY revocada con confirmación explícita del usuario;
+  seis conexiones originales preservadas y archivo privado temporal retirado.
+
+Estas comprobaciones sustituyen los bloqueos históricos de EV-04D/EV-05 al final
+del archivo; no reinterpretan informes antiguos como evidencia nueva.
+
 **This is the only file to read for current status.** Everything closed
 out (FASE 0-16, the full visual redesign) lives in one frozen file,
 [`TASKS_ARCHIVE.md`](TASKS_ARCHIVE.md) — open it only if you need the

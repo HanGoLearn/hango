@@ -19,8 +19,11 @@ const serverSchema = z.object({
   // Keep serverless connection pools deliberately small. Local development
   // retains its larger pool unless this is explicitly overridden.
   DATABASE_POOL_MAX: optionalPoolSize,
-  // Explicit local opt-in only; production must remain on its current rollout.
-  HANGO_JOURNEY_EVALUATION_V2: z.enum(["off", "local"]).default("off"),
+  // Explicit environment-specific opt-in, only after its database is migrated.
+  // A local flag never enables production, and a production flag never enables tests.
+  HANGO_JOURNEY_EVALUATION_V2: z
+    .enum(["off", "local", "production"])
+    .default("off"),
   AUTH_SECRET: z.string().min(32),
   // Optional: Google Sign-In (FASE 2.5) is disabled when these are unset —
   // see src/lib/auth.ts. Get these from https://console.cloud.google.com/apis/credentials.

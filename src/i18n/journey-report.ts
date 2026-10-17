@@ -5,7 +5,7 @@ export const journeyReportMessages = {
     title: "Tu resultado de la lección",
     legacyTitle: "Esta lección conserva un resultado anterior",
     legacyNotice:
-      "La nueva evaluación ya está habilitada en localhost. Para medir esta lección con tu conversación propia, pulsa Intentar de nuevo y confirma. No convertiremos el resultado anterior en una evaluación nueva ni borraremos otras lecciones o cuentas.",
+      "La nueva evaluación ya está habilitada. Para medir esta lección con tu conversación propia, pulsa Intentar de nuevo y confirma. No convertiremos el resultado anterior en una evaluación nueva ni borraremos otras lecciones o cuentas.",
     setupTitle: "La nueva evaluación aún no está disponible",
     setupNotice:
       "Falta completar la preparación de la base de datos local. No iniciaremos el flujo antiguo como sustituto ni generaremos un informe con datos incompletos.",
@@ -79,7 +79,7 @@ export const journeyReportMessages = {
     title: "Your lesson result",
     legacyTitle: "This lesson has a previous result",
     legacyNotice:
-      "The new evaluation is enabled on localhost. To assess this lesson from your own conversation, press Try again and confirm. We will not relabel the old result as a new evaluation or reset other lessons or accounts.",
+      "The new evaluation is enabled. To assess this lesson from your own conversation, press Try again and confirm. We will not relabel the old result as a new evaluation or reset other lessons or accounts.",
     setupTitle: "The new evaluation is not available yet",
     setupNotice:
       "Local database preparation is incomplete. We will not silently use the old flow or generate a report from incomplete data.",

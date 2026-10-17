@@ -26,12 +26,23 @@ import {
 beforeEach(() => {
   vi.resetAllMocks();
 });
-describe("local-only Journey activation", () => {
-  it("cannot activate production or test, even with the local flag", () => {
+describe("environment-scoped Journey activation", () => {
+  it("never enables another environment from the local flag", () => {
     expect(isLocalJourneyRolloutRequested("production", "local")).toBe(false);
     expect(isLocalJourneyRolloutRequested("test", "local")).toBe(false);
     expect(isLocalJourneyRolloutRequested("development", "off")).toBe(false);
     expect(isLocalJourneyRolloutRequested("development", "local")).toBe(true);
+  });
+  it("requires an explicit production mode and still excludes tests/development", () => {
+    expect(isLocalJourneyRolloutRequested("production", "production")).toBe(
+      true,
+    );
+    expect(isLocalJourneyRolloutRequested("production", "off")).toBe(false);
+    expect(isLocalJourneyRolloutRequested("development", "production")).toBe(
+      false,
+    );
+    expect(isLocalJourneyRolloutRequested("test", "production")).toBe(false);
+    expect(isLocalJourneyRolloutRequested("test", "off")).toBe(false);
   });
   it("requires the migrated tables instead of silently running legacy", async () => {
     mock.attempt.mockRejectedValue(new Error("missing column"));

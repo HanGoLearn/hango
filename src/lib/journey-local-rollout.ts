@@ -7,7 +7,10 @@ export function isLocalJourneyRolloutRequested(
   environment = serverEnv.NODE_ENV,
   mode = serverEnv.HANGO_JOURNEY_EVALUATION_V2,
 ) {
-  return environment === "development" && mode === "local";
+  return (
+    (environment === "development" && mode === "local") ||
+    (environment === "production" && mode === "production")
+  );
 }
 
 /** No paid calls or writes. An incomplete setup cannot silently run legacy. */

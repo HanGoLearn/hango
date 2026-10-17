@@ -20,6 +20,7 @@ const argument = (name) => {
 const file = argument("--env-file");
 const label = argument("--label");
 const expected = argument("--expected-fingerprint");
+const expectedAdministratorId = argument("--expected-admin-id");
 const administrator = "hango.learn@gmail.com";
 if (!file || !["local", "production"].includes(label))
   throw new Error("Explicit environment file and label required");
@@ -43,9 +44,15 @@ async function inspect() {
   if (
     admin.rowCount !== 1 ||
     admin.rows[0].role !== "ADMINISTRATOR" ||
-    !admin.rows[0].verified
+    (!admin.rows[0].verified &&
+      (!expectedAdministratorId ||
+        admin.rows[0].id !== expectedAdministratorId))
   )
-    throw new Error("Exactly one verified administrator must be preserved");
+    throw new Error(
+      "Exactly one verified or explicitly identity-pinned administrator must be preserved",
+    );
+  if (expectedAdministratorId && admin.rows[0].id !== expectedAdministratorId)
+    throw new Error("Administrator identity mismatch");
   const count = await client.query('SELECT count(*)::int AS users FROM "User"');
   const curriculum = await client.query(
     'SELECT (SELECT count(*)::int FROM "Lesson") AS lessons, (SELECT count(*)::int FROM "Scenario") AS scenarios',
