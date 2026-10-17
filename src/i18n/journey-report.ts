@@ -17,6 +17,16 @@ export const journeyReportMessages = {
     loadError:
       "No pudimos confirmar el resultado. Comprueba su estado o reintenta solo el guardado; no generamos otra evaluación automáticamente.",
     evaluate: "Evaluar esta conversación",
+    recover: "Recuperar evaluación",
+    recoverDescription:
+      "Usaremos la conversación que ya guardaste; no necesitas repetir la lección. Puedes solicitar una recuperación. Generará una nueva evaluación con IA y consumo adicional; abrir esta pantalla no lo hace automáticamente.",
+    exerciseProgress: "Tu avance hasta ahora",
+    exerciseSummary:
+      "En los ejercicios evaluados: {correct} de {total} respuestas correctas.",
+    savedPractice: "Tu práctica está guardada",
+    feedbackPending:
+      "La devolución de tu conversación sigue pendiente. Tus respuestas no se han perdido.",
+    hanNote: "Una nota de Han",
     evaluateDescription:
       "Evaluaremos la conversación guardada una sola vez. Esta acción utiliza IA; volver a abrir el informe no genera otra evaluación.",
     checkStatus: "Comprobar estado",
@@ -25,7 +35,7 @@ export const journeyReportMessages = {
     finishLesson: "Finalizar lección",
     returnToJourney: "Volver a la ruta",
     partialProgressNote:
-      "El informe parcial queda guardado, pero esta lección aún no está completada. No otorgamos logros de finalización ni desbloqueamos la siguiente lección con evidencia faltante.",
+      "Tu avance está guardado. La lección se completará cuando esté lista la evaluación pendiente.",
     score: "Nota global",
     stars: "Estrellas",
     complete: "Evaluación completa",
@@ -46,11 +56,11 @@ export const journeyReportMessages = {
     speakingPending: "La evaluación de esta conversación está pendiente.",
     speakingProcessing: "Estamos evaluando esta conversación.",
     speakingFailed:
-      "No pudimos obtener una evaluación fiable. Esto no equivale a una nota de cero.",
+      "Tu conversación está guardada, pero HanGo no pudo validar su evaluación. Es un fallo del sistema, no un error tuyo ni una nota de cero.",
     speakingInsufficient:
       "No hay suficiente evidencia para dar una nota de conversación.",
     partialNote:
-      "No calculamos una nota global mientras falte evidencia esencial. No sustituimos los datos faltantes por errores.",
+      "La nota final está pendiente; conservamos los resultados que ya completaste.",
     achievement: "Lo que hiciste bien",
     priority: "Tu siguiente mejora",
     nextStep: "Ahora prueba esto",
@@ -91,6 +101,16 @@ export const journeyReportMessages = {
     loadError:
       "We could not confirm the result. Check its status or retry saving only; we do not generate another evaluation automatically.",
     evaluate: "Evaluate this conversation",
+    recover: "Recover evaluation",
+    recoverDescription:
+      "We will use your saved conversation; you do not need to repeat the lesson. You can request one recovery. It creates a new AI evaluation and additional usage; opening this screen never does this automatically.",
+    exerciseProgress: "Your progress so far",
+    exerciseSummary:
+      "In assessed exercises: {correct} of {total} answers correct.",
+    savedPractice: "Your practice is saved",
+    feedbackPending:
+      "Your conversation feedback is still pending. Your answers have not been lost.",
+    hanNote: "A note from Han",
     evaluateDescription:
       "We will evaluate the saved conversation once. This action uses AI; reopening the report does not generate another evaluation.",
     checkStatus: "Check status",
@@ -99,7 +119,7 @@ export const journeyReportMessages = {
     finishLesson: "Finish lesson",
     returnToJourney: "Return to the journey",
     partialProgressNote:
-      "The partial report is saved, but this lesson is not completed yet. Missing evidence does not grant completion achievements or unlock the next lesson.",
+      "Your progress is saved. The lesson will be completed once the pending evaluation is ready.",
     score: "Overall score",
     stars: "Stars",
     complete: "Complete evaluation",
@@ -120,11 +140,11 @@ export const journeyReportMessages = {
     speakingPending: "This conversation is awaiting evaluation.",
     speakingProcessing: "We are evaluating this conversation.",
     speakingFailed:
-      "We could not obtain a reliable evaluation. This does not mean a score of zero.",
+      "Your conversation is saved, but HanGo could not validate its evaluation. This is a system failure, not your mistake or a score of zero.",
     speakingInsufficient:
       "There is not enough evidence for a conversation score.",
     partialNote:
-      "We do not calculate an overall score while essential evidence is missing. Missing data is not counted as a mistake.",
+      "Your final score is pending; we keep the results you have already completed.",
     achievement: "What you did well",
     priority: "Your next improvement",
     nextStep: "Try this next",

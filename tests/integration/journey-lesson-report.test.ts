@@ -1,4 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { advanceLessonStep } from "@/lib/lesson-progress-data";
 import {
@@ -187,7 +189,7 @@ beforeEach(() => {
     complete,
   });
 });
-async function run(fill = true, locale: "es" | "en" = "es") {
+async function run(fill = true, locale: "es" | "en" = "es", quickMisses = 0) {
   const userId = (
     await db.user.create({
       data: { email: `report-${crypto.randomUUID()}@example.test` },
@@ -203,12 +205,12 @@ async function run(fill = true, locale: "es" | "en" = "es") {
   });
   if (fill) {
     await db.vocabularyQuizAttempt.createMany({
-      data: vocabularyIds.map((id) => ({
+      data: vocabularyIds.map((id, index) => ({
         userId,
         lessonId,
         vocabularyItemId: id,
         questionKey: `${id}:quicktest`,
-        isCorrect: true,
+        isCorrect: index >= quickMisses,
       })),
     });
     await db.exerciseAttempt.createMany({
@@ -259,6 +261,87 @@ async function prepareFinalStep(userId: string) {
 }
 
 describe("Journey report integration (real disposable Postgres; mock AI only)", () => {
+  it("a passing quick test keeps wrong answers and never invents remedial missing questions", async () => {
+    const capture = await run(true, "es", 1);
+    await select(capture);
+    const stored = await getJourneySpeakingAttempt(
+      capture.userId,
+      capture.attemptId,
+      lessonId,
+    );
+    const snapshot = stored.snapshot as unknown as JourneyAttemptSnapshot;
+    expect(summarizeJourneyQuiz(snapshot.assessment!.vocabulary)).toMatchObject(
+      {
+        state: "COMPLETE",
+        total: vocabularyIds.length,
+        incorrect: 1,
+        missing: 0,
+      },
+    );
+    const report = await getJourneyLessonReport(capture.userId, lessonId);
+    expect(report.categories.vocabulary.score).toBe(
+      Math.round(((vocabularyIds.length - 1) / vocabularyIds.length) * 100),
+    );
+    expect(complete).not.toHaveBeenCalled();
+  });
+  it("repairs the prior frozen quick-test projection read-only using original server answers", async () => {
+    const capture = await run(true, "es", 1);
+    const stored = await getJourneySpeakingAttempt(
+      capture.userId,
+      capture.attemptId,
+      lessonId,
+    );
+    const snapshot = stored.snapshot as unknown as JourneyAttemptSnapshot;
+    // Simulate the previous server release's immutable snapshot, with a valid
+    // hash, not a browser-selected grade. Only the test database is altered.
+    const missed = `${vocabularyIds[0]}:quicktest`;
+    snapshot.assessment!.vocabulary = snapshot.assessment!.vocabulary.flatMap(
+      (entry) =>
+        entry.key === missed
+          ? ["order", "meaning", "chineseForm", "blank:2"].map((kind) => ({
+              key: `${vocabularyIds[0]}:${kind}`,
+              attemptId: null,
+              result: null,
+            }))
+          : [entry],
+    );
+    function canonical(value: unknown): unknown {
+      if (Array.isArray(value)) return value.map(canonical);
+      if (value && typeof value === "object")
+        return Object.fromEntries(
+          Object.entries(value)
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+            .map(([key, entry]) => [key, canonical(entry)]),
+        );
+      return value;
+    }
+    const hash = createHash("sha256")
+      .update(JSON.stringify(canonical(snapshot)))
+      .digest("hex");
+    await db.journeySpeakingAttempt.update({
+      where: { id: capture.attemptId },
+      data: {
+        snapshot: snapshot as unknown as Prisma.InputJsonValue,
+        snapshotHash: hash,
+      },
+    });
+    await select(capture);
+    const report = await getJourneyLessonReport(capture.userId, lessonId);
+    expect(report.categories.vocabulary).toMatchObject({
+      state: "COMPLETE",
+      incorrect: 1,
+      missing: 0,
+      total: vocabularyIds.length,
+    });
+    const unchanged = await getJourneySpeakingAttempt(
+      capture.userId,
+      capture.attemptId,
+      lessonId,
+    );
+    expect(unchanged.snapshotHash).toBe(hash);
+    expect(unchanged.snapshot).toEqual(snapshot);
+    expect(complete).not.toHaveBeenCalled();
+  });
   it("final completion is blocked until a complete result is settled, even through a direct server call", async () => {
     const capture = await run();
     await db.learnerProfile.create({ data: { userId: capture.userId } });
@@ -629,6 +712,7 @@ describe("Journey report integration (real disposable Postgres; mock AI only)", 
     const report = await getJourneyLessonReport(capture.userId, lessonId);
     expect(report.speaking).toEqual({
       state: "FAILED",
+      canRetry: false,
       score: null,
       report: null,
       reason: "EVALUATION_FAILED",

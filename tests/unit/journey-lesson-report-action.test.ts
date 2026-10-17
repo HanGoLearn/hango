@@ -17,11 +17,13 @@ import {
   getJourneyLessonReportAction,
   evaluateJourneyLessonReportAction,
   saveJourneyLessonReportAction,
+  recoverJourneyLessonReportAction,
 } from "@/lib/actions/journey-lesson-report";
 const actions = [
   getJourneyLessonReportAction,
   evaluateJourneyLessonReportAction,
   saveJourneyLessonReportAction,
+  recoverJourneyLessonReportAction,
 ];
 beforeEach(() => {
   vi.resetAllMocks();
@@ -31,6 +33,13 @@ beforeEach(() => {
   save.mockResolvedValue({ version: "test-saved" });
 });
 describe("Journey report actions", () => {
+  it("only the explicit recovery action authorizes a bounded second evaluation", async () => {
+    await recoverJourneyLessonReportAction({ lessonId: "lesson" });
+    expect(evaluate).toHaveBeenCalledExactlyOnceWith("owner", "lesson", {
+      recoverFailed: true,
+    });
+    expect(save).toHaveBeenCalledWith("owner", "lesson");
+  });
   it.each(actions)("requires authentication for %s", async (action) => {
     auth.mockResolvedValue(null);
     expect(await action({ lessonId: "lesson" })).toEqual({

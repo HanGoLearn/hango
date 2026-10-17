@@ -176,12 +176,18 @@ describe("ES/EN final report", () => {
     failed.rewards.eligible = false;
     render(<JourneyFinalReport report={failed} />);
     expect(
-      screen.getByText(/could not obtain a reliable evaluation/),
+      screen.getByText(/HanGo could not validate its evaluation/),
     ).toBeInTheDocument();
     expect(screen.queryByText("What you did well")).not.toBeInTheDocument();
     expect(
       screen.queryByText("You introduced yourself."),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Overall score: —")).toBeInTheDocument();
+    expect(
+      screen.getByText("In assessed exercises: 3 of 3 answers correct."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/system failure, not your mistake/),
+    ).toBeInTheDocument();
   });
 });

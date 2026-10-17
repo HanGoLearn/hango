@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { canRecoverJourneyEvaluation } from "@/lib/journey-evaluation-recovery";
 import { Prisma } from "@/generated/prisma/client";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
 import { checkReflectionAchievements } from "@/lib/achievements";
@@ -31,6 +32,7 @@ import {
   JourneyReportProvenanceSchema,
   JOURNEY_LESSON_REPORT_VERSION,
   type JourneyLessonReportView,
+  passedJourneyQuickTestEvidence,
 } from "@/lib/journey-lesson-report";
 
 /** Selected by the completed Speaking step of the CURRENT server-owned run,
@@ -96,6 +98,37 @@ async function getSelectedAttempt(
     !["es", "en"].includes(attempt.locale)
   )
     throw new JourneyAttemptAccessError("Selected Journey attempt unavailable");
+  // Read-only compatibility repair for frozen snapshots made before the
+  // quick-test bug fix. Use only first server answers from the original time
+  // window; never regrade against edited content or later practice/another run.
+  if (assessment.data.vocabulary.some((entry) => entry.attemptId === null)) {
+    const wordIds = [
+      ...new Set(
+        assessment.data.vocabulary.map((entry) => entry.key.split(":")[0]!),
+      ),
+    ];
+    const answers = await client.vocabularyQuizAttempt.findMany({
+      where: {
+        userId,
+        lessonId,
+        questionKey: { in: wordIds.map((id) => `${id}:quicktest`) },
+        createdAt: {
+          gte: new Date(assessment.data.progressStartedAt),
+          lte: new Date(assessment.data.capturedAt),
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 10_000,
+      select: { id: true, questionKey: true, isCorrect: true },
+    });
+    if (answers.length === 10_000)
+      throw new JourneyAttemptAccessError("Assessment read limit reached");
+    const quick = passedJourneyQuickTestEvidence(
+      wordIds,
+      answers.map((row) => ({ ...row, key: row.questionKey })),
+    );
+    if (quick) assessment.data.vocabulary = quick;
+  }
   return { attempt, snapshot, assessment: assessment.data };
 }
 
@@ -132,7 +165,10 @@ function buildSelectedReport({
   )
     state = "FAILED";
   let report = null;
-  if (evaluation?.report) {
+  if (
+    evaluation?.report &&
+    ["COMPLETE", "PARTIAL", "INSUFFICIENT"].includes(evaluation.status)
+  ) {
     const context: JourneyEvaluationContext = {
       snapshot,
       locale: attempt.locale as "es" | "en",
@@ -180,6 +216,18 @@ function buildSelectedReport({
     !attempt.turns.some((turn) => turn.role === "USER")
   )
     view.speaking.reason = "NO_SPEECH";
+  view.speaking.canRetry = Boolean(
+    evaluation &&
+    attempt.status === "SEALED" &&
+    canRecoverJourneyEvaluation({
+      ...evaluation,
+      status: state,
+      failureCode:
+        evaluation.status === "PROCESSING" && state === "FAILED"
+          ? "processing_expired"
+          : evaluation.failureCode,
+    }),
+  );
   return view;
 }
 
@@ -371,9 +419,10 @@ export async function persistJourneyLessonReport(
 export async function evaluateJourneyLessonReport(
   userId: string,
   lessonId: string,
+  options: { recoverFailed?: boolean } = {},
 ) {
   const { attempt } = await getSelectedAttempt(userId, lessonId);
-  await evaluateJourneySpeakingAttempt(userId, attempt.id, lessonId);
+  await evaluateJourneySpeakingAttempt(userId, attempt.id, lessonId, options);
   // A concurrent redo cannot attach the old result to a new progress row.
   const report = await getJourneyLessonReport(userId, lessonId);
   if (report.attemptId !== attempt.id)

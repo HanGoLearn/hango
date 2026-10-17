@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { canRecoverJourneyEvaluation } from "@/lib/journey-evaluation-recovery";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
 import {
   DailyUsageCapExceededError,
@@ -29,15 +30,13 @@ import {
 
 export const JOURNEY_PROCESSING_DEADLINE_MS = 120_000;
 
-/** Prepared backend, not yet called by legacy Reflection. One dispatch maximum
- * per sealed attempt, including failures. A refresh is never a paid retry.
- * A process crash/ambiguous timeout stays explicitly failed; recovering it will
- * require a separate, deliberate policy rather than an automatic second call.
- */
+/** One initial dispatch; a separate explicit action can recover a failed
+ * evaluation once. Read/poll/save can never dispatch a second paid request. */
 export async function evaluateJourneySpeakingAttempt(
   userId: string,
   attemptId: string,
   lessonId: string,
+  options: { recoverFailed?: boolean } = {},
 ) {
   const attempt = await getJourneySpeakingAttempt(userId, attemptId, lessonId);
   if (attempt.status === "ACTIVE" || !attempt.closeReason)
@@ -63,15 +62,15 @@ export async function evaluateJourneySpeakingAttempt(
     ],
     skipDuplicates: true,
   });
-  const evaluation = await db.journeySpeakingEvaluation.findUniqueOrThrow({
+  let evaluation = await db.journeySpeakingEvaluation.findUniqueOrThrow({
     where: { attemptId },
   });
   if (evaluation.status !== "PENDING") {
     if (
       evaluation.status === "PROCESSING" &&
-      evaluation.processingStartedAt &&
-      Date.now() - evaluation.processingStartedAt.getTime() >
-        JOURNEY_PROCESSING_DEADLINE_MS
+      (!evaluation.processingStartedAt ||
+        Date.now() - evaluation.processingStartedAt.getTime() >
+          JOURNEY_PROCESSING_DEADLINE_MS)
     ) {
       await db.journeySpeakingEvaluation.updateMany({
         where: {
@@ -86,9 +85,11 @@ export async function evaluateJourneySpeakingAttempt(
         },
       });
     }
-    return db.journeySpeakingEvaluation.findUniqueOrThrow({
+    evaluation = await db.journeySpeakingEvaluation.findUniqueOrThrow({
       where: { attemptId },
     });
+    if (!options.recoverFailed || !canRecoverJourneyEvaluation(evaluation))
+      return evaluation;
   }
   const context: JourneyEvaluationContext = {
     snapshot,
@@ -109,7 +110,12 @@ export async function evaluateJourneySpeakingAttempt(
   };
   const leaseToken = randomUUID();
   const claim = await db.journeySpeakingEvaluation.updateMany({
-    where: { id: evaluation.id, status: "PENDING", requestCount: 0 },
+    where: {
+      id: evaluation.id,
+      status: evaluation.status,
+      requestCount: evaluation.requestCount,
+      leaseToken: evaluation.leaseToken,
+    },
     data: {
       status: "PROCESSING",
       processingStartedAt: new Date(),
@@ -126,10 +132,24 @@ export async function evaluateJourneySpeakingAttempt(
     status: "PROCESSING" as const,
     leaseToken,
   };
-  async function fail(code: string) {
+  async function fail(code: string, validationErrors?: string[]) {
     await db.journeySpeakingEvaluation.updateMany({
       where: claimWhere,
-      data: { status: "FAILED", failureCode: code, score: null },
+      data: {
+        status: "FAILED",
+        failureCode: code,
+        score: null,
+        ...(validationErrors
+          ? {
+              // Fixed validator messages only: no transcript, credentials or raw
+              // provider output. Useful diagnostics must survive a rejected result.
+              report: {
+                kind: "validation_failure",
+                errors: validationErrors.slice(0, 20),
+              },
+            }
+          : {}),
+      },
     });
   }
   try {
@@ -164,7 +184,7 @@ export async function evaluateJourneySpeakingAttempt(
           },
           async () => {
             const dispatch = await db.journeySpeakingEvaluation.updateMany({
-              where: { ...claimWhere, requestCount: 0 },
+              where: { ...claimWhere, requestCount: evaluation.requestCount },
               data: { requestCount: { increment: 1 } },
             });
             if (dispatch.count !== 1)
@@ -182,7 +202,7 @@ export async function evaluateJourneySpeakingAttempt(
               ],
               structuredOutput: {
                 name: "journey_evidence_judgment",
-                schema: journeyJudgmentOutputSchema(),
+                schema: journeyJudgmentOutputSchema(context),
               },
               maxOutputTokens: 3_500,
               timeoutMs: 45_000,
@@ -228,7 +248,7 @@ export async function evaluateJourneySpeakingAttempt(
           }
           if (raw !== undefined) {
             const checked = validateJourneyJudgment(raw, context);
-            if (!checked.ok) await fail("invalid_evidence");
+            if (!checked.ok) await fail("invalid_evidence", checked.errors);
             else
               await db.journeySpeakingEvaluation.updateMany({
                 where: claimWhere,

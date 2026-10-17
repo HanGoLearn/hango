@@ -8,16 +8,18 @@ import {
   getJourneyLessonReportAction,
   evaluateJourneyLessonReportAction,
   saveJourneyLessonReportAction,
+  recoverJourneyLessonReportAction,
 } from "@/lib/actions/journey-lesson-report";
 import type { JourneyLessonReportView } from "@/lib/journey-lesson-report";
 import { journeyReportMessages } from "@/i18n/journey-report";
 import type { AppLocale } from "@/i18n/config";
 
-type Operation = "read" | "evaluate" | "save";
+type Operation = "read" | "evaluate" | "save" | "recover";
 const actions = {
   read: getJourneyLessonReportAction,
   evaluate: evaluateJourneyLessonReportAction,
   save: saveJourneyLessonReportAction,
+  recover: recoverJourneyLessonReportAction,
 };
 
 /** Mounting/reopening is read-only. Only an explicit press may evaluate or
@@ -110,6 +112,8 @@ export function JourneyReportPanel({
   const pending = report?.speaking.state === "PENDING";
   const processing = report?.speaking.state === "PROCESSING";
   const settled = report?.rewards.settlement === "SETTLED";
+  const recoverable =
+    report?.speaking.state === "FAILED" && report.speaking.canRetry;
   return (
     <div className="flex min-w-0 flex-col gap-4" aria-busy={busy}>
       {report && <JourneyFinalReport report={report} />}
@@ -120,7 +124,17 @@ export function JourneyReportPanel({
         </Body>
       )}
       {pending && <Body>{text.evaluateDescription}</Body>}
+      {recoverable && <Body>{text.recoverDescription}</Body>}
       <div className="flex flex-wrap gap-2">
+        {recoverable && !state.error && (
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => void run("recover")}
+          >
+            {text.recover}
+          </Button>
+        )}
         {pending && !state.error && (
           <Button
             type="button"
@@ -134,6 +148,7 @@ export function JourneyReportPanel({
           !pending &&
           !processing &&
           !settled &&
+          !recoverable &&
           !state.error &&
           !state.saveConfirmed && (
             <Button
@@ -181,7 +196,7 @@ export function JourneyReportPanel({
           !pending &&
           !processing &&
           !report.rewards.eligible &&
-          state.saveConfirmed &&
+          (state.saveConfirmed || recoverable) &&
           !state.error && (
             <div className="flex flex-col gap-2">
               <Body>{text.partialProgressNote}</Body>

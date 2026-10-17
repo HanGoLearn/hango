@@ -58,6 +58,21 @@ const context: JourneyEvaluationContext = {
 };
 const userCitation = { turnId: "u1", quote: "我叫Arean" };
 describe("Cached Journey report validation", () => {
+  it("constrains generated references to this attempt and locale without weakening citation validation", () => {
+    const wire = JSON.stringify(journeyJudgmentOutputSchema(context));
+    expect(wire).toContain('"enum":["a1","u1","a2","u2"]');
+    expect(wire).toContain(`"enum":["${context.snapshot.banks.version}"]`);
+    expect(wire).toContain('"enum":["es"]');
+    const prompt = buildJourneyEvaluationPrompt(context);
+    expect(prompt).toContain("OBSERVED interaction MUST cite BOTH");
+    expect(prompt).toContain(
+      "NOT_OBSERVED/NO_OPPORTUNITY items must not cite learner production",
+    );
+    expect(prompt).toContain("SAME turnId AND quote");
+    expect(prompt).toContain(
+      "do not classify its words as INDEPENDENT, ASSISTED or ERROR",
+    );
+  });
   it("recomputes the stored grade and rejects modified scores, status, quotes or pronunciation", () => {
     const checked = validateJourneyJudgment(judgment(), context);
     if (!checked.ok) throw new Error("Invalid fixture");

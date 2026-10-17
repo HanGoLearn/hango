@@ -9,6 +9,7 @@ import {
   JOURNEY_LESSON_REPORT_VERSION,
   JourneyAssessmentSnapshotSchema,
   selectJourneyQuestionEvidence,
+  passedJourneyQuickTestEvidence,
 } from "@/lib/journey-lesson-report";
 
 /** Freeze existing server-graded exercise evidence before the voice session.
@@ -151,10 +152,15 @@ export async function getJourneyAssessmentSnapshot(
         progressId: progress.id,
         progressStartedAt: progress.startedAt.toISOString(),
         capturedAt: capturedAt.toISOString(),
-        vocabulary: selectJourneyQuestionEvidence(
-          vocabularyKeys,
-          vocabularyAttempts.map((row) => ({ ...row, key: row.questionKey })),
-        ),
+        vocabulary:
+          passedJourneyQuickTestEvidence(
+            items.map((item) => item.id),
+            vocabularyAttempts.map((row) => ({ ...row, key: row.questionKey })),
+          ) ??
+          selectJourneyQuestionEvidence(
+            vocabularyKeys,
+            vocabularyAttempts.map((row) => ({ ...row, key: row.questionKey })),
+          ),
         grammar: selectJourneyQuestionEvidence(grammarKeys, evidence),
         comprehension: selectJourneyQuestionEvidence(
           comprehensionKeys,
