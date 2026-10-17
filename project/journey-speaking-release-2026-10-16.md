@@ -145,15 +145,51 @@ en vPaY, creada hoy; Console confirmó eliminación y conserva las seis conexion
 originales. Se retiró `.env.production-maintenance.local` de la PC. No se borró
 ningún respaldo ni se sustituyeron las conexiones de Vercel/localhost.
 
-Prueba del usuario tras confirmar despliegue:
+Prueba del usuario (despliegue confirmado; aceptación oral pendiente):
 
 1. Entrar en `https://hango-three.vercel.app/es/login` con el administrador.
 2. Abrir Saludos y presentaciones, completar ejercicios y Speaking real
    manteniendo presionado el botón para hablar; pedir ayuda en español si hace
-   falta. Si aparece un resultado antiguo, usar el reinicio explícito.
+   falta. El administrador conserva un resultado antiguo: pulsar **Intentarlo
+   de nuevo** y confirmar para medir la nueva conversación; el agente no lo
+   reinició durante la comprobación.
 3. Finalizar y comprobar informe único en español, evidencia oral, nota explicada
    o motivo explícito de datos insuficientes; recargar no debe generar otro cobro
    ni premios duplicados. Verificar aporte real a General Level.
 
 Guías utilizadas: Prisma CLI y Client API para destino explícito, migraciones y
 transacciones; Prisma Postgres para conexión de mantenimiento en Console.
+
+## Cierre comprobado de publicación
+
+- [PR #3](https://github.com/HanGoLearn/hango/pull/3) integrado sin forzar
+  controles. Commit de aplicación en master: `98161fd8f27cbf59b71dccd8b8cd942f170a7490`.
+  PC sincronizada por fast-forward, sin descartar cambios.
+- [CI aprobado](https://github.com/HanGoLearn/hango/actions/runs/38996826157):
+  1.416 unitarias + 212 componentes + 376 integraciones + un smoke = 2.005.
+  También tipos, lint, secretos, build y auditoría aprobados con la excepción
+  dev explícita; runtime cero avisos. El CI de push posterior repite el mismo
+  código y no debe confundirse con la aceptación oral del usuario.
+- Se resolvió además el falso positivo de secretos del nuevo destino CI:
+  solo la línea exacta de conexión ficticia a 127.0.0.1:54329/hango_local_test
+  queda reconocida en `.github/workflows/ci.yml`. No se eximieron hosts reales,
+  otros usuarios/puertos/bases ni se reescribió historial.
+- Vercel producción Ready: `dpl_7qyT8gKybsNMpSESC4zCrTRetzKT`, URL técnica
+  `https://hango-ji1ogz233-hangolearn.vercel.app`. Log de build confirma
+  master/98161fd, Next 16.3.8 y Prisma Client 7.10.1. Alias verificado:
+  [HanGo producción](https://hango-three.vercel.app).
+- Comprobaciones públicas: `/es/login` y `/en/login` HTTP 200; `/api/health`
+  HTTP 200 con status ok (base y almacenamiento); `/es/speaking-preview` 404.
+- Usuario inició sesión como administrador. Verificación en la lección real:
+  aparece el aviso de resultado anterior y la frase «La nueva evaluación ya
+  está habilitada». Esto comprueba el opt-in y disponibilidad de las tablas
+  en el entorno real; no es el demo sintético ni una nueva medición de voz.
+- Evidencia visual privada: `outputs/journey-speaking-produccion-habilitado-2026-10-16.jpg`.
+  No se pulsó Intentarlo de nuevo ni se modificó ese resultado del administrador.
+  No micrófono, conversación pagada ni gasto OpenAI por el agente.
+- Cierre documental posterior al despliegue: solo estas notas/TASKS, sin
+  cambios adicionales a código, dependencias, configuración o bases.
+
+Pendiente: el usuario confirma redo y completa una conversación real para
+aceptar comportamiento, dificultad, nota, feedback y aporte a General Level.
+La excepción dev autorizada debe revisarse antes de finalizar el 23/10/2026.

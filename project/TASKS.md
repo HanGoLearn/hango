@@ -24,11 +24,11 @@ Status: Active
   lint dirigido, formato, secretos y build de 70 páginas pasan. Las 376
   integraciones y smoke del lote anterior ya estaban verificadas; no se
   repitieron contra producción ni se usó OpenAI de pago.
-- [ ] Publicación en master/Vercel detenida por seguridad: excepción de Prisma
+- [x] Resuelto el bloqueo inicial de publicación por seguridad: excepción de Prisma
   vencida el 16/10; auditoría actual informa 13 altas, una crítica (Next 16.3.5)
   y una moderada. No prorrogar excepción ni bajar controles automáticamente.
-  Estado inicial superado por el lote de seguridad descrito debajo. Base/flag
-  preparados; publicación y aceptación oral todavía no certificadas.
+  Estado inicial superado por el lote de seguridad descrito debajo y la
+  publicación comprobada. Aceptación oral humana todavía pendiente.
 - [x] Conexión temporal vPaY revocada con confirmación explícita del usuario;
   seis conexiones originales preservadas y archivo privado temporal retirado.
 - [x] Parches autorizados: Next/ESLint 16.3.8, Prisma/Client/Adapter 7.10.1,
@@ -47,8 +47,20 @@ Status: Active
   precisión micro-USD del ledger, sin modificar tarifas/límites. Primer CI
   remoto rechazó cinco suites por puerto/nombre de su Postgres desechable;
   alineado servicio CI al destino permitido sin relajar barreras de pruebas.
-- [ ] Terminar CI remota, integrar entrega y confirmar Vercel Ready/alias/
-  recorrido real antes de solicitar prueba oral.
+- [x] CI remoto completo aprobado: 1.416 unitarias, 212 componentes, 376
+  integraciones y un smoke (2.005 pruebas). PR #3 integrado normalmente en
+  master, commit de aplicación `98161fd`; PC sincronizada sin reset ni force.
+  Despliegue `hango-ji1ogz233-hangolearn.vercel.app` Ready y dominio público
+  `hango-three.vercel.app` asignado. Login ES/EN y health 200; preview local 404.
+- [x] Verificación autenticada en producción tras login del usuario admin:
+  Saludos y presentaciones muestra «La nueva evaluación ya está habilitada»
+  y ofrece Intentarlo de nuevo para su resultado antiguo. No se pulsó redo ni
+  se inició micrófono/IA. Skill Computer Use usado para comprobar UI real.
+- [ ] Aceptación oral del usuario: confirmar redo de esa lección, completar
+  conversación y revisar puntaje/feedback nuevo en ES y aporte a General Level.
+  Despliegue y pruebas simuladas no certifican calidad semántica de su voz.
+- [ ] Revisar/retirar excepción dev de braces antes de finalizar el 23/10;
+  cualquier nueva alerta, versión/ruta distinta o vencimiento bloquea CI.
 
 Estas comprobaciones sustituyen los bloqueos históricos de EV-04D/EV-05 al final
 del archivo; no reinterpretan informes antiguos como evidencia nueva.
