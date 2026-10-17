@@ -9,6 +9,7 @@ import {
 } from "@/lib/journey-lesson-report";
 import { JOURNEY_RUBRIC_VERSION } from "@/lib/journey-speaking-attempt-contract";
 import type { JourneyEvaluationReport } from "@/lib/journey-speaking-evaluation";
+import { JOURNEY_EVALUATION_POLICY } from "@/lib/journey-evaluation-policy";
 afterEach(cleanup);
 function report(locale: "es" | "en", complete = true) {
   const dimension = {
@@ -79,6 +80,38 @@ function report(locale: "es" | "en", complete = true) {
   );
 }
 describe("ES/EN final report", () => {
+  it.each(["es", "en"] as const)(
+    "explains excluded speech visibly without hiding the valid score (%s)",
+    (locale) => {
+      const result = report(locale);
+      result.speaking.report!.evaluationPolicy = JOURNEY_EVALUATION_POLICY;
+      result.speaking.report!.limitations = [
+        {
+          kind: "recognition_uncertain",
+          reason: "Recognition detail",
+          citations: [],
+        },
+      ];
+      render(<JourneyFinalReport report={result} />);
+      expect(
+        screen.getByText(
+          locale === "es"
+            ? /Evaluamos tus intervenciones claras/
+            : /We assess your clear turns/,
+        ),
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          locale === "es" ? "Conversación: 75/100" : "Conversation: 75/100",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          locale === "es" ? "Nota global: —" : "Overall score: —",
+        ),
+      ).not.toBeInTheDocument();
+    },
+  );
   it("keeps detailed counts and criteria collapsed, one feedback panel", () => {
     const { container } = render(<JourneyFinalReport report={report("es")} />);
     const details = container.querySelectorAll("details");

@@ -55,6 +55,36 @@ describe("real quick-test regression: 9 correct, one wrong, no unseen remediatio
   });
 });
 describe("explicit recovery policy", () => {
+  it("permits one compatibility request only for the exact unversioned recognition rejection", () => {
+    const old = {
+      status: "FAILED",
+      requestCount: 2,
+      failureCode: "invalid_evidence",
+      report: {
+        kind: "validation_failure",
+        errors: ["Uncertain recognition cannot certify production or an error"],
+      },
+    };
+    expect(canRecoverJourneyEvaluation(old)).toBe(true);
+    for (const change of [
+      { requestCount: 3 },
+      { status: "COMPLETE" },
+      {
+        report: {
+          ...old.report,
+          evaluationPolicy: "clear-turns-2026-10-17-v1",
+        },
+      },
+      {
+        report: {
+          ...old.report,
+          errors: [...old.report.errors, "Unbacked citation: language"],
+        },
+      },
+      { report: null },
+    ])
+      expect(canRecoverJourneyEvaluation({ ...old, ...change })).toBe(false);
+  });
   it("allows one recovery of a rejected judgment but never a third dispatch", () => {
     expect(
       canRecoverJourneyEvaluation({

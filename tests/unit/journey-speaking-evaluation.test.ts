@@ -11,6 +11,7 @@ import {
 } from "@/lib/journey-speaking-attempt-contract";
 import {
   buildJourneyEvaluationPrompt,
+  getJourneyEvaluableContext,
   JOURNEY_SPEAKING_WEIGHTS,
   journeyJudgmentOutputSchema,
   validateJourneyJudgment,
@@ -194,7 +195,7 @@ function report(candidate = judgment(), input = context) {
   return result.report;
 }
 describe("Journey v2 evidence and grade contract", () => {
-  it("known recognition uncertainty and incomplete capture force partial even if the model omits limitations", () => {
+  it("uncertain essential evidence is unobserved, not a rejected report or invented level", () => {
     for (const confidence of [0.1, 0.9]) {
       const input = structuredClone(context);
       input.turns[1]!.recognition = {
@@ -213,7 +214,10 @@ describe("Journey v2 evidence and grade contract", () => {
           (item) => item.kind === "recognition_uncertain",
         ),
       ).toBe(true);
-      expect(validateJourneyJudgment(judgment(), input).ok).toBe(false);
+      const sanitized = report(judgment(), input);
+      expect(sanitized.evidence).toEqual([]);
+      expect(sanitized.feedback.achievement).toBeNull();
+      expect(sanitized.dimensions.language.level).toBeNull();
     }
     for (const quality of [
       { pendingLearnerTurn: true, interruptedAssistant: false },
@@ -225,6 +229,83 @@ describe("Journey v2 evidence and grade contract", () => {
         result.limitations.some((item) => item.kind === "capture_incomplete"),
       ).toBe(true);
     }
+  });
+  it("isolates one uncertain turn while grading the remaining clear conversation", () => {
+    const input = structuredClone(context);
+    input.turns = [
+      ...input.turns,
+      {
+        id: "uncertain",
+        sequence: 4,
+        role: "user",
+        content: "我想吃芋丝。",
+        recognition: {
+          rawTranscript: "我想吃芋丝。",
+          interpretedTranscript: "我想吃芋丝。",
+          confidence: 0.33195079835813507,
+        },
+      },
+    ];
+    const before = structuredClone(input);
+    const result = report(judgment(), input);
+    expect(result).toMatchObject({ status: "COMPLETE", score: 75 });
+    expect(result.limitations.map((item) => item.kind)).toEqual([
+      "recognition_uncertain",
+    ]);
+    const prompt = buildJourneyEvaluationPrompt(input);
+    const wire = JSON.stringify(journeyJudgmentOutputSchema(input));
+    expect(prompt).not.toContain("我想吃芋丝");
+    expect(wire).not.toContain('"uncertain"');
+    expect(getJourneyEvaluableContext(input).turns).toHaveLength(4);
+    expect(input).toEqual(before);
+    expect(validateStoredJourneyReport(result, input, "COMPLETE", 75)).toEqual(
+      result,
+    );
+    const legacy = validateJourneyJudgment(judgment(), input, {
+      isolateRecognition: false,
+    });
+    if (!legacy.ok) throw new Error("Invalid legacy fixture");
+    expect(legacy.report).toMatchObject({ status: "PARTIAL", score: null });
+    expect(legacy.report.evaluationPolicy).toBeUndefined();
+    expect(
+      validateStoredJourneyReport(legacy.report, input, "PARTIAL", null),
+    ).toEqual(legacy.report);
+  });
+  it("does not hide invented quotes, foreign IDs or duplicated items behind uncertainty filtering", () => {
+    const input = structuredClone(context);
+    input.turns[1]!.recognition = {
+      rawTranscript: "我叫Arean。",
+      interpretedTranscript: "我叫Arean。",
+      confidence: 0.1,
+    };
+    const quote = judgment();
+    quote.evidence[0]!.citations = [{ turnId: "u1", quote: "invented" }];
+    const foreign = judgment();
+    foreign.evidence[0]!.itemId = "foreign";
+    const duplicate = judgment();
+    duplicate.evidence.push(structuredClone(duplicate.evidence[0]!));
+    for (const candidate of [quote, foreign, duplicate])
+      expect(validateJourneyJudgment(candidate, input).ok).toBe(false);
+  });
+  it("uncertain-only content cannot generate a score even with invented high levels", () => {
+    const input = structuredClone(context);
+    input.turns = input.turns.map((turn) =>
+      turn.role === "user"
+        ? {
+            ...turn,
+            recognition: {
+              rawTranscript: turn.content,
+              interpretedTranscript: turn.content,
+              confidence: 0.1,
+            },
+          }
+        : turn,
+    );
+    expect(report(judgment(), input)).toMatchObject({
+      status: "INSUFFICIENT",
+      score: null,
+      evidence: [],
+    });
   });
   it("punctuation-only interpretation changes do not claim a recognition error", () => {
     const input = structuredClone(context);
@@ -358,7 +439,9 @@ describe("Journey v2 evidence and grade contract", () => {
       reason: "Evidencia limitada.",
       citations: [],
     });
-    expect(report(candidate).score).toBeNull();
+    const result = report(candidate);
+    expect(result.score).toBe(kind === "recognition_uncertain" ? 75 : null);
+    expect(result.limitations).toHaveLength(1);
   });
   it("rejects unrelated, invented or wrong-speaker evidence", () => {
     for (const citation of [

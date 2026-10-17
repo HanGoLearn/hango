@@ -208,7 +208,7 @@ describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
     });
     expect(complete).toHaveBeenCalledTimes(2);
   });
-  it("recognition and capture quality stored by the browser cannot be ignored to award a complete grade", async () => {
+  it("uncertain-only capture makes no paid dispatch and cannot be scored", async () => {
     const userId = (
       await db.user.create({
         data: {
@@ -245,19 +245,102 @@ describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
       lessonId,
     );
     expect(result).toMatchObject({
-      status: "PARTIAL",
+      status: "INSUFFICIENT",
       score: null,
-      requestCount: 1,
+      requestCount: 0,
     });
+    await evaluateJourneySpeakingAttempt(userId, attempt.id, lessonId);
+    expect(complete).not.toHaveBeenCalled();
+    expect(await db.aiUsageLog.count({ where: { userId } })).toBe(0);
+  });
+  it("recovers the pre-fix exhausted failure once, excluding uncertain speech without altering capture", async () => {
+    const userId = (
+      await db.user.create({
+        data: { email: `clear-recovery-${crypto.randomUUID()}@example.test` },
+      })
+    ).id;
+    const attempt = await startJourneySpeakingAttempt(userId, {
+      lessonId,
+      locale: "es",
+      requestKey: crypto.randomUUID(),
+    });
+    await sealJourneySpeakingAttempt(userId, {
+      attemptId: attempt.id,
+      lessonId,
+      closeReason: "NATURAL",
+      turns: [
+        { role: "assistant", content: "你好，你叫什么名字？" },
+        ...[
+          "你好,你叫什么名字?",
+          "我叫阿亮,很高兴认识你。",
+          "我是中国人,你呢?",
+          "我是北京人,你是北京人吗?",
+          "我爱北京,我想再去别的。",
+          "我想吃芋丝。",
+        ].map((content, index) => ({
+          role: "user" as const,
+          content,
+          recognition: {
+            rawTranscript: content,
+            interpretedTranscript: content,
+            confidence: index === 5 ? 0.33195079835813507 : 0.98,
+          },
+        })),
+      ],
+    });
+    await db.journeySpeakingEvaluation.create({
+      data: {
+        attemptId: attempt.id,
+        rubricVersion: JOURNEY_RUBRIC_VERSION,
+        locale: "es",
+        status: "FAILED",
+        requestCount: 2,
+        failureCode: "invalid_evidence",
+        report: {
+          kind: "validation_failure",
+          errors: [
+            "Uncertain recognition cannot certify production or an error",
+          ],
+        },
+      },
+    });
+    const before = await getJourneySpeakingAttempt(
+      userId,
+      attempt.id,
+      lessonId,
+    );
+    await evaluateJourneySpeakingAttempt(userId, attempt.id, lessonId);
+    expect(complete).not.toHaveBeenCalled();
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        evaluateJourneySpeakingAttempt(userId, attempt.id, lessonId, {
+          recoverFailed: true,
+        }),
+      ),
+    );
+    const result = await evaluateJourneySpeakingAttempt(
+      userId,
+      attempt.id,
+      lessonId,
+      { recoverFailed: true },
+    );
+    expect(result).toMatchObject({
+      status: "COMPLETE",
+      score: 75,
+      requestCount: 3,
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete.mock.calls[0]![0].systemPrompt).not.toContain("我想吃芋丝");
     expect(
       (result.report as { limitations: { kind: string }[] }).limitations.map(
         (item) => item.kind,
       ),
-    ).toEqual(
-      expect.arrayContaining(["capture_incomplete", "recognition_uncertain"]),
-    );
-    await evaluateJourneySpeakingAttempt(userId, attempt.id, lessonId);
-    expect(complete).toHaveBeenCalledTimes(1);
+    ).toContain("recognition_uncertain");
+    const after = await getJourneySpeakingAttempt(userId, attempt.id, lessonId);
+    expect(after.turns).toEqual(before.turns);
+    expect(after.captureHash).toBe(before.captureHash);
+    expect(after.snapshotHash).toBe(before.snapshotHash);
+    expect(await db.aiUsageLog.count({ where: { userId } })).toBe(1);
   });
   it("persists one structured judgment, one metered cost and no reward/global chat", async () => {
     const { userId, attemptId } = await capture();
