@@ -21,9 +21,28 @@ Status: Active
   exclusión de fallos nuevos, mismas guardas de concurrencia/usuario/consumo.
 - [x] 1.439 unitarias y 216 componentes pasan. Pruebas nuevas: aislamiento,
   no mutación del intento, informe histórico, citas falsas y recuperación acotada.
-- [ ] Integraciones, tipos/lint/build y CI remoto; publicación GitHub/Vercel.
-- [ ] Usuario autoriza UNA evaluación real adicional del intento ya guardado.
-  Ejecutarla únicamente tras publicar, comprobar resultado y no repetir si falla.
+- [x] 381 integraciones pasan en Postgres desechable; tipos/lint/build de 70
+  páginas, secretos y formato pasan. CI remoto 39036564274 completo verde:
+  2.037 pruebas. PR #5 integrado `d59a7dd`, Vercel `hango-ctpdthofw` Ready,
+  dominio público y health 200. Sin migraciones ni borrados.
+- [x] Ejecutada UNA evaluación real adicional autorizada: contador 2→3,
+  6.069 tokens entrada/2.728 salida, estimación registrada US$0,00697325.
+  Conversación: 13 turnos y ambos hashes originales intactos. Falló por OTRO
+  motivo: hallazgo opcional UNDERSTOOD sin evidencia del estudiante
+  (`Missing learner evidence` y `Generic assent cannot certify item comprehension`).
+  No certificar nota real ni afirmar aceptación completa. No volver a llamar IA.
+- [ ] Segundo ajuste: omitir comprensión opcional sin respuesta significativa,
+  conservando las citas/banco estrictos y los cuatro criterios independientes.
+  El juicio rechazado no se conservó completo: no es recuperable de su diagnóstico
+  ni se puede inventar una nota. Otra evaluación real requerirá nueva autorización.
+- [x] Nueva autorización expresa del usuario: UNA evaluación más tras publicar el
+  segundo ajuste. Recuperación acotada a ese diagnóstico exacto con contador 3;
+  permite pasar a 4 solo por acción explícita, sin reset, sin ampliar límite normal
+  ni permitir un quinto dispatch. Todavía no ejecutada.
+- [x] Para futuros rechazos semánticos, conservar candidato privado solo tras
+  parseo estricto/acotado del esquema. Sigue FAILED/sin nota; no se devuelve como
+  feedback, no se registra en logs ni concede puntos. Permite diagnóstico offline
+  sin otra llamada de pago. JSON inválido/esquema inválido no se conserva.
 
 ## Corrección de reflexión/Speaking — 17 de octubre de 2026
 

@@ -24,10 +24,12 @@ import {
 import {
   buildJourneyEvaluationPrompt,
   getJourneyEvaluableContext,
+  JourneyJudgmentSchema,
   hasSubstantiveJourneyTurn,
   journeyJudgmentOutputSchema,
   validateJourneyJudgment,
   type JourneyEvaluationContext,
+  type JourneyJudgment,
 } from "@/lib/journey-speaking-evaluation";
 
 export const JOURNEY_PROCESSING_DEADLINE_MS = 120_000;
@@ -134,7 +136,11 @@ export async function evaluateJourneySpeakingAttempt(
     status: "PROCESSING" as const,
     leaseToken,
   };
-  async function fail(code: string, validationErrors?: string[]) {
+  async function fail(
+    code: string,
+    validationErrors?: string[],
+    candidate?: JourneyJudgment,
+  ) {
     await db.journeySpeakingEvaluation.updateMany({
       where: claimWhere,
       data: {
@@ -143,12 +149,14 @@ export async function evaluateJourneySpeakingAttempt(
         score: null,
         ...(validationErrors
           ? {
-              // Fixed validator messages only: no transcript, credentials or raw
-              // provider output. Useful diagnostics must survive a rejected result.
+              // Bounded schema-parsed candidate stays private and untrusted.
+              // Never log it, expose it as feedback or grade it without validation.
+              // Retain it for offline repair rather than requiring another paid call.
               report: {
                 kind: "validation_failure",
                 evaluationPolicy: JOURNEY_EVALUATION_POLICY,
                 errors: validationErrors.slice(0, 20),
+                ...(candidate ? { candidate } : {}),
               },
             }
           : {}),
@@ -251,8 +259,14 @@ export async function evaluateJourneySpeakingAttempt(
           }
           if (raw !== undefined) {
             const checked = validateJourneyJudgment(raw, context);
-            if (!checked.ok) await fail("invalid_evidence", checked.errors);
-            else
+            if (!checked.ok) {
+              const bounded = JourneyJudgmentSchema.safeParse(raw);
+              await fail(
+                "invalid_evidence",
+                checked.errors,
+                bounded.success ? bounded.data : undefined,
+              );
+            } else
               await db.journeySpeakingEvaluation.updateMany({
                 where: claimWhere,
                 data: {

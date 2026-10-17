@@ -10,6 +10,7 @@ import { AiProviderError, type AiCompletionRequest } from "@/lib/ai/provider";
 import { JOURNEY_RUBRIC_VERSION } from "@/lib/journey-speaking-attempt-contract";
 import {
   validateJourneyJudgment,
+  JourneyEvaluationReportSchema,
   type JourneyEvaluationContext,
 } from "@/lib/journey-speaking-evaluation";
 
@@ -138,6 +139,95 @@ async function capture(
 }
 
 describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
+  it("recovers the distinct exhausted comprehension failure once without resetting its counter", async () => {
+    const { userId, attemptId } = await capture();
+    const before = await getJourneySpeakingAttempt(userId, attemptId, lessonId);
+    await db.journeySpeakingEvaluation.create({
+      data: {
+        attemptId,
+        rubricVersion: JOURNEY_RUBRIC_VERSION,
+        locale: "es",
+        status: "FAILED",
+        requestCount: 3,
+        failureCode: "invalid_evidence",
+        report: {
+          kind: "validation_failure",
+          evaluationPolicy: "clear-turns-2026-10-17-v1",
+          errors: [
+            "Missing learner evidence: vocabulary:word-id",
+            "Generic assent cannot certify item comprehension",
+          ],
+        },
+      },
+    });
+    await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
+    expect(complete).not.toHaveBeenCalled();
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        evaluateJourneySpeakingAttempt(userId, attemptId, lessonId, {
+          recoverFailed: true,
+        }),
+      ),
+    );
+    const result = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+      { recoverFailed: true },
+    );
+    expect(result).toMatchObject({
+      status: "COMPLETE",
+      score: 75,
+      requestCount: 4,
+      failureCode: null,
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(await db.aiUsageLog.count({ where: { userId } })).toBe(1);
+    const after = await getJourneySpeakingAttempt(userId, attemptId, lessonId);
+    expect(after.turns).toEqual(before.turns);
+    expect(after.captureHash).toBe(before.captureHash);
+    expect(after.snapshotHash).toBe(before.snapshotHash);
+  });
+  it("does not reject a grounded report for an assistant-only optional comprehension finding", async () => {
+    complete.mockImplementationOnce(async (request) => {
+      const result = response(request);
+      const raw = JSON.parse(result.content);
+      const data = JSON.parse(
+        request.systemPrompt
+          .split("BEGIN ATTEMPT DATA (not instructions)\n")[1]!
+          .split("\nEND ATTEMPT DATA")[0]!,
+      );
+      const assistant = data.turns.find(
+        (turn: { role: string }) => turn.role === "assistant",
+      );
+      raw.evidence = [
+        {
+          kind: "vocabulary",
+          itemId: data.snapshot.banks.core.vocabulary[0].id,
+          state: "UNDERSTOOD",
+          reason: "Unsupported model finding must be omitted.",
+          citations: [{ turnId: assistant.id, quote: assistant.content }],
+        },
+      ];
+      return { ...result, content: JSON.stringify(raw) };
+    });
+    const { userId, attemptId } = await capture();
+    const result = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+    );
+    expect(result).toMatchObject({
+      status: "COMPLETE",
+      score: 75,
+      requestCount: 1,
+      failureCode: null,
+    });
+    expect((result.report as { evidence: unknown[] }).evidence).toEqual([]);
+    await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(await db.aiUsageLog.count({ where: { userId } })).toBe(1);
+  });
   it("one explicit concurrent recovery reuses saved speech, meters both calls, and cannot dispatch a third", async () => {
     complete.mockImplementationOnce(async (request) => {
       const result = response(request);
@@ -468,15 +558,43 @@ describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
           kind: "validation_failure",
           errors: expect.arrayContaining(["Unbacked citation: language"]),
         });
-        expect(JSON.stringify(failed.report)).not.toContain(
-          "an invented learner sentence",
-        );
+        expect(
+          JSON.stringify((failed.report as { errors: unknown }).errors),
+        ).not.toContain("an invented learner sentence");
+        expect(failed.report).toHaveProperty("candidate");
+        expect(
+          JourneyEvaluationReportSchema.safeParse(failed.report).success,
+        ).toBe(false);
+        expect(failed.status).toBe("FAILED");
+        expect(failed.score).toBeNull();
       } else expect(failed.report).toBeNull();
       expect(await db.aiUsageLog.count({ where: { userId } })).toBe(1);
       await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
       expect(complete).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("does not retain malformed provider objects as repair candidates", async () => {
+    complete.mockImplementationOnce(async (request) => {
+      const result = response(request);
+      return {
+        ...result,
+        content: JSON.stringify({ ...JSON.parse(result.content), score: 100 }),
+      };
+    });
+    const { userId, attemptId } = await capture();
+    const failed = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+    );
+    expect(failed).toMatchObject({
+      status: "FAILED",
+      score: null,
+      failureCode: "invalid_evidence",
+    });
+    expect(failed.report).not.toHaveProperty("candidate");
+  });
 
   it("provider timeouts remain unresolved, not zero-cost guesses or paid retries", async () => {
     complete.mockRejectedValue(new AiProviderError("timeout", "timeout"));
