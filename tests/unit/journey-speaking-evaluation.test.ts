@@ -461,7 +461,7 @@ describe("Journey v2 evidence and grade contract", () => {
     )!.id;
     expect(validateJourneyJudgment(candidate, context).ok).toBe(false);
   });
-  it("generic assent cannot certify comprehension of a word", () => {
+  it("generic assent cannot certify comprehension, without cancelling grounded criteria", () => {
     const candidate = judgment();
     candidate.evidence[0]!.state = "UNDERSTOOD";
     candidate.evidence[0]!.citations = [{ turnId: "u2", quote: "好" }];
@@ -471,7 +471,33 @@ describe("Journey v2 evidence and grade contract", () => {
         t.id === "u2" ? { ...t, content: "好。" } : t,
       ),
     };
-    expect(validateJourneyJudgment(candidate, input).ok).toBe(false);
+    const result = report(candidate, input);
+    expect(result).toMatchObject({
+      status: "COMPLETE",
+      score: 75,
+      evidence: [],
+    });
+  });
+  it("excludes an optional UNDERSTOOD finding with no learner response (production regression)", () => {
+    for (const citations of [[], [{ turnId: "a1", quote: "你叫什么名字" }]]) {
+      const candidate = judgment();
+      candidate.evidence[0]!.state = "UNDERSTOOD";
+      candidate.evidence[0]!.citations = citations;
+      const result = report(candidate);
+      expect(result).toMatchObject({
+        status: "COMPLETE",
+        score: 75,
+        evidence: [],
+      });
+      expect(
+        validateStoredJourneyReport(result, context, "COMPLETE", 75),
+      ).toEqual(result);
+      expect(
+        validateJourneyJudgment(candidate, context, {
+          isolateRecognition: false,
+        }).ok,
+      ).toBe(false);
+    }
   });
   it("assisted production needs the actual hint and the learner's application", () => {
     const candidate = judgment();

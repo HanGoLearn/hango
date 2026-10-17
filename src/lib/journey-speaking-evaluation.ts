@@ -397,9 +397,20 @@ export function validateJourneyJudgment(
               : "The cited evidence includes uncertain recognition; no level is assigned to this criterion.",
         };
     }
-    judgment.evidence = judgment.evidence.filter(
-      (item) => !citesUncertainUser(item.citations),
-    );
+    judgment.evidence = judgment.evidence.filter((item) => {
+      if (citesUncertainUser(item.citations)) return false;
+      // Content findings are supplemental, not the four graded criteria.
+      // Omit unsupported comprehension instead of certifying teacher-only
+      // words or throwing away independently grounded criterion judgments.
+      if (item.state === "UNDERSTOOD") {
+        const learnerQuotes = item.citations
+          .filter((citation) => turns.get(citation.turnId)?.role === "user")
+          .map((citation) => citation.quote);
+        if (!learnerQuotes.length || learnerQuotes.every(isGenericAssent))
+          return false;
+      }
+      return true;
+    });
     if (
       judgment.feedback.achievement &&
       citesUncertainUser(judgment.feedback.achievement.citations)
@@ -625,6 +636,7 @@ export function buildJourneyEvaluationPrompt(
     "VALIDATION CHECKLIST: Each citation is {turnId,quote} from the SAME supplied turn, with an exact unchanged substring of 1..240 characters (do not translate, repair punctuation or use an interpreted transcript). Use only supplied bank item IDs, never their words as IDs. Reasons <=400 characters, evidence <=12 items, <=4 citations each. Feedback summary <=360, achievement <=260, priority <=300, nextStep <=240 characters. Keep every field, using null/[] where appropriate.",
     "For each OBSERVED dimension: level is 0..4 and at least one citation is from a USER turn. For NOT_OBSERVED/NO_OPPORTUNITY: level=null. OBSERVED interaction MUST cite BOTH an assistant question/response and a learner response. ASSISTED item evidence MUST cite BOTH the actual assistant model/hint and learner application. INDEPENDENT/ASSISTED vocabulary MUST include that exact Chinese word inside a learner quote. NOT_OBSERVED/NO_OPPORTUNITY items must not cite learner production; normally omit unused items entirely instead of cataloguing them.",
     "If a user turn has uncertain recognition, do not classify its words as INDEPENDENT, ASSISTED or ERROR. Mark the recognition limitation and evaluate only what can be supported. A generic assent alone cannot certify UNDERSTOOD. A grammar/vocabulary correction priority must cite the exact SAME turnId AND quote as a matching ERROR evidence item of the same kind; otherwise use a practice extension with no claimed error. Never add an error just to justify a priority.",
+    "UNDERSTOOD content evidence requires a meaningful USER response showing comprehension. Assistant-only citations, empty citations, and generic assent cannot establish it: omit that optional item entirely. The graded criteria must each be supported independently by clear learner evidence.",
     "A closure segment is not a technical error; USER_END can be fully evaluable. A greeting and immediate exit provide insufficient evidence. Do not require a fixed turn count or six characters as proof of ability. Judge the opportunity and actual communicative acts of this lesson.",
     `Rubric version: ${JOURNEY_RUBRIC_VERSION}; bank version: ${context.snapshot.banks.version}; locale code: ${context.locale}.`,
     "Return a JSON object matching JourneyJudgmentSchema: rubricVersion, bankVersion, locale, dimensions {communication,language,interaction,autonomy} each {observation,level,reason,citations:[{turnId,quote}]}; evidence [{kind:vocabulary|grammar|act,itemId,state,reason,citations}]; limitations [{kind:recognition_uncertain|ai_interference|capture_incomplete,reason,citations}]; feedback {summary,achievement:null|{text,citations},priority:null|{kind:grammar|vocabulary|communication|practice,text,citations,example:null|{chinese,pinyin,translation}},nextStep}. No extra keys, no overall score.",

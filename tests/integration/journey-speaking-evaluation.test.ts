@@ -138,6 +138,46 @@ async function capture(
 }
 
 describe("Journey single evaluation (disposable Postgres, no paid API)", () => {
+  it("does not reject a grounded report for an assistant-only optional comprehension finding", async () => {
+    complete.mockImplementationOnce(async (request) => {
+      const result = response(request);
+      const raw = JSON.parse(result.content);
+      const data = JSON.parse(
+        request.systemPrompt
+          .split("BEGIN ATTEMPT DATA (not instructions)\n")[1]!
+          .split("\nEND ATTEMPT DATA")[0]!,
+      );
+      const assistant = data.turns.find(
+        (turn: { role: string }) => turn.role === "assistant",
+      );
+      raw.evidence = [
+        {
+          kind: "vocabulary",
+          itemId: data.snapshot.banks.core.vocabulary[0].id,
+          state: "UNDERSTOOD",
+          reason: "Unsupported model finding must be omitted.",
+          citations: [{ turnId: assistant.id, quote: assistant.content }],
+        },
+      ];
+      return { ...result, content: JSON.stringify(raw) };
+    });
+    const { userId, attemptId } = await capture();
+    const result = await evaluateJourneySpeakingAttempt(
+      userId,
+      attemptId,
+      lessonId,
+    );
+    expect(result).toMatchObject({
+      status: "COMPLETE",
+      score: 75,
+      requestCount: 1,
+      failureCode: null,
+    });
+    expect((result.report as { evidence: unknown[] }).evidence).toEqual([]);
+    await evaluateJourneySpeakingAttempt(userId, attemptId, lessonId);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(await db.aiUsageLog.count({ where: { userId } })).toBe(1);
+  });
   it("one explicit concurrent recovery reuses saved speech, meters both calls, and cannot dispatch a third", async () => {
     complete.mockImplementationOnce(async (request) => {
       const result = response(request);
