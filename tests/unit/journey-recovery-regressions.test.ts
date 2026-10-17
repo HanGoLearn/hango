@@ -55,6 +55,43 @@ describe("real quick-test regression: 9 correct, one wrong, no unseen remediatio
   });
 });
 describe("explicit recovery policy", () => {
+  it("allows the separately authorized recovery only for the exact old comprehension failure", () => {
+    const failed = {
+      status: "FAILED",
+      requestCount: 3,
+      failureCode: "invalid_evidence",
+      report: {
+        kind: "validation_failure",
+        evaluationPolicy: "clear-turns-2026-10-17-v1",
+        errors: [
+          "Missing learner evidence: vocabulary:word-id",
+          "Generic assent cannot certify item comprehension",
+        ],
+      },
+    };
+    expect(canRecoverJourneyEvaluation(failed)).toBe(true);
+    for (const change of [
+      { requestCount: 4 },
+      { status: "PROCESSING" },
+      { report: { ...failed.report, evaluationPolicy: undefined } },
+      {
+        report: {
+          ...failed.report,
+          errors: [...failed.report.errors, "Unbacked citation: language"],
+        },
+      },
+      {
+        report: {
+          ...failed.report,
+          errors: [
+            "Missing learner evidence: communication",
+            "Generic assent cannot certify item comprehension",
+          ],
+        },
+      },
+    ])
+      expect(canRecoverJourneyEvaluation({ ...failed, ...change })).toBe(false);
+  });
   it("permits one compatibility request only for the exact unversioned recognition rejection", () => {
     const old = {
       status: "FAILED",

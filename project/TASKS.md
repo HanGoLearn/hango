@@ -35,6 +35,14 @@ Status: Active
   conservando las citas/banco estrictos y los cuatro criterios independientes.
   El juicio rechazado no se conservó completo: no es recuperable de su diagnóstico
   ni se puede inventar una nota. Otra evaluación real requerirá nueva autorización.
+- [x] Nueva autorización expresa del usuario: UNA evaluación más tras publicar el
+  segundo ajuste. Recuperación acotada a ese diagnóstico exacto con contador 3;
+  permite pasar a 4 solo por acción explícita, sin reset, sin ampliar límite normal
+  ni permitir un quinto dispatch. Todavía no ejecutada.
+- [x] Para futuros rechazos semánticos, conservar candidato privado solo tras
+  parseo estricto/acotado del esquema. Sigue FAILED/sin nota; no se devuelve como
+  feedback, no se registra en logs ni concede puntos. Permite diagnóstico offline
+  sin otra llamada de pago. JSON inválido/esquema inválido no se conserva.
 
 ## Corrección de reflexión/Speaking — 17 de octubre de 2026
 
