@@ -27,12 +27,23 @@ Status: Active
 - [ ] Publicación en master/Vercel detenida por seguridad: excepción de Prisma
   vencida el 16/10; auditoría actual informa 13 altas, una crítica (Next 16.3.5)
   y una moderada. No prorrogar excepción ni bajar controles automáticamente.
-  Parches candidatos disponibles: Next/ESLint 16.3.8, Prisma 7.10.1, Sharp
-  0.35.5; cadenas transitivas aún requieren revisión (braces sigue en 3.0.3).
-  La base/flag están preparados, pero el nuevo Speaking NO está desplegado.
-  Hace falta resolver la seguridad, publicar y aceptar la conversación real.
+  Estado inicial superado por el lote de seguridad descrito debajo. Base/flag
+  preparados; publicación y aceptación oral todavía no certificadas.
 - [x] Conexión temporal vPaY revocada con confirmación explícita del usuario;
   seis conexiones originales preservadas y archivo privado temporal retirado.
+- [x] Parches autorizados: Next/ESLint 16.3.8, Prisma/Client/Adapter 7.10.1,
+  Sharp 0.35.5, music-metadata 11.16.1 y transitivas corregidas. Cliente
+  regenerado sin migrar bases. Auditoría runtime: cero avisos; retirada la
+  antigua excepción de Prisma. Build de 70 páginas, 1.613 pruebas existentes
+  y 15 pruebas nuevas de la política pasan. Sin API pagada.
+- [x] Excepción nueva autorizada expresamente solo para GHSA-vfj7-8cjw-p6xm
+  de braces y su cadena dev de ESLint, sin parche publicado. Vigente hasta
+  finalizar el 23/10 en Bogotá; después bloquea CI. Nodos/versiones/causas
+  exactos, ninguna crítica exceptuada; runtime exige cero avisos. Patrones
+  rootDir de ESLint prohibidos mientras exista esa excepción. No anunciar
+  cero vulnerabilidades totales: quedan cinco avisos de una sola causa dev.
+- [ ] Integraciones/smoke repetidos con parches y CI remota; integrar entrega
+  y confirmar Vercel Ready/alias/recorrido real antes de solicitar prueba oral.
 
 Estas comprobaciones sustituyen los bloqueos históricos de EV-04D/EV-05 al final
 del archivo; no reinterpretan informes antiguos como evidencia nueva.

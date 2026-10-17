@@ -14,6 +14,7 @@ const config = [
     // inaccessible temp folder" finding.
     ignores: [
       ".next/**",
+      ".next-smoke/**",
       "node_modules/**",
       "src/generated/**",
       ".codex-tmp/**",

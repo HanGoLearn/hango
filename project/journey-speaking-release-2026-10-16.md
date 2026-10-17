@@ -88,6 +88,45 @@ La web pública sigue con la versión anterior. Se requiere corregir/revalidar
 estas dependencias antes de desplegar el lote nuevo. La advertencia crítica
 tampoco demuestra por sí sola explotación en HanGo; no se hizo tal afirmación.
 
+### Actualización de seguridad autorizada posteriormente
+
+El usuario autorizó corregir las dependencias, repetir pruebas y publicar;
+posteriormente autorizó una excepción específica hasta el 23 de octubre.
+
+- Next y su configuración ESLint fijados en 16.3.8; Prisma CLI/Client/adapter-pg
+  en 7.10.1, sin salto a Prisma 8. Sharp 0.35.5 y music-metadata 11.16.1.
+- Overrides acotados a líneas compatibles: brace-expansion 1.x → 1.1.21,
+  5.x → 5.0.12; source-map-js 1.2.2; undici 8.x → 8.10.2. Mantenerlos mientras
+  las dependencias padre no resuelvan esas correcciones por sí mismas.
+- Cliente Prisma regenerado siguiendo la guía Prisma CLI, sin migrar ni sembrar
+  ninguna base persistente. No cambios a prompts, personajes ni currículo.
+- `npm audit --omit=dev`: cero avisos. Auditoría completa: cinco avisos altos
+  derivados de una sola causa de tooling sin parche, ninguno crítico/moderado.
+- Excepción propietaria: `GHSA-vfj7-8cjw-p6xm`, exclusivamente `braces@3.0.3`
+  bajo `micromatch@4.0.8 → fast-glob@3.3.1 → @next/eslint-plugin-next@16.3.8
+  → eslint-config-next@16.3.8`, todos dev-only. Finaliza al acabar el 23/10/2026
+  en America/Bogota (`2026-10-24T00:00:00-05:00`). No es prórroga de Prisma.
+- Política rechaza cualquier causa/aviso extra, crítica, versión/ruta distinta,
+  promoción a dependencia runtime o informe malformado. Runtime no exceptúa
+  ninguna severidad. Quince pruebas nuevas cubren estas barreras y vencimiento.
+- No hay `settings.next.rootDir` en la configuración; ese es el único input de
+  patrones en el helper de este plugin. El control prohíbe habilitarlo durante
+  la excepción. Sigue existiendo riesgo residual en tooling si cambia la forma
+  de ejecutar esa cadena fuera del flujo comprobado; no se declara parcheada.
+- Se excluye `.next-smoke` de ESLint, igual que `.next`, para no recorrer código
+  generado de pruebas. No se excluye código fuente de la aplicación.
+
+Fuente del aviso sin parche:
+[GitHub Advisory GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+La revisión de metadatos se realizó en npm; no se usó `audit fix --force`, ni una
+versión mayor de Next/Prisma/React, ni un fork ajeno para esconder el aviso.
+
+Verificados por ahora: compilación completa de 70 páginas, 1.613 pruebas
+unitarias/componentes existentes, 15 de política y typecheck. Integraciones,
+smoke y publicación se registrarán al terminar. Aviso de tooling: jsdom 30
+declara Node >=24.15 en esta línea; la PC tiene 24.14 y las pruebas pasan, pero
+se recomienda actualizar el runtime local a un parche soportado por separado.
+
 ### Cierre del acceso de mantenimiento
 
 Con confirmación explícita, se revocó únicamente la conexión temporal terminada

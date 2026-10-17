@@ -92,10 +92,9 @@ jobs:
         env:
           NODE_ENV: production
       - run: npx prisma migrate status
-      # Blocks every unexpected high/critical finding. The only temporary
-      # exception is the exact Prisma CLI 7.10.0 chain documented in
-      # project/AUDITORIA_INTEGRAL_Y_PROXIMOS_PASOS.md; it expires and fails
-      # closed if its package, version or install path changes.
+      # Runtime audit must be clean. Owner-approved, dev-only braces/ESLint
+      # exception through Oct 23 Bogota: exact advisory, versions and paths;
+      # any new finding or expiry fails closed (see release 2026-10-16).
       - run: npm run security:audit
 
       - run: npm run test:unit
