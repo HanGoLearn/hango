@@ -18,7 +18,21 @@ Status: Active
   banco e integridad originales; actualización condicional sin reset del contador.
   Tanto si acepta como si rechaza, retorna antes del proveedor, sin cargo IA.
   Leer/abrir continúa siendo solo lectura. UI ES/EN distingue revisión sin IA.
-- [ ] Pruebas, publicación y recuperación real sin consumo adicional.
+- [x] Publicado en PR #7, merge `034f354`; PC sincronizada sin descartar cambios.
+  CI 39143589311 completo verde: 1.442 unitarias, 218 componentes, 386
+  integraciones y un smoke (2.047). Tipos, lint, build, secretos y política de
+  dependencias pasan. Vercel confirma despliegue `2i8QNepbsqR5fa7n8fupi2jDs7kx`
+  exitoso; botón de revisión sin IA visible en el dominio público.
+- [x] Recuperación REAL ejecutada en la cuenta administradora y comprobada
+  después de recargar: Conversación 100/100, nota global 98/100, tres estrellas,
+  vocabulario 90/100, gramática/comprensión 100/100; nota y siguiente práctica
+  en español. Resultado guardado y recompensas procesadas; detalles plegados.
+  Los niveles 4/4 proceden del juicio recibido, no de una nueva evaluación.
+- [x] Verificación de integridad/consumo en producción: mismos 13 turnos,
+  hashes de captura/snapshot originales, contador 4 y mismo `usageLogId` que
+  antes de la revisión. Cero llamadas de IA adicionales en esta recuperación.
+  No cuentas borradas, currículo alterado, migraciones o cambios en Han burbuja
+  ni Speaking Lab. Captura local de evidencia guardada fuera de Git.
 
 ## Aislamiento de reconocimiento incierto — 17 de octubre de 2026
 
@@ -49,14 +63,15 @@ Status: Active
   motivo: hallazgo opcional UNDERSTOOD sin evidencia del estudiante
   (`Missing learner evidence` y `Generic assent cannot certify item comprehension`).
   No certificar nota real ni afirmar aceptación completa. No volver a llamar IA.
-- [ ] Segundo ajuste: omitir comprensión opcional sin respuesta significativa,
+- [x] Segundo ajuste: omitir comprensión opcional sin respuesta significativa,
   conservando las citas/banco estrictos y los cuatro criterios independientes.
   El juicio rechazado no se conservó completo: no es recuperable de su diagnóstico
   ni se puede inventar una nota. Otra evaluación real requerirá nueva autorización.
 - [x] Nueva autorización expresa del usuario: UNA evaluación más tras publicar el
   segundo ajuste. Recuperación acotada a ese diagnóstico exacto con contador 3;
   permite pasar a 4 solo por acción explícita, sin reset, sin ampliar límite normal
-  ni permitir un quinto dispatch. Todavía no ejecutada.
+  ni permitir un quinto dispatch. Ejecutada; el rechazo por referencia del
+  interlocutor se resolvió sin IA adicional según la sección del 18 de octubre.
 - [x] Para futuros rechazos semánticos, conservar candidato privado solo tras
   parseo estricto/acotado del esquema. Sigue FAILED/sin nota; no se devuelve como
   feedback, no se registra en logs ni concede puntos. Permite diagnóstico offline
