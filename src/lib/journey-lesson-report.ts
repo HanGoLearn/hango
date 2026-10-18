@@ -166,6 +166,7 @@ export type JourneyLessonReportView = {
   };
   speaking: {
     canRetry?: boolean;
+    canRepairWithoutAi?: boolean;
     reason?: "TECHNICAL_CAPTURE" | "NO_SPEECH" | "EVALUATION_FAILED";
     state: JourneySpeakingReportState;
     score: number | null;

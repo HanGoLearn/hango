@@ -1,6 +1,9 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { canRecoverJourneyEvaluation } from "@/lib/journey-evaluation-recovery";
+import {
+  canRecoverJourneyEvaluation,
+  getJourneyEvaluationCandidate,
+} from "@/lib/journey-evaluation-recovery";
 import { Prisma } from "@/generated/prisma/client";
 import { recomputeGeneralLevelPoints } from "@/lib/general-level";
 import { checkReflectionAchievements } from "@/lib/achievements";
@@ -227,6 +230,11 @@ function buildSelectedReport({
           ? "processing_expired"
           : evaluation.failureCode,
     }),
+  );
+  view.speaking.canRepairWithoutAi = Boolean(
+    evaluation &&
+    attempt.status === "SEALED" &&
+    getJourneyEvaluationCandidate({ ...evaluation, status: state }),
   );
   return view;
 }

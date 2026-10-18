@@ -1,4 +1,21 @@
 import { JOURNEY_EVALUATION_POLICY } from "@/lib/journey-evaluation-policy";
+import { JourneyJudgmentSchema } from "@/lib/journey-speaking-evaluation";
+
+export function getJourneyEvaluationCandidate(evaluation: {
+  status: string;
+  report?: unknown;
+}) {
+  if (
+    evaluation.status !== "FAILED" ||
+    !evaluation.report ||
+    typeof evaluation.report !== "object"
+  )
+    return null;
+  const stored = evaluation.report as { kind?: unknown; candidate?: unknown };
+  if (stored.kind !== "validation_failure") return null;
+  const parsed = JourneyJudgmentSchema.safeParse(stored.candidate);
+  return parsed.success ? parsed.data : null;
+}
 
 /** One initial dispatch plus one deliberate recovery, never a refresh retry.
  * Provider calls may have cost even when their output was rejected. */
@@ -20,6 +37,9 @@ export function canRecoverJourneyEvaluation(evaluation: {
   failureCode: string | null;
   report?: unknown;
 }): boolean {
+  // This path only revalidates private saved data: the evaluator must return
+  // before provider dispatch, even when validation still fails or caps are spent.
+  if (getJourneyEvaluationCandidate(evaluation)) return true;
   // One explicit compatibility recovery for the exact pre-fix rejection.
   // No counter reset and no retry for new-policy failures or unrelated errors.
   const report = evaluation.report as
