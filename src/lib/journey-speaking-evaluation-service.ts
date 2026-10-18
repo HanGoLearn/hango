@@ -2,7 +2,10 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
-import { canRecoverJourneyEvaluation } from "@/lib/journey-evaluation-recovery";
+import {
+  canRecoverJourneyEvaluation,
+  getJourneyEvaluationCandidate,
+} from "@/lib/journey-evaluation-recovery";
 import { JOURNEY_EVALUATION_POLICY } from "@/lib/journey-evaluation-policy";
 import { getAiProvider, AiProviderError } from "@/lib/ai";
 import {
@@ -56,6 +59,23 @@ export async function evaluateJourneySpeakingAttempt(
       "Attempt evaluation version mismatch",
     );
 
+  const context: JourneyEvaluationContext = {
+    snapshot,
+    locale: attempt.locale as "es" | "en",
+    closeReason: attempt.closeReason,
+    turns: attempt.turns.map((turn) => ({
+      id: turn.id,
+      sequence: turn.sequence,
+      role: turn.role === "USER" ? "user" : "assistant",
+      content: turn.content,
+      ...(turn.recognition
+        ? { recognition: JourneyRecognitionSchema.parse(turn.recognition) }
+        : {}),
+    })),
+    ...(attempt.captureQuality
+      ? { quality: JourneyCaptureQualitySchema.parse(attempt.captureQuality) }
+      : {}),
+  };
   await db.journeySpeakingEvaluation.createMany({
     data: [
       {
@@ -92,26 +112,38 @@ export async function evaluateJourneySpeakingAttempt(
     evaluation = await db.journeySpeakingEvaluation.findUniqueOrThrow({
       where: { attemptId },
     });
-    if (!options.recoverFailed || !canRecoverJourneyEvaluation(evaluation))
-      return evaluation;
+    if (!options.recoverFailed) return evaluation;
+    const candidate = getJourneyEvaluationCandidate(evaluation);
+    if (candidate) {
+      if (
+        attempt.status !== "SEALED" ||
+        evaluation.rubricVersion !== attempt.rubricVersion ||
+        evaluation.locale !== attempt.locale
+      )
+        return evaluation;
+      const checked = validateJourneyJudgment(candidate, context);
+      if (checked.ok)
+        await db.journeySpeakingEvaluation.updateMany({
+          where: {
+            id: evaluation.id,
+            status: "FAILED",
+            requestCount: evaluation.requestCount,
+            leaseToken: evaluation.leaseToken,
+          },
+          data: {
+            status: checked.report.status,
+            score: checked.report.score,
+            report: checked.report as unknown as Prisma.InputJsonValue,
+            failureCode: null,
+          },
+        });
+      // A failed offline review NEVER falls through to a paid request.
+      return db.journeySpeakingEvaluation.findUniqueOrThrow({
+        where: { attemptId },
+      });
+    }
+    if (!canRecoverJourneyEvaluation(evaluation)) return evaluation;
   }
-  const context: JourneyEvaluationContext = {
-    snapshot,
-    locale: attempt.locale as "es" | "en",
-    closeReason: attempt.closeReason,
-    turns: attempt.turns.map((turn) => ({
-      id: turn.id,
-      sequence: turn.sequence,
-      role: turn.role === "USER" ? "user" : "assistant",
-      content: turn.content,
-      ...(turn.recognition
-        ? { recognition: JourneyRecognitionSchema.parse(turn.recognition) }
-        : {}),
-    })),
-    ...(attempt.captureQuality
-      ? { quality: JourneyCaptureQualitySchema.parse(attempt.captureQuality) }
-      : {}),
-  };
   const leaseToken = randomUUID();
   const claim = await db.journeySpeakingEvaluation.updateMany({
     where: {

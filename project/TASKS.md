@@ -2,6 +2,24 @@
 
 Status: Active
 
+## Recuperación sin nueva IA — 18 de octubre de 2026
+
+- [x] Segundo ajuste publicado en PR #6, merge `f66dcd7`; CI 39037794809
+  verde con 2.042 pruebas. Vercel `hango-85o0arl0j` Ready y health 200.
+- [x] Ejecutada la segunda llamada adicional autorizada (contador 3→4).
+  Juicio completo conservado: los cuatro niveles propuestos son 4/4. Rechazo
+  mecánico: Interacción no incluyó cita del personaje, aunque sus turnos están
+  guardados. No modificar niveles, respuestas ni inventar una evaluación nueva.
+- [x] Unir únicamente el turno real del personaje inmediatamente anterior a
+  una intervención clara ya citada, cuando hay espacio en las cuatro citas.
+  Conservar las citas del estudiante y los ordinales; sin contexto adyacente
+  verificable, no completar artificialmente la evidencia.
+- [x] Revisión explícita de candidato privado: revalidación local con autoría,
+  banco e integridad originales; actualización condicional sin reset del contador.
+  Tanto si acepta como si rechaza, retorna antes del proveedor, sin cargo IA.
+  Leer/abrir continúa siendo solo lectura. UI ES/EN distingue revisión sin IA.
+- [ ] Pruebas, publicación y recuperación real sin consumo adicional.
+
 ## Aislamiento de reconocimiento incierto — 17 de octubre de 2026
 
 - [x] Segundo fallo real identificado: `invalid_evidence` con diagnóstico

@@ -195,6 +195,43 @@ function report(candidate = judgment(), input = context) {
   return result.report;
 }
 describe("Journey v2 evidence and grade contract", () => {
+  it("joins actual adjacent interlocutor context without changing learner evidence or ordinals", () => {
+    const candidate = judgment();
+    const input: JourneyEvaluationContext = {
+      ...context,
+      turns: [
+        ...context.turns,
+        { id: "a3", sequence: 4, role: "assistant", content: "你是哪里人？" },
+        { id: "u3", sequence: 5, role: "user", content: "我是北京人。" },
+      ],
+    };
+    for (const dimension of Object.values(candidate.dimensions))
+      dimension.level = 4;
+    candidate.dimensions.interaction.citations = [
+      userCitation,
+      { turnId: "u2", quote: "我是秘鲁人" },
+      { turnId: "u3", quote: "我是北京人。" },
+    ];
+    const before = structuredClone(candidate);
+    const result = report(candidate, input);
+    expect(result.score).toBe(100);
+    expect(result.dimensions.interaction.level).toBe(
+      before.dimensions.interaction.level,
+    );
+    expect(result.dimensions.interaction.citations.slice(0, 3)).toEqual(
+      before.dimensions.interaction.citations,
+    );
+    expect(result.dimensions.interaction.citations[3]).toEqual({
+      turnId: "a1",
+      quote: context.turns[0]!.content,
+    });
+    expect(candidate).toEqual(before);
+    const noPartner = {
+      ...context,
+      turns: context.turns.filter((turn) => turn.role === "user"),
+    };
+    expect(validateJourneyJudgment(candidate, noPartner).ok).toBe(false);
+  });
   it("uncertain essential evidence is unobserved, not a rejected report or invented level", () => {
     for (const confidence of [0.1, 0.9]) {
       const input = structuredClone(context);

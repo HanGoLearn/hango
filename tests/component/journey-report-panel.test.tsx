@@ -71,6 +71,38 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("Journey report action boundary", () => {
+  it.each(["es", "en"] as const)(
+    "discloses a saved-candidate review as no additional AI (%s)",
+    async (locale) => {
+      const failed = report("PENDING", locale);
+      failed.speaking = {
+        state: "FAILED",
+        score: null,
+        report: null,
+        canRetry: true,
+        canRepairWithoutAi: true,
+      };
+      mocks.read.mockResolvedValue({ ok: true, report: failed });
+      mocks.recover.mockResolvedValue({ ok: true, report: failed });
+      render(<JourneyReportPanel lessonId="lesson" locale={locale} />);
+      const button = await screen.findByRole("button", {
+        name:
+          locale === "es"
+            ? "Revisar evaluación guardada"
+            : "Review saved evaluation",
+      });
+      expect(
+        screen.getByText(
+          locale === "es" ? /no utiliza IA adicional/ : /uses no additional AI/,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/consumo adicional/)).not.toBeInTheDocument();
+      expect(mocks.recover).not.toHaveBeenCalled();
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.recover).toHaveBeenCalledTimes(1));
+      expect(mocks.evaluate).not.toHaveBeenCalled();
+    },
+  );
   it("can leave a failed report without paying for recovery or resetting the lesson", async () => {
     const failed = report();
     failed.speaking = {

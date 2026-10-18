@@ -18,6 +18,9 @@ export const journeyReportMessages = {
       "No pudimos confirmar el resultado. Comprueba su estado o reintenta solo el guardado; no generamos otra evaluación automáticamente.",
     evaluate: "Evaluar esta conversación",
     recover: "Recuperar evaluación",
+    repair: "Revisar evaluación guardada",
+    repairDescription:
+      "Volveremos a comprobar la evaluación recibida y la conversación guardada. Esta revisión no utiliza IA adicional ni genera consumo de OpenAI.",
     recoverDescription:
       "Usaremos la conversación que ya guardaste; no necesitas repetir la lección. Puedes solicitar una recuperación. Generará una nueva evaluación con IA y consumo adicional; abrir esta pantalla no lo hace automáticamente.",
     exerciseProgress: "Tu avance hasta ahora",
@@ -104,6 +107,9 @@ export const journeyReportMessages = {
       "We could not confirm the result. Check its status or retry saving only; we do not generate another evaluation automatically.",
     evaluate: "Evaluate this conversation",
     recover: "Recover evaluation",
+    repair: "Review saved evaluation",
+    repairDescription:
+      "We will recheck the received evaluation against your saved conversation. This review uses no additional AI and creates no OpenAI usage.",
     recoverDescription:
       "We will use your saved conversation; you do not need to repeat the lesson. You can request one recovery. It creates a new AI evaluation and additional usage; opening this screen never does this automatically.",
     exerciseProgress: "Your progress so far",

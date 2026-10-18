@@ -114,6 +114,7 @@ export function JourneyReportPanel({
   const settled = report?.rewards.settlement === "SETTLED";
   const recoverable =
     report?.speaking.state === "FAILED" && report.speaking.canRetry;
+  const freeRepair = report?.speaking.canRepairWithoutAi === true;
   return (
     <div className="flex min-w-0 flex-col gap-4" aria-busy={busy}>
       {report && <JourneyFinalReport report={report} />}
@@ -124,7 +125,11 @@ export function JourneyReportPanel({
         </Body>
       )}
       {pending && <Body>{text.evaluateDescription}</Body>}
-      {recoverable && <Body>{text.recoverDescription}</Body>}
+      {recoverable && (
+        <Body>
+          {freeRepair ? text.repairDescription : text.recoverDescription}
+        </Body>
+      )}
       <div className="flex flex-wrap gap-2">
         {recoverable && !state.error && (
           <Button
@@ -132,7 +137,7 @@ export function JourneyReportPanel({
             disabled={busy}
             onClick={() => void run("recover")}
           >
-            {text.recover}
+            {freeRepair ? text.repair : text.recover}
           </Button>
         )}
         {pending && !state.error && (

@@ -383,6 +383,32 @@ export function validateJourneyJudgment(
       checkCitations(judgment.feedback.achievement.citations, "achievement");
     if (judgment.feedback.priority)
       checkCitations(judgment.feedback.priority.citations, "priority");
+    const interaction = judgment.dimensions.interaction;
+    if (
+      interaction.observation === "OBSERVED" &&
+      interaction.citations.length < 4 &&
+      !interaction.citations.some(
+        (cite) => turns.get(cite.turnId)?.role === "assistant",
+      )
+    ) {
+      // Join real interlocutor context, not a new model judgment or guessed
+      // speech. Keep every learner citation and the proposed ordinal unchanged.
+      const partner = interaction.citations.flatMap((cite) => {
+        const learner = turns.get(cite.turnId);
+        if (learner?.role !== "user" || hasUncertainJourneyRecognition(learner))
+          return [];
+        const preceding = context.turns.find(
+          (turn) =>
+            turn.role === "assistant" && turn.sequence === learner.sequence - 1,
+        );
+        return preceding ? [preceding] : [];
+      })[0];
+      if (partner)
+        interaction.citations.push({
+          turnId: partner.id,
+          quote: partner.content.slice(0, 240),
+        });
+    }
     // If a criterion depended on excluded speech, do not guess a replacement
     // ordinal. Other genuinely observed criteria and content remain usable.
     for (const key of Criteria) {
@@ -545,6 +571,15 @@ export function validateJourneyJudgment(
     (item, index, all) =>
       all.findIndex((candidate) => candidate.kind === item.kind) === index,
   );
+  if (isolateRecognition) {
+    for (const limitation of limitations) {
+      if (limitation.kind === "recognition_uncertain")
+        limitation.reason =
+          context.locale === "es"
+            ? "El reconocimiento o la interpretación de algunos turnos es incierto; no se certifica su pronunciación ni producción literal."
+            : "Some turns have uncertain recognition or interpretation; pronunciation and literal production are not certified.";
+    }
+  }
   if (
     uncertainTurns.length &&
     !limitations.some((item) => item.kind === "recognition_uncertain")
