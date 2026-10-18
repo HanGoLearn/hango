@@ -713,6 +713,7 @@ describe("Journey report integration (real disposable Postgres; mock AI only)", 
     expect(report.speaking).toEqual({
       state: "FAILED",
       canRetry: false,
+      canRepairWithoutAi: false,
       score: null,
       report: null,
       reason: "EVALUATION_FAILED",
