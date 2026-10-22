@@ -45,6 +45,7 @@ import {
   buildJourneyLessonReport,
   JOURNEY_LESSON_REPORT_VERSION,
 } from "@/lib/journey-lesson-report";
+import { unifiedView } from "../fixtures/journey-unified";
 function report(
   state: "PENDING" | "PROCESSING" | "INSUFFICIENT" = "PENDING",
   locale: "es" | "en" = "es",
@@ -71,6 +72,50 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("Journey report action boundary", () => {
+  it("evaluates an integrated lesson only on request, saves one result, and cannot award or finish it as teacher-validated", async () => {
+    const pending = report();
+    pending.unified = {
+      ...unifiedView(),
+      phase: "WAITING",
+      speakingScore: null,
+      lessonScore: null,
+    };
+    const ready = {
+      ...pending,
+      unified: unifiedView(),
+      speaking: { ...pending.speaking, state: "PARTIAL" as const },
+    };
+    mocks.read.mockResolvedValue({ ok: true, report: pending });
+    mocks.evaluate.mockResolvedValue({ ok: true, report: ready });
+    const exit = vi.fn(),
+      finish = vi.fn();
+    render(
+      <JourneyReportPanel
+        lessonId="lesson"
+        locale="es"
+        onExit={exit}
+        onContinue={finish}
+      />,
+    );
+    const button = await screen.findByRole("button", {
+      name: "Evaluar esta conversación",
+    });
+    expect(mocks.evaluate).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await screen.findByRole("group", {
+      name: "Nota provisional de la lección: 93/100",
+    });
+    expect(mocks.evaluate).toHaveBeenCalledTimes(1);
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Finalizar lección" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Volver a la ruta" }));
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(finish).not.toHaveBeenCalled();
+    expect(mocks.legacy).not.toHaveBeenCalled();
+    expect(mocks.recover).not.toHaveBeenCalled();
+  });
   it.each(["es", "en"] as const)(
     "discloses a saved-candidate review as no additional AI (%s)",
     async (locale) => {
@@ -168,7 +213,7 @@ describe("Journey report action boundary", () => {
         />
       </LessonMessagesProvider>,
     );
-    await screen.findByText("Nota global: —");
+    await screen.findByLabelText("Nota global: —");
     expect(mocks.legacy).not.toHaveBeenCalled();
     expect(mocks.evaluate).not.toHaveBeenCalled();
     expect(
@@ -235,7 +280,7 @@ describe("Journey report action boundary", () => {
     expect(mocks.save).toHaveBeenCalledExactlyOnceWith({ lessonId: "lesson" });
     expect(onContinue).not.toHaveBeenCalled();
     expect(onExit).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Nota global: —")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nota global: —")).toBeInTheDocument();
   });
   it("processing can be checked without paid dispatch and cannot finish", async () => {
     mocks.read.mockResolvedValue({ ok: true, report: report("PROCESSING") });
@@ -263,9 +308,9 @@ describe("Journey report action boundary", () => {
       .mockResolvedValue({ ok: true, report: report("INSUFFICIENT", "en") });
     const view = render(<JourneyReportPanel lessonId="old" locale="es" />);
     view.rerender(<JourneyReportPanel lessonId="new" locale="en" />);
-    await screen.findByText("Overall score: —");
+    await screen.findByLabelText("Overall score: —");
     await act(async () => resolve({ ok: true, report: report() }));
-    expect(screen.queryByText("Nota global: —")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Nota global: —")).not.toBeInTheDocument();
   });
   it("completed v2 lessons never mount legacy report generation, keep explicit redo", async () => {
     render(
@@ -280,7 +325,7 @@ describe("Journey report action boundary", () => {
         />
       </LessonMessagesProvider>,
     );
-    await screen.findByText("Nota global: —");
+    await screen.findByLabelText("Nota global: —");
     expect(mocks.legacy).not.toHaveBeenCalled();
     expect(mocks.evaluate).not.toHaveBeenCalled();
     expect(

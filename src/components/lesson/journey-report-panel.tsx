@@ -204,7 +204,13 @@ export function JourneyReportPanel({
           (state.saveConfirmed || recoverable) &&
           !state.error && (
             <div className="flex flex-col gap-2">
-              <Body>{text.partialProgressNote}</Body>
+              <Body>
+                {report.unified
+                  ? locale === "es"
+                    ? "Tu reflexión de prueba queda guardada en esta lección. Puedes volver a la ruta; esta evaluación provisional no concede recompensas."
+                    : "Your test reflection is saved in this lesson. You can return to the journey; this provisional evaluation does not grant rewards."
+                  : text.partialProgressNote}
+              </Body>
               <Button
                 type="button"
                 variant="secondary"

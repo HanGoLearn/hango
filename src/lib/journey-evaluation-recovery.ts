@@ -31,6 +31,26 @@ const RECOVERABLE_FAILURES = new Set([
   "budget_blocked",
 ]);
 
+/** Unified policy permits ONE provider dispatch. An explicit first dispatch is
+ * recoverable after a known preflight failure, never after a paid/ambiguous call. */
+export function canStartUndispatchedUnifiedEvaluation(evaluation: {
+  status: string;
+  requestCount: number;
+  failureCode: string | null;
+  report?: unknown;
+}): boolean {
+  return (
+    evaluation.status === "FAILED" &&
+    evaluation.requestCount === 0 &&
+    !evaluation.report &&
+    [
+      "structured_provider_unavailable",
+      "budget_blocked",
+      "processing_expired",
+    ].includes(evaluation.failureCode ?? "")
+  );
+}
+
 export function canRecoverJourneyEvaluation(evaluation: {
   status: string;
   requestCount: number;

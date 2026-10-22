@@ -22,6 +22,16 @@ vi.mock("@/lib/actions/ai-teacher", () => actionMocks);
 import { HanVoiceConversation } from "@/components/ai-teacher/han-voice-conversation";
 import * as turnGuard from "@/lib/speech/realtime-turn-guard";
 import {
+  JOURNEY_SESSION_AUDIO_PHASE,
+  JOURNEY_SESSION_AUDIO_VERSION,
+  JOURNEY_SESSION_AUDIO_TIMEOUT_MS,
+} from "@/lib/journey-session-audio-review";
+import { sessionAudioJudgment } from "../fixtures/journey-session-audio";
+import {
+  buildJourneySpeakingLevel,
+  type JourneyAudioLessonContext,
+} from "@/lib/journey-speaking-level";
+import {
   JOURNEY_BANK_VERSION,
   type JourneySpeakingBanks,
 } from "@/lib/content/journey-speaking-banks";
@@ -213,6 +223,8 @@ async function startJourneyRealtimeConversation(
   timed = false,
   lessonId?: string,
   captureBank?: JourneySpeakingBanks,
+  sessionAudio = false,
+  audioContext?: JourneyAudioLessonContext,
 ) {
   const appendMessage = vi.fn();
   const onComplete = vi.fn();
@@ -230,6 +242,15 @@ async function startJourneyRealtimeConversation(
           speechSpeed: 0.9,
           journeyAttemptId: "owned-attempt",
           journeySpeakingBanks: captureBank,
+          ...(sessionAudio
+            ? {
+                journeySessionAudioReview: {
+                  version: JOURNEY_SESSION_AUDIO_VERSION,
+                  locale: "es",
+                  ...(audioContext ? { context: audioContext } : {}),
+                },
+              }
+            : {}),
         }),
     } as Response);
   render(
@@ -291,6 +312,286 @@ const capturedBank: JourneySpeakingBanks = {
 };
 
 describe("Journey isolated attempt voice capture", () => {
+  it("waits for the last committed audio transcript without resuming the character or losing that turn", async () => {
+    vi.spyOn(turnGuard, "isLikelyLearnerUtterance").mockReturnValue(true);
+    const { peer, onComplete } = await startJourneyRealtimeConversation(
+      false,
+      capturedBank.lessonId,
+      capturedBank,
+      true,
+    );
+    await finishJourneyCharacterTurn(peer);
+    vi.useFakeTimers();
+    const button = screen.getByRole("button", {
+      name: "Hold to talk, then release to send",
+    });
+    fireEvent.keyDown(button, { key: " " });
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    fireEvent.keyUp(button, { key: " " });
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    expect(audioTrack.enabled).toBe(false);
+    expect(onComplete).not.toHaveBeenCalled();
+    await act(async () => {
+      peer.channel.emit({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: "last-audio",
+        transcript: "你好，我叫小明。",
+        logprobs: [{ logprob: -0.2 }],
+      });
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    const requests = peer.channel.sent.filter(
+      (event) =>
+        (event.response as { metadata?: { hango_phase?: string } })?.metadata
+          ?.hango_phase === JOURNEY_SESSION_AUDIO_PHASE,
+    );
+    expect(requests).toHaveLength(1);
+    const metadata = (requests[0]!.response as { metadata: object }).metadata;
+    await act(async () => {
+      peer.channel.emit({
+        type: "response.created",
+        response: { id: "final-review", metadata },
+      });
+      peer.channel.emit({
+        type: "response.done",
+        response: {
+          id: "final-review",
+          status: "completed",
+          output: [
+            {
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify(
+                    sessionAudioJudgment("owned-attempt", "last-audio"),
+                  ),
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0]![1].quality).toMatchObject({
+      pendingLearnerTurn: false,
+      sessionAudio: { status: "REVIEWED", totalLearnerTurns: 1 },
+    });
+    expect(onComplete.mock.calls[0]![1].capturedTurns).toHaveLength(2);
+  });
+  it("marks pending speech incomplete when the final transcript never arrives", async () => {
+    const { peer, onComplete } = await startJourneyRealtimeConversation(
+      false,
+      capturedBank.lessonId,
+      capturedBank,
+      true,
+    );
+    await finishJourneyCharacterTurn(peer);
+    vi.useFakeTimers();
+    const button = screen.getByRole("button", {
+      name: "Hold to talk, then release to send",
+    });
+    fireEvent.keyDown(button, { key: " " });
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    fireEvent.keyUp(button, { key: " " });
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    await act(async () => vi.advanceTimersByTimeAsync(2500));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0]![1].quality).toMatchObject({
+      pendingLearnerTurn: true,
+      sessionAudio: { status: "UNAVAILABLE", reason: "PENDING_TURN" },
+    });
+    expect(JSON.stringify(peer.channel.sent)).not.toContain(
+      `"hango_phase":"${JOURNEY_SESSION_AUDIO_PHASE}"`,
+    );
+  });
+  it("handles disconnection during the review immediately without a blank success or extra AI call", async () => {
+    vi.spyOn(turnGuard, "isLikelyLearnerUtterance").mockReturnValue(true);
+    const { peer, onComplete } = await startJourneyRealtimeConversation(
+      false,
+      capturedBank.lessonId,
+      capturedBank,
+      true,
+    );
+    await finishJourneyCharacterTurn(peer);
+    await act(async () =>
+      peer.channel.emit({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: "audio-disconnect",
+        transcript: "我叫小明。",
+        logprobs: [{ logprob: -0.2 }],
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    await act(async () => {
+      peer.connectionState = "failed";
+      peer.onconnectionstatechange?.();
+    });
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete.mock.calls[0]![1].quality.sessionAudio).toMatchObject({
+      reason: "CONNECTION_CLOSED",
+      judgment: null,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("reviews audio once on End, ignores cancelled character events and forwards the result in the saved diagnostics", async () => {
+    const audioContext: JourneyAudioLessonContext = {
+      contextHash: "a".repeat(64),
+      level: buildJourneySpeakingLevel(1, "BEGINNER", 350),
+      lesson: {
+        id: capturedBank.lessonId,
+        slug: capturedBank.lessonSlug,
+        title: "Saludos",
+        difficulty: "BEGINNER",
+        objective: "Saludar",
+        successConditions: ["Say your own name"],
+        coreVocabulary: ["叫"],
+        coreGrammar: [],
+      },
+    };
+    vi.spyOn(turnGuard, "isLikelyLearnerUtterance").mockReturnValue(true);
+    const { peer, onComplete, appendMessage } =
+      await startJourneyRealtimeConversation(
+        false,
+        capturedBank.lessonId,
+        capturedBank,
+        true,
+        audioContext,
+      );
+    await finishJourneyCharacterTurn(peer, "你好，你叫什么名字？");
+    await act(async () =>
+      peer.channel.emit({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: "learner-audio",
+        transcript: "你好，我叫小明。",
+        logprobs: [{ logprob: -0.2 }],
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    const request = peer.channel.sent.find(
+      (event) =>
+        (event.response as { metadata?: { hango_phase?: string } })?.metadata
+          ?.hango_phase === JOURNEY_SESSION_AUDIO_PHASE,
+    )!;
+    expect(request).toBeDefined();
+    expect(
+      (request.response as { instructions: string }).instructions,
+    ).toContain("350 points");
+    expect(
+      (request.response as { instructions: string }).instructions,
+    ).toContain("planning pauses are expected");
+    expect((request.response as { input: unknown[] }).input).toEqual([
+      { type: "item_reference", id: "learner-audio" },
+    ]);
+    expect(audioTrack.enabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    await act(async () =>
+      peer.channel.emit({
+        type: "response.done",
+        response: { id: "character", status: "cancelled" },
+      }),
+    );
+    expect(onComplete).not.toHaveBeenCalled();
+    const metadata = (request.response as { metadata: object }).metadata;
+    await act(async () => {
+      peer.channel.emit({
+        type: "response.created",
+        response: { id: "audio-review", metadata },
+      });
+      peer.channel.emit({
+        type: "response.done",
+        response: {
+          id: "audio-review",
+          status: "completed",
+          output: [
+            {
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify(
+                    sessionAudioJudgment("owned-attempt", "learner-audio"),
+                  ),
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete.mock.calls[0]![1].quality.sessionAudio).toMatchObject({
+      status: "REVIEWED",
+      attemptId: "owned-attempt",
+      contextHash: audioContext.contextHash,
+      judgment: { dimensions: { tones: { level: 3 } } },
+    });
+    expect(
+      onComplete.mock.calls[0]![0].some((turn: { content: string }) =>
+        turn.content.includes("reviewedItemIds"),
+      ),
+    ).toBe(false);
+    expect(
+      peer.channel.sent.filter(
+        (event) =>
+          (event.response as { metadata?: { hango_phase?: string } })?.metadata
+            ?.hango_phase === JOURNEY_SESSION_AUDIO_PHASE,
+      ),
+    ).toHaveLength(1);
+    expect(appendMessage).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("keeps the conversation on review timeout and never sends an automatic retry", async () => {
+    vi.spyOn(turnGuard, "isLikelyLearnerUtterance").mockReturnValue(true);
+    const { peer, onComplete } = await startJourneyRealtimeConversation(
+      false,
+      capturedBank.lessonId,
+      capturedBank,
+      true,
+    );
+    await finishJourneyCharacterTurn(peer);
+    await act(async () =>
+      peer.channel.emit({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: "learner-audio",
+        transcript: "你好，我叫小明。",
+        logprobs: [{ logprob: -0.2 }],
+      }),
+    );
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    await act(async () =>
+      vi.advanceTimersByTimeAsync(JOURNEY_SESSION_AUDIO_TIMEOUT_MS),
+    );
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0]![1].quality.sessionAudio).toMatchObject({
+      status: "TIMEOUT",
+      judgment: null,
+    });
+    expect(
+      onComplete.mock.calls[0]![1].capturedTurns.some(
+        (turn: { content: string }) => turn.content === "你好，我叫小明。",
+      ),
+    ).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("an empty audio session closes explicitly without inferring perfect pronunciation or paying for a review", async () => {
+    const { peer, onComplete } = await startJourneyRealtimeConversation(
+      false,
+      capturedBank.lessonId,
+      capturedBank,
+      true,
+    );
+    await finishJourneyCharacterTurn(peer);
+    fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete.mock.calls[0]![1].quality.sessionAudio).toMatchObject({
+      status: "UNAVAILABLE",
+      reason: "NO_AUDIO_ITEMS",
+    });
+    expect(JSON.stringify(peer.channel.sent)).not.toContain(
+      `"hango_phase":"${JOURNEY_SESSION_AUDIO_PHASE}"`,
+    );
+  });
   it("binds the handshake, preserves original STT and avoids Han history and a second silent review", async () => {
     vi.spyOn(turnGuard, "isLikelyLearnerUtterance").mockReturnValue(true);
     const { peer, appendMessage, onComplete, prepare } =

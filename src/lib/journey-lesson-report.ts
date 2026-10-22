@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { REFLECTION_WEIGHTS, starsForScore } from "@/lib/points-system";
 import type { JourneyEvaluationReport } from "@/lib/journey-speaking-evaluation";
+import type { JourneySessionAudioResult } from "@/lib/journey-session-audio-review";
+import { JOURNEY_UNIFIED_POLICY } from "@/lib/journey-unified-policy";
+import type { JourneyUnifiedView } from "@/lib/journey-unified-speaking";
 import { VOCABULARY_QUICK_TEST_PASS_THRESHOLD } from "@/lib/content/vocabulary-quiz";
 
 export const JOURNEY_LESSON_REPORT_VERSION = "journey-lesson-2026-10-11-v2";
@@ -11,6 +14,7 @@ export const JourneyReportProvenanceSchema = z
     attemptId: z.string().min(1).max(100),
     progressId: z.string().min(1).max(100),
     progressStartedAt: z.iso.datetime(),
+    evaluationPolicy: z.literal(JOURNEY_UNIFIED_POLICY).optional(),
   })
   .strict();
 export const JourneySpeakingStepResponseSchema = z
@@ -159,6 +163,8 @@ export type JourneyLessonReportView = {
   version: typeof JOURNEY_LESSON_REPORT_VERSION;
   attemptId: string;
   locale: "es" | "en";
+  /** Integrated administrator test profile, not settled learner grades. */
+  unified?: JourneyUnifiedView;
   categories: {
     vocabulary: JourneyQuizSummary;
     grammar: JourneyQuizSummary;
@@ -171,6 +177,8 @@ export type JourneyLessonReportView = {
     state: JourneySpeakingReportState;
     score: number | null;
     report: JourneyEvaluationReport | null;
+    /** Experimental client-delivered observations. Never part of reward scoring. */
+    sessionAudio?: JourneySessionAudioResult;
   };
   overall: {
     state: "COMPLETE" | "PARTIAL" | "PENDING";

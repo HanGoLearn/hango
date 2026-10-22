@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { unavailableJourneySessionAudio } from "@/lib/journey-session-audio-review";
 import { describe, expect, it } from "vitest";
 import {
   buildJourneySpeakingBanks,
@@ -59,6 +60,25 @@ const context: JourneyEvaluationContext = {
 };
 const userCitation = { turnId: "u1", quote: "我叫Arean" };
 describe("Cached Journey report validation", () => {
+  it("excludes client-delivered acoustic judgments from the textual judge and its grade", () => {
+    const audio = unavailableJourneySessionAudio("attempt", "es", "TIMEOUT", 2);
+    const input = {
+      ...context,
+      quality: {
+        pendingLearnerTurn: false,
+        interruptedAssistant: false,
+        sessionAudio: audio,
+      },
+    };
+    const prompt = buildJourneyEvaluationPrompt(input);
+    expect(prompt).not.toContain("sessionAudio");
+    expect(prompt).not.toContain("UNVERIFIED_BROWSER_REALTIME_REVIEW");
+    expect(getJourneyEvaluableContext(input).quality).toEqual({
+      pendingLearnerTurn: false,
+      interruptedAssistant: false,
+    });
+    expect(input.quality.sessionAudio).toEqual(audio);
+  });
   it("constrains generated references to this attempt and locale without weakening citation validation", () => {
     const wire = JSON.stringify(journeyJudgmentOutputSchema(context));
     expect(wire).toContain('"enum":["a1","u1","a2","u2"]');

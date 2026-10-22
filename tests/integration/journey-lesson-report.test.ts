@@ -1,4 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  JourneySessionAudioReview,
+  JOURNEY_SESSION_AUDIO_PHASE,
+} from "@/lib/journey-session-audio-review";
+import { sessionAudioJudgment } from "../fixtures/journey-session-audio";
 import { createHash } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
@@ -30,6 +35,10 @@ import type { AiCompletionRequest } from "@/lib/ai/provider";
 import type { JourneyEvaluationContext } from "@/lib/journey-speaking-evaluation";
 import { summarizeJourneyQuiz } from "@/lib/journey-lesson-report";
 import { usesJourneyLessonReport } from "@/lib/journey-report-routing";
+import { unifiedWire } from "../fixtures/journey-unified";
+import { JOURNEY_UNIFIED_POLICY } from "@/lib/journey-unified-policy";
+import { buildJourneyAudioLessonContext } from "@/lib/journey-speaking-level";
+import { experienceLimitKey } from "@/lib/ai-experiences";
 
 const { complete, provider, recompute } = vi.hoisted(() => ({
   complete: vi.fn(),
@@ -189,10 +198,19 @@ beforeEach(() => {
     complete,
   });
 });
-async function run(fill = true, locale: "es" | "en" = "es", quickMisses = 0) {
+async function run(
+  fill = true,
+  locale: "es" | "en" = "es",
+  quickMisses = 0,
+  withAudio = false,
+  administrator = false,
+) {
   const userId = (
     await db.user.create({
-      data: { email: `report-${crypto.randomUUID()}@example.test` },
+      data: {
+        email: `report-${crypto.randomUUID()}@example.test`,
+        ...(administrator ? { role: "ADMINISTRATOR" as const } : {}),
+      },
     })
   ).id;
   const progress = await db.learnerLessonProgress.create({
@@ -227,14 +245,99 @@ async function run(fill = true, locale: "es" | "en" = "es", quickMisses = 0) {
     locale,
     requestKey: crypto.randomUUID(),
   });
+  const audioReview = new JourneySessionAudioReview(
+    attempt.id,
+    locale,
+    [
+      {
+        sequence: 1,
+        itemId: "test-audio",
+        content: administrator ? "你好，我叫Ana。你叫什么名字？" : "我叫Ana。",
+      },
+    ],
+    1,
+    "test-request",
+    buildJourneyAudioLessonContext(
+      attempt.snapshot as unknown as JourneyAttemptSnapshot,
+      attempt.snapshotHash,
+    ),
+  );
+  audioReview.handle({
+    type: "response.created",
+    response: {
+      id: "test-response",
+      metadata: {
+        review_id: "test-request",
+        hango_phase: JOURNEY_SESSION_AUDIO_PHASE,
+      },
+    },
+  });
+  const judgment = sessionAudioJudgment(
+    attempt.id,
+    "test-audio",
+    1,
+    administrator ? "你好，我叫Ana。你叫什么名字？" : "我叫Ana。",
+    locale,
+  );
+  judgment.findings = [];
+  const sessionAudio = audioReview.handle({
+    type: "response.done",
+    response: {
+      id: "test-response",
+      status: "completed",
+      output: [
+        { content: [{ type: "output_text", text: JSON.stringify(judgment) }] },
+      ],
+    },
+  })!;
+  if (withAudio) {
+    const otherLocale = locale === "es" ? "en" : "es";
+    await expect(
+      sealJourneySpeakingAttempt(userId, {
+        attemptId: attempt.id,
+        lessonId,
+        closeReason: "USER_END",
+        turns: [
+          { role: "assistant", content: "你好，你叫什么名字？" },
+          {
+            role: "user",
+            content: administrator
+              ? "你好，我叫Ana。你叫什么名字？"
+              : "我叫Ana。",
+          },
+        ],
+        quality: {
+          pendingLearnerTurn: false,
+          interruptedAssistant: false,
+          sessionAudio: {
+            ...sessionAudio,
+            locale: otherLocale,
+            judgment: { ...sessionAudio.judgment!, locale: otherLocale },
+          },
+        },
+      }),
+    ).rejects.toThrow("locale mismatch");
+  }
   await sealJourneySpeakingAttempt(userId, {
     attemptId: attempt.id,
     lessonId,
     closeReason: "USER_END",
     turns: [
       { role: "assistant", content: "你好，你叫什么名字？" },
-      { role: "user", content: "我叫Ana。" },
+      {
+        role: "user",
+        content: administrator ? "你好，我叫Ana。你叫什么名字？" : "我叫Ana。",
+      },
     ],
+    ...(withAudio
+      ? {
+          quality: {
+            pendingLearnerTurn: false,
+            interruptedAssistant: false,
+            sessionAudio,
+          },
+        }
+      : {}),
   });
   return { userId, attemptId: attempt.id, progress };
 }
@@ -261,6 +364,283 @@ async function prepareFinalStep(userId: string) {
 }
 
 describe("Journey report integration (real disposable Postgres; mock AI only)", () => {
+  it("rechecks the user's AI budget during explicit zero-dispatch recovery", async () => {
+    const capture = await run(true, "es", 0, true, true);
+    await select(capture);
+    const key = {
+      userId: capture.userId,
+      feature: experienceLimitKey("LESSON_REFLECTION"),
+    };
+    await db.aiUsageUserCap.create({ data: { ...key, dailyLimitUsd: 0 } });
+    await evaluateJourneyLessonReport(capture.userId, lessonId);
+    await evaluateJourneyLessonReport(capture.userId, lessonId, {
+      recoverFailed: true,
+    });
+    expect(complete).not.toHaveBeenCalled();
+    expect(
+      await db.journeySpeakingEvaluation.findUniqueOrThrow({
+        where: { attemptId: capture.attemptId },
+      }),
+    ).toMatchObject({
+      status: "FAILED",
+      requestCount: 0,
+      failureCode: "budget_blocked",
+    });
+    await db.aiUsageUserCap.update({
+      where: { userId_feature: key },
+      data: { dailyLimitUsd: 1 },
+    });
+    complete.mockImplementation(async (request: AiCompletionRequest) => ({
+      content: JSON.stringify(unifiedWire(request.messages[0]!.content)),
+      provider: "openai",
+      model: "gpt-5-mini",
+      inputTokens: 1000,
+      outputTokens: 300,
+      outputStatus: "complete",
+    }));
+    await evaluateJourneyLessonReport(capture.userId, lessonId, {
+      recoverFailed: true,
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(
+      (await getJourneyLessonReport(capture.userId, lessonId)).unified?.phase,
+    ).toBe("READY");
+  });
+  it("recovers a preflight failure with exactly one explicit first dispatch, no refresh purchase and no second paid request", async () => {
+    const capture = await run(true, "es", 0, true, true);
+    await select(capture);
+    provider.mockReturnValue({
+      name: "mock",
+      supportsStructuredOutput: false,
+      complete,
+    });
+    const failed = await evaluateJourneyLessonReport(capture.userId, lessonId);
+    expect(failed.speaking).toMatchObject({
+      canRetry: true,
+      canRepairWithoutAi: false,
+    });
+    expect(
+      await db.journeySpeakingEvaluation.findUniqueOrThrow({
+        where: { attemptId: capture.attemptId },
+      }),
+    ).toMatchObject({
+      status: "FAILED",
+      requestCount: 0,
+      report: null,
+      failureCode: "structured_provider_unavailable",
+    });
+    provider.mockReturnValue({
+      name: "openai",
+      supportsStructuredOutput: true,
+      complete,
+    });
+    complete.mockImplementation(async (request: AiCompletionRequest) => ({
+      content: JSON.stringify(unifiedWire(request.messages[0]!.content)),
+      provider: "openai",
+      model: "gpt-5-mini",
+      inputTokens: 1000,
+      outputTokens: 300,
+      outputStatus: "complete",
+    }));
+    await getJourneyLessonReport(capture.userId, lessonId);
+    await persistJourneyLessonReport(capture.userId, lessonId);
+    await evaluateJourneyLessonReport(capture.userId, lessonId);
+    expect(complete).not.toHaveBeenCalled();
+    await Promise.all([
+      evaluateJourneyLessonReport(capture.userId, lessonId, {
+        recoverFailed: true,
+      }),
+      evaluateJourneyLessonReport(capture.userId, lessonId, {
+        recoverFailed: true,
+      }),
+    ]);
+    expect(complete).toHaveBeenCalledTimes(1);
+    const reopened = await getJourneyLessonReport(capture.userId, lessonId);
+    expect(reopened.unified).toMatchObject({
+      phase: "READY",
+      speakingScore: 75,
+      level: { lessonLevel: 1, generalLevel: 0, generalPoints: 0 },
+    });
+    await evaluateJourneyLessonReport(capture.userId, lessonId, {
+      recoverFailed: true,
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+  it.each(["es", "en"] as const)(
+    "joins the calibrator, saved audio, six variables and exercises in the REAL admin lesson lifecycle (%s)",
+    async (locale) => {
+      const capture = await run(true, locale, 0, true, true);
+      await select(capture);
+      const stored = await getJourneySpeakingAttempt(
+        capture.userId,
+        capture.attemptId,
+        lessonId,
+      );
+      expect(
+        (stored.snapshot as unknown as JourneyAttemptSnapshot).evaluationPolicy,
+      ).toBe(JOURNEY_UNIFIED_POLICY);
+      const before = await getJourneyLessonReport(capture.userId, lessonId);
+      expect(before.unified).toMatchObject({
+        phase: "WAITING",
+        speakingScore: null,
+        lessonScore: null,
+      });
+      expect(complete).not.toHaveBeenCalled();
+      complete.mockImplementation(async (request: AiCompletionRequest) => ({
+        content: JSON.stringify(unifiedWire(request.messages[0]!.content)),
+        provider: "openai",
+        model: "gpt-5-mini",
+        inputTokens: 1000,
+        outputTokens: 300,
+        outputStatus: "complete",
+      }));
+      await Promise.all([
+        evaluateJourneyLessonReport(capture.userId, lessonId),
+        evaluateJourneyLessonReport(capture.userId, lessonId),
+      ]);
+      const evaluated = await getJourneyLessonReport(capture.userId, lessonId);
+      expect(evaluated.unified).toMatchObject({
+        phase: "READY",
+        speakingScore: 75,
+        lessonScore: 93,
+        eligibleForRewards: false,
+      });
+      expect(evaluated.speaking.score).toBeNull();
+      expect(evaluated.rewards.eligible).toBe(false);
+      expect(complete).toHaveBeenCalledTimes(1);
+      const request = complete.mock.calls[0]![0] as AiCompletionRequest;
+      expect(request.structuredOutput!.name).toBe("journey_evidence_selection");
+      expect(request.messages[0]!.content).not.toContain("sessionAudio");
+      const saved = await persistJourneyLessonReport(capture.userId, lessonId);
+      const reopened = await getJourneyLessonReport(capture.userId, lessonId);
+      expect(reopened.unified).toEqual(saved.unified);
+      await evaluateJourneyLessonReport(capture.userId, lessonId, {
+        recoverFailed: true,
+      });
+      expect(complete).toHaveBeenCalledTimes(1);
+      const evaluation = await db.journeySpeakingEvaluation.findUniqueOrThrow({
+        where: { attemptId: capture.attemptId },
+      });
+      expect(evaluation).toMatchObject({
+        status: "PARTIAL",
+        score: null,
+        requestCount: 1,
+      });
+      expect(evaluation.report).toMatchObject({
+        kind: "journey_unified_review",
+        version: JOURNEY_UNIFIED_POLICY,
+      });
+      expect(
+        await db.aiUsageLog.count({
+          where: { userId: capture.userId, feature: "lesson-reflection" },
+        }),
+      ).toBe(1);
+      expect(
+        await db.coinLedgerEntry.count({ where: { userId: capture.userId } }),
+      ).toBe(0);
+      expect(
+        await db.progressEvidence.count({
+          where: { userId: capture.userId, source: "SPEAKING" },
+        }),
+      ).toBe(0);
+      expect(recompute).not.toHaveBeenCalled();
+      await expect(
+        getJourneyLessonReport("another-owner", lessonId),
+      ).rejects.toThrow();
+      expect(
+        (
+          await getJourneySpeakingAttempt(
+            capture.userId,
+            capture.attemptId,
+            lessonId,
+          )
+        ).captureHash,
+      ).toBe(stored.captureHash);
+    },
+  );
+  it("retains rejected integrated output privately and rechecks without repurchasing a response or erasing exercise grades", async () => {
+    const capture = await run(true, "es", 0, true, true);
+    await select(capture);
+    complete.mockResolvedValue({
+      content: "private incomplete output",
+      provider: "openai",
+      model: "gpt-5-mini",
+      inputTokens: 1000,
+      outputTokens: 100,
+      outputStatus: "incomplete",
+    });
+    const failed = await evaluateJourneyLessonReport(capture.userId, lessonId);
+    expect(failed.unified).toMatchObject({
+      phase: "FAILED",
+      speakingScore: null,
+    });
+    expect(failed.categories.vocabulary.score).toBe(100);
+    expect(failed.speaking.canRepairWithoutAi).toBe(true);
+    expect(JSON.stringify(failed)).not.toContain("private incomplete output");
+    await evaluateJourneyLessonReport(capture.userId, lessonId, {
+      recoverFailed: true,
+    });
+    const reopened = await persistJourneyLessonReport(capture.userId, lessonId);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(reopened.unified!.phase).toBe("FAILED");
+    const evaluation = await db.journeySpeakingEvaluation.findUniqueOrThrow({
+      where: { attemptId: capture.attemptId },
+    });
+    expect(evaluation.report).toMatchObject({
+      response: { text: "private incomplete output", status: "incomplete" },
+    });
+    expect(evaluation.requestCount).toBe(1);
+  });
+  it("retains the experimental audio review across seal, JSONB integrity, evaluation, save and reopen without another provider call", async () => {
+    const capture = await run(true, "es", 0, true);
+    await select(capture);
+    const stored = await getJourneySpeakingAttempt(
+      capture.userId,
+      capture.attemptId,
+      lessonId,
+    );
+    const before = await getJourneyLessonReport(capture.userId, lessonId);
+    expect(before.speaking.sessionAudio).toMatchObject({
+      status: "REVIEWED",
+      attemptId: capture.attemptId,
+      judgment: { dimensions: { tones: { level: 3 } } },
+    });
+    expect(complete).not.toHaveBeenCalled();
+    const evaluated = await evaluateJourneyLessonReport(
+      capture.userId,
+      lessonId,
+    );
+    expect(evaluated.speaking.score).toBe(75);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete.mock.calls[0]![0].systemPrompt).not.toContain(
+      "UNVERIFIED_BROWSER_REALTIME_REVIEW",
+    );
+    expect(complete.mock.calls[0]![0].systemPrompt).not.toContain(
+      "sessionAudio",
+    );
+    await db.learnerProfile.create({
+      data: { userId: capture.userId, displayName: "Audio test learner" },
+    });
+    await persistJourneyLessonReport(capture.userId, lessonId);
+    const reopened = await getJourneyLessonReport(capture.userId, lessonId);
+    expect(reopened.speaking.sessionAudio).toEqual(
+      before.speaking.sessionAudio,
+    );
+    expect(reopened.speaking.score).toBe(75);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        await getJourneySpeakingAttempt(
+          capture.userId,
+          capture.attemptId,
+          lessonId,
+        )
+      ).captureHash,
+    ).toBe(stored.captureHash);
+    await expect(
+      getJourneySpeakingAttempt("different-owner", capture.attemptId, lessonId),
+    ).rejects.toThrow("Attempt unavailable");
+  });
   it("a passing quick test keeps wrong answers and never invents remedial missing questions", async () => {
     const capture = await run(true, "es", 1);
     await select(capture);

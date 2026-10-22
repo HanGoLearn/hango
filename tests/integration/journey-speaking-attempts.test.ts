@@ -5,6 +5,7 @@ import {
   sealJourneySpeakingAttempt,
   startJourneySpeakingAttempt,
 } from "@/lib/journey-speaking-attempts";
+import { getJourneyRealtimeBinding } from "@/lib/journey-speaking-realtime-binding";
 
 const destination = new URL(process.env.DATABASE_URL ?? "http://missing");
 if (
@@ -42,6 +43,60 @@ beforeAll(async () => {
   ).id;
 });
 describe("Journey independent sealed attempts (disposable Postgres)", () => {
+  it("freezes earned General Level for the lesson and never takes points from the browser or changes old attempts on reopen", async () => {
+    const user = await db.user.create({
+      data: {
+        email: `level-${crypto.randomUUID()}@example.test`,
+        learnerProfile: { create: { generalLevelPoints: 350 } },
+      },
+    });
+    const request = { lessonId, requestKey: crypto.randomUUID(), locale: "es" };
+    const first = await startJourneySpeakingAttempt(user.id, request);
+    expect(first.snapshot).toMatchObject({
+      speakingLevel: {
+        generalPoints: 350,
+        generalLevel: 2,
+        lessonLevel: 1,
+        entryLevel: 1,
+        stretchLevel: 2,
+      },
+    });
+    await db.learnerProfile.update({
+      where: { userId: user.id },
+      data: { generalLevelPoints: 1800 },
+    });
+    const replay = await startJourneySpeakingAttempt(user.id, request);
+    expect(replay.snapshotHash).toBe(first.snapshotHash);
+    const binding = await getJourneyRealtimeBinding(
+      user.id,
+      first.id,
+      lessonId,
+    );
+    expect(binding.audioContext).toMatchObject({
+      contextHash: first.snapshotHash,
+      level: { generalPoints: 350 },
+    });
+    expect(binding.rolePlay.journeyLevel?.generalPoints).toBe(350);
+    const next = await startJourneySpeakingAttempt(user.id, {
+      ...request,
+      requestKey: crypto.randomUUID(),
+    });
+    expect(next.snapshot).toMatchObject({
+      speakingLevel: {
+        generalPoints: 1800,
+        generalLevel: 8,
+        lessonLevel: 1,
+        stretchLevel: 2,
+      },
+    });
+    await expect(
+      startJourneySpeakingAttempt(user.id, {
+        ...request,
+        requestKey: crypto.randomUUID(),
+        generalPoints: 9999,
+      }),
+    ).rejects.toThrow();
+  });
   it("scopes idempotency to owner, freezes server banks and does not write Tutor chat or progress", async () => {
     const requestKey = crypto.randomUUID();
     const before = await db.learnerLessonProgress.count({ where: { userId } });

@@ -2,6 +2,461 @@
 
 Status: Active
 
+## Publicación autorizada de Speaking — 22/10/2026
+
+- [x] Usuario solicita actualizar Vercel para probar. Rama separada y destino
+  GitHub/Vercel contrastados; ninguna migración, borrado de cuentas ni nueva IA
+  forma parte de esta publicación. Credenciales/exports privados excluidos.
+- [x] Alerta nueva de Vite detectada antes de publicar y corregida con parche
+  compatible 8.3.5. Auditoría runtime cero; excepción braces existente sin ampliar.
+- [ ] Completar verificaciones finales, PR/CI y despliegue productivo; comprobar
+  alias/salud/lección y dejar instrucciones de un intento nuevo para el admin.
+  Ver `speaking-quality/release-2026-10-22.md`.
+
+## Speaking — tres P1 y nivel por experiencia, 22/10/2026
+
+- [x] Contexto de nivel propio por intento, congelado en servidor con los puntos
+  existentes de General Level y el nivel curricular. Misma referencia para
+  conversación, juez textual y acústico; anclas acústicas por etapa y huella del
+  snapshot. La reflexión nueva muestra nivel/puntos al iniciar; históricos no se
+  recalifican. La experiencia adapta apoyo/extensión acotada, no certifica HSK.
+- [x] Recuperación explícita del primer despacho cuando FAILED/requestCount=0,
+  sin respuesta guardada y por fallo conocido de preflight. Propiedad, versión,
+  presupuesto y lease se vuelven a comprobar. Reabrir no compra; tras un despacho
+  unificado no se compra otro. Respuesta guardada solo admite revisión offline.
+- [x] EVIDENCE_MISMATCH se aplica también a cobertura, dimensiones y nota de Han:
+  no elogiar ni contar el objetivo inválido, no penalizar al alumno por el juez.
+  Original privado conservado; audio/ejercicios válidos no se borran.
+- [x] QA previo al ajuste final de instrucciones: 2.112/2.112 unitarias/componentes
+  en 173 archivos y 40/40 integraciones en tres archivos sobre base desechable
+  retirada. Tipos y lint dirigido correctos. Sin IA pagada ni bases reales.
+- [x] QA final: 143/143 pruebas dirigidas tras la separación de instrucciones,
+  40/40 integraciones repetidas con base desechable retirada, tipos, lint,
+  formato y diff correctos. Compilación aislada de 73 páginas completada, sin
+  conexión real ni claves de IA. No se publicó ni consumió OpenAI.
+- [ ] Prueba real, calibración docente, P2 de la auditoría y publicación autorizada
+  siguen pendientes; no declarar que estos cambios ya están en Vercel.
+  Detalle: `speaking-quality/fixes-and-progression-2026-10-22.md`.
+
+## Speaking — unión en la reflexión real, 21/10/2026
+
+- [x] Solicitud explícita: unir calibrador, audio y reflexión, no mantenerlos como
+  pantallas independientes. Nuevos intentos ADMINISTRATOR congelan la política
+  `journey-unified-2026-10-21-v1`; ni alumnos ni intentos históricos se cambian
+  silenciosamente. Captura v2 compatible, sin nueva migración.
+- [x] El único juez textual del cierre usa el transporte de evidencia/calibrador
+  ya desarrollado. Se reemplaza la solicitud anterior en estos intentos, no se
+  suma otra evaluación/nota de Han. Salida pagada se conserva antes de inspección;
+  fallo, reapertura, guardado y revisión offline no compran otra respuesta.
+- [x] Un resultado integrado ES/EN: comunicación, vocabulario, gramática,
+  pronunciación/tonos, interacción/autonomía y fluidez; pesos propuestos del plan
+  20/15/20/25/10/10. Nota provisional de Speaking y de lección (20/20/30/30),
+  evidencias, notas de ejercicios, logros, correcciones con pinyin y siguiente paso.
+  No se duplican correcciones ni se genera otra narrativa libre de Han.
+- [x] Falta de audio/dimensión/captura coherente bloquea la nota integral, sin
+  inventar cero ni redistribuir pesos. Evidencia de acto contradictoria retiene
+  nota/logro; un máximo exige objetivos prioritarios confirmados. Texto no mide
+  tonos: acústica se lee de la revisión experimental de la sesión propia.
+- [x] La nota de prueba se identifica expresamente como NO calibrada; audio sigue
+  entregado por navegador, no autenticado independientemente. No se usa para GP,
+  HanCoins, estrellas ni finalización premiada. Se conserva el contrato docente
+  HOLD/score=null del candidato, no se falsifica una aprobación pedagógica.
+- [x] QA técnico: 2.089/2.089 unitarias/componentes en 172 archivos;
+  37/37 integraciones en tres archivos contra Postgres desechable (retirado),
+  incluidos cierre/juicio/guardado/reapertura ES/EN, petición única concurrente,
+  salida rechazada conservada sin nuevo pago y ausencia de recompensas. Tipos,
+  lint dirigido, formato y diff pasan. Build aislado completo: 73 páginas, sin
+  claves de IA/conexión real. Detalle en
+  `speaking-quality/unified-reflection-2026-10-21.md`.
+- [ ] Ensayo real acotado de proveedor/audio, revisión docente/autenticidad,
+  aceptación visual/móvil y publicación autorizada siguen pendientes. No pedir
+  otra lección en Vercel como si este lote ya estuviera publicado. No hubo IA
+  pagada, borrado de usuarios ni cambios en bases reales durante esta integración.
+
+## Speaking — reconexión experimental del audio, 21/10/2026
+
+- [x] Usuario exige comprobar el recorrido completo. Corregida la omisión del
+  cierre Journey: revisión silenciosa del audio en la misma sesión para intentos
+  vinculados por servidor, sin usar historial de Han burbuja/Companion/Lab.
+- [x] Contrato versionado, correlación por response ID/metadata, silencio y micro
+  apagado al terminar, espera acotada del último turno, una revisión máxima,
+  límites de salida/muestra y estados explícitos ante ausencia, fallo o timeout.
+- [x] Observaciones provisionales de tonos/articulación/ritmo, citas originales,
+  pinyin y práctica; resultado privado persistido en JSON de captura existente,
+  hash/autoría/relectura comprobables y bloque final ES/EN. Reabrir no llama IA.
+- [x] Procedencia marcada como entrega de navegador no verificada; no afecta a
+  notas, recompensas o General Level, ni entra al juez textual. La cabecera
+  advierte que la nota vigente no es oral integral. Aviso previo de consumo extra;
+  US$0,05 sigue siendo estimación, no coste real/techo garantizado.
+- [x] QA: 2.071/2.071 unitarias/componentes en 171 archivos antes del último
+  ajuste; 129/129 dirigidas finales, incluidas conservación acotada del borrador
+  rechazado para diagnóstico offline, sin mostrarlo como feedback ni pedir otro
+  pago. 34/34 integraciones en tres archivos contra Postgres desechable, incluida
+  persistencia/JSONB/hash/reapertura y rechazo de locale ajeno. Build aislado de
+  73 páginas correcto sin claves de IA/base real antes del ajuste acotado final;
+  lint/formato/diff pasan. Bases temporales retiradas, sin tocar cuentas reales.
+- [ ] Prueba real con audio/proveedor y presupuesto acordado, procedencia de
+  servidor para puntuar, gramática/vocabulario separados, fórmula integral,
+  calibración y aceptación móvil/Vercel pendientes. **No está terminada ni
+  publicada la evaluación TOTAL solicitada.** No pedir otra lección como si lo
+  estuviera. Sin llamadas pagadas, datos reales borrados ni despliegue en este lote.
+  Ver `speaking-quality/session-audio-reconnection-2026-10-21.md`.
+
+## Propuesta de calidad de Speaking y reflexión — 18 de octubre de 2026
+
+- [x] Plan solicitado documentado en `speaking-evaluation-quality-plan-2026-10-18.md`:
+  auditoría, matriz por lección, evidencia acústica, calibración docente, feedback,
+  rediseño visual, integración y piloto. Diagnóstico de código realizado sin IA pagada.
+- [x] Usuario autoriza comenzar la primera fase: auditoría y matriz piloto.
+  Las demás entregas siguen pendientes; no se autoriza consumo pagado por este paso.
+- [ ] Ejecutar entregas con aceptación técnica, pedagógica y visual diferenciadas.
+  Revisión humana, audio adicional y presupuesto pendientes de definir; no declarar
+  medición de tonos ni evaluación integral calibrada antes de comprobarlas.
+- Restricciones: no reevaluar notas históricas, publicar, borrar datos o consumir IA
+  adicional por la creación del plan. Han burbuja/Companion/Speaking Lab independientes.
+
+## Calidad Speaking — entrega 1 local, 18 de octubre de 2026
+
+- [x] Auditoría del recorrido captura → juicio → nota → General Level y límites
+  de medición documentada en `speaking-quality/phase-1/README.md`.
+- [x] Matriz editorial de Saludos/presentaciones, Entrar/pedir y Revisión de
+  condiciones del contrato; contenidos contrastados con el inventario local.
+  164/164 planes disponibles, sin core faltante en esa instantánea; no certifica
+  calibración pedagógica ni coincidencia actual con la base de Vercel.
+- [x] Rúbrica editorial de seis dimensiones con anclas 0–4, ayudas, oportunidades,
+  límites de audio y reglas de coherencia, sin activación productiva.
+- [x] 17 pruebas nuevas: seis brechas semánticas reproducidas, controles existentes
+  conservados y matriz verificada. Lote dirigido: 80/80. Suite unitaria completa:
+  1.459/1.459 en 115 archivos; tipos y lint dirigido pasan. Sin DB ni proveedores.
+- [ ] Calibración estadística/estabilidad con juicios reales y revisión docente:
+  pendiente de muestra, audio y condiciones autorizadas. No confundir candidatos
+  ficticios con frecuencia real de 100 o error observado del modelo.
+- [ ] Implementar el nuevo evaluador, captura acústica y rediseño en sus entregas;
+  no cambian todavía notas, prompts, UI, recompensas o producción.
+
+## Calidad Speaking — viabilidad acústica, 18 de octubre de 2026
+
+- [x] Continuación solicitada: estudio de revisión en sesión frente a audio privado
+  por intervención. Documento `speaking-quality/phase-2-audio-feasibility.md`.
+- [x] Prototipo aislado `journey-speaking-acoustic-candidate.ts`: liga turno/audio,
+  acota segmentos y candidatos, bloquea fuentes insuficientes y siempre deja
+  `score=null`, no elegible para calificación. No invoca ni almacena audio.
+- [x] 27 pruebas nuevas; lote dirigido 86/86 y suite unitaria completa
+  1.486/1.486 en 116 archivos. Tipos, lint dirigido y formato pasan. Solo el test
+  importa el prototipo; no cambia ningún flujo de aplicación ni nota en Vercel.
+- [ ] Captura nueva, conexión con analizador y corpus humano: aún no activados;
+  requieren condiciones de privacidad, presupuesto y revisión por definir.
+- [ ] Comparación real de precisión/coste/latencia y compatibilidad de dispositivos;
+  pruebas sintéticas de metadatos no certifican detección tonal ni calidad docente.
+
+## Calidad Speaking — candidato lingüístico, 18 de octubre de 2026
+
+- [x] Continuación solicitada: contrato versionado independiente de seis dimensiones,
+  separación léxico/gramática, objetivos con evidencia y cobertura explícita.
+- [x] Controles de máximos frente a errores/ayuda, transferencia posterior,
+  autocorrección y prioridades resueltas. Perfil parcial conserva evidencias sin
+  convertirlas en cero. Etiquetas ES/EN del servidor; sin nota global ni premios.
+- [x] Documento `speaking-quality/phase-3-quality-candidate.md` registra qué brechas
+  se controlan y cuáles requieren todavía juicio/calibración. No hay proveedor nuevo,
+  llamadas pagadas, migración, activación de app ni cambio de notas en Vercel.
+- [x] 34 pruebas nuevas del candidato; suite unitaria completa 1.520/1.520 en
+  117 archivos. Tipos, lint dirigido y formato pasan. Solo su prueba importa
+  el módulo nuevo; el evaluador activo conserva versión y comportamiento.
+- [ ] Calibración humana/estabilidad y evidencia acústica siguen pendientes;
+  no anunciar mejora de precisión del modelo por aprobar pruebas sintéticas.
+
+## Calidad Speaking — propuesta visual local, 18 de octubre de 2026
+
+- [x] `/es/reflection-design` y EN: propuesta independiente solo en development,
+  seis variables, resultados de ejercicios, logros, nota específica de Han,
+  correcciones con pinyin/traducción y próximo intento. Tres casos ficticios;
+  sin audio evaluado no se inventa nota global ni error tonal.
+- [x] Navegador local ES/EN, temas claro/oscuro y anchos 320/390/768/1440;
+  sin desbordamiento horizontal observado. No sustituye prueba en móvil real.
+  1.752 pruebas completas pasan antes del último ajuste; 16 dirigidas pasan
+  después. Tipos/lint/formato pasan. Documento `speaking-quality/phase-5-reflection-design.md`.
+- [x] Usuario aprueba el diseño y solicita aplicarlo. Integrado en
+  `JourneyFinalReport`, utilizado por el cierre y la reapertura de lecciones v2.
+  Conserva datos/estados/acciones de `JourneyReportPanel`: no añade llamadas,
+  cambios de nota o recompensas. Cuatro criterios reales con aportes y evidencia;
+  uso del idioma no se divide artificialmente, audio/fluidez sin evaluar.
+- [x] Integración: 1.757 pruebas unitarias/componentes en 156 archivos pasan;
+  lint dirigido y tipos pasan. Navegador local: componente real con fixture
+  identificado, escritorio y ancho 390 sin desbordamiento observado. No prueba
+  de voz pagada ni build/publicación en este bloque.
+- [ ] Calibración humana/audio, separación de vocabulario/gramática en el juicio
+  e integración de medición acústica siguen pendientes. No se cambia el
+  evaluador activo ni se publica Vercel con esta aprobación visual.
+
+## Calidad Speaking — adaptador del contexto, 18 de octubre de 2026
+
+- [x] Función pura `journey-speaking-quality-context.ts`: convierte snapshot y
+  captura del mismo intento en recursos separados y citas originales. Sin cuota
+  automática de palabras, exposición confundida con dominio, mezcla de lecciones
+  o sustitución del texto reconocido. Fallos de captura no pasan como completos.
+- [x] 21 pruebas nuevas y lote dirigido 72/72 pasan; tipos/lint dirigido pasan.
+  Regresión unitaria completa: 1.550/1.550 en 120 archivos.
+  Recorrido adaptador → inspector ficticio conserva nota nula y sin recompensas.
+  Documento `speaking-quality/phase-3-context-adapter.md`.
+- [ ] Activación real del candidato/calibración/audio pendientes. Solo se usa en
+  pruebas; no recalcula historia ni llama proveedores, cambia datos o Vercel.
+
+## Calidad Speaking — preparación del juicio, 18 de octubre de 2026
+
+- [x] `journey-speaking-quality-review.ts`: instrucciones/rúbrica, mensaje de datos
+  separado y esquema derivado del validador. Recepción distingue completa,
+  incompleta, rechazo y candidato inconsistente, sin reparar niveles ni reintentar.
+- [x] Recursos con significados, dificultad contextual y citas originales; turnos
+  dudosos no se envían como producción. Sin respuestas/notas de ejercicios,
+  calificación acústica o nota global. No SDK, modelo nuevo, red o persistencia.
+- [x] 19 pruebas nuevas; lote dirigido 74/74 y unitarias 1.569/1.569 en 121
+  archivos pasan. Tipos/lint dirigido pasan. OpenAI Docs consultado; detalle en
+  `speaking-quality/phase-3-review-request.md`. Solo su test usa este módulo.
+- [ ] Generación pagada real, almacenamiento versionado, calibración humana,
+  medición acústica y activación siguen pendientes. Sin cambios de notas o Vercel.
+
+## Calidad Speaking — servicio local de proveedor, 18 de octubre de 2026
+
+- [x] Servicio server-only manual, administrador/intentos propios, tres lecciones
+  piloto y captura sellada verificada por lector existente. Flag nuevo off por
+  defecto; production/test siempre bloqueados. Sin botón/ruta/action aún.
+- [x] Proveedor existente, formato candidato, retry=false y límites/contabilidad
+  lesson-reflection/LESSON_REFLECTION. Candidato guardado privado antes de validar;
+  ledger local excluido de Git, reclamación exclusiva y sin reenvío ante fallo.
+- [x] 22 pruebas dirigidas pasan, con proveedor/auth/DB simulados y temporales
+  privados de test. Documento `speaking-quality/phase-3-local-provider-service.md`.
+  Regresión completa 1.819/1.819 en 160 archivos; tipos/lint dirigido pasan.
+- [ ] Ninguna ejecución pagada o activación realizada. Interfaz privada, presupuesto,
+  calibración/audio y almacenamiento productivo pendientes. No toca notas/premios,
+  evaluador real o Vercel. No declarar listo para probar voz por este servicio solo.
+
+## Calidad Speaking — pantalla privada de lectura, 18 de octubre de 2026
+
+- [x] Usuario solicita pantalla y limitar intentos pagados: ruta local
+  `/admin/speaking-quality`, enlace solo en admin de desarrollo, autorización
+  del propietario y selección acotada de sus intentos piloto. Producción 404.
+- [x] Conversación original, criterio/apoyo/citas, correcciones, estado y consumo
+  registrado; revisión local del candidato guardado con procedencia verificada.
+  No importa el despacho de IA ni tiene formulario/botón de pago. Sin generación,
+  notas/recompensas modificadas o flag activado.
+- [x] Navegador localhost autenticado y revisión escritorio/ancho 390: sin
+  desbordamiento de página observado. La selección local está vacía; no sustituir
+  por datos de Vercel ni ejemplos sin identificar. Tests de datos/ruta/componente,
+  incluidos candidato ficticio y accesibilidad; tipos pasan.
+- [x] Regresión 1.839/1.839 pruebas en 163 archivos; tipos, lint dirigido y
+  diff pasan. Cero llamadas pagadas. Sin build ni publicación en este bloque.
+- [ ] Probar un único intento real solo con presupuesto/autorización específicos;
+  sin lote pagado automático. Calibración/audio y despliegue permanecen pendientes.
+  Documento `speaking-quality/phase-3-private-review-screen.md`.
+
+## Calidad Speaking — preparación del intento de Vercel, 18 de octubre de 2026
+
+- [x] Usuario autoriza preparar una prueba con su conversación guardada en Vercel;
+  todavía sin ejecutar consumo. Studio de HanGo Producción permite lectura con
+  sesión existente: no se crea acceso nuevo ni se reutiliza conexión revocada.
+- [x] SELECT acotados: único intento propio de la primera lección, 13 turnos,
+  nota original 100 y requestCount 4. Snapshot/captura verificados por hashes.
+  Artefactos privados fuera de Git, sin importarlos en la base de localhost.
+- [x] Preflight offline real preparado; una intervención dudosa omitida. Nueva
+  utilidad y script sin DB/proveedor. Lote dirigido 49/49, tipos/lint pasan.
+  Cero llamadas IA o escrituras de base, sin cambio de notas/premios o despliegue.
+- [x] Autorizado presupuesto máximo US$0.05 y ejecutado un único despacho
+  manual, sin reintentos: 3.052 tokens entrada/2.532 salida, coste calculado
+  US$0.005827. Ledger exclusivo y respuesta privada conservada antes del
+  registro local de consumo/validación. Producción, nota y premios intactos.
+- [x] Candidato rechazado, no publicado: WORD_NOT_PRODUCED en una evidencia
+  de vocabulario y MISSING_INTERLOCUTOR_CONTEXT en interacción. No reparar
+  citas/niveles ni volver a comprar otro juicio automáticamente. Revisión
+  pedagógica offline detecta además apoyo confundido con seguimiento normal
+  y posible atribución de un error a un objetivo léxico distinto.
+- [x] Revisión offline de objetivo/cita/corrección y ayuda: prompt v2 distingue
+  asistencia pedagógica de preguntas normales y explicita alineación de recursos,
+  elipsis, correcciones fieles e idioma. Inspector v2 bloquea error léxico ajeno,
+  ayuda sin evidencia previa, contexto no contiguo y dimensiones con citas ajenas
+  a sus hallazgos. Contrato/clave de despacho conservados, no nuevo pago.
+- [x] Respuesta real reinspeccionada sin modificarla ni reparar niveles/citas:
+  siete incidencias (dos previas más cinco nuevas). Artefacto privado versionado
+  y ligado por hash; cero llamadas IA/escrituras de base/cambios de nota.
+  136 pruebas dirigidas y regresión 1.866/1.866 en 165 archivos pasan;
+  tipos/lint pasan. Sin build/publicación. Ver
+  `speaking-quality/offline-evidence-hardening-2026-10-18.md`.
+- [ ] Calidad semántica/precisión del prompt revisado, medición acústica y
+  comparación humana siguen pendientes. Tests no prueban que el proveedor
+  distinga bien toda ayuda, elipsis o error; no activar ni publicar por este paso.
+  Detalle `speaking-quality/production-single-review-preparation.md`.
+
+## Calidad Speaking — segunda prueba explícitamente autorizada, 18/10/2026
+
+- [x] Usuario confirma UNA evaluación adicional con prompt corregido, máximo
+  US$0.05 y sin reintentos. Autorización nominal independiente: conserva claim,
+  respuesta y rechazo del primer despacho; exige predecesor rechazado completo,
+  mismos datos/esquema y prompt v2. Repetir cualquiera de los modos no paga otra
+  vez. No nueva autorización inferida de cambiar versión de prompt/inspector.
+- [x] Preflight: margen conservador US$0.01213425, inferior al máximo del usuario
+  y a reserva TEXT US$0.02. Cuenta administradora y destino local verificados;
+  límites existentes respetados. Registro de consumo solo local.
+- [x] Un despacho adicional real: 3.479 tokens entrada / 2.588 salida;
+  coste calculado US$0.00604575, respuesta completa guardada antes de validar.
+  REJECTED_CANDIDATE con seis incidencias: dos hallazgos sin evidencia del alumno,
+  palabra no producida en su cita, error léxico ajeno, dimensión gramatical sin
+  enlace a sus hallazgos e interacción sin intercambio contiguo.
+- [x] Revisión offline confirma que el prompt v2 NO resolvió calidad: confunde
+  turnos del personaje con producción del alumno, insiste en error sobre recurso
+  ajeno y usa brevedad/vocabulario básico como limitaciones de nivel inicial.
+  No aceptar sus niveles 3 como mejora frente al 100 anterior. No reparar informe,
+  bajar notas por heurística, ejecutar más llamadas ni publicar por continuidad.
+- [x] 42 pruebas simuladas en cuatro suites pasan; tipos/lint/formato/diff pasan.
+  Dos claims privados en total, uno por autorización; no se borra ninguno.
+  Nota/General Level/puntos/captura/producción intactos, sin commit o despliegue.
+- [x] Corrección estructural offline: transporte con catálogos L/P propiedad del
+  servidor; esquema y lector impiden aceptar citas del personaje como producción
+  y restringen evidencias por objetivo léxico. Citas reconstruidas desde original,
+  no escritas por IA. Servicio privado local conectado; lector nuevo/legacy
+  diferenciado. No activa flag, amplía autorizaciones ni borra claims anteriores.
+- [x] Export real preparado sin envío: cinco fragmentos claros del alumno y siete
+  del personaje; 高兴 no puede vincularse al fragmento ajeno sobre destino.
+  Solicitud privada distinta, archivos originales conservados y solo dos claims.
+  65 pruebas dirigidas pasan; regresión completa previa al último caso nuevo:
+  1.886/1.886 en 166 archivos. Documento
+  `speaking-quality/server-owned-evidence-2026-10-18.md`.
+- [ ] Calidad de selección/juicio semántico, aceptación real del esquema por
+  proveedor y calibración docente siguen sin probar; gramática no se certifica
+  por coincidencia de texto. Omisiones/sustituciones léxicas requieren contrato
+  aparte, no usar palabra ajena. Pronunciación/fluidez sin audio evaluable.
+  Cualquier otra IA necesita autorización; no cambia el evaluador de Vercel.
+  Detalle `speaking-quality/production-single-review-preparation.md`.
+
+## Calidad Speaking — pruebas reutilizando lo pagado, 18/10/2026
+
+- [x] Usuario autoriza usar las DOS respuestas guardadas, sin gasto adicional.
+  Script offline con pins e integridad, datos originales verificados y fetch
+  bloqueado. No proveedores, secretos, base o contabilidad importados.
+- [x] 19/19 comprobaciones reales de regresión/selección pasan: rechazo original,
+  no conversión silenciosa al contrato nuevo, hablante, recurso ajeno, citas
+  controladas por servidor, contexto y ayuda; dos controles positivos sin nota.
+  Sondas derivadas, NO respuestas nuevas del modelo ni informes corregidos.
+- [x] Hashes de export/ambas respuestas sin cambios; cero intentos de red,
+  llamadas pagadas o escrituras de base. Auditoría privada nueva excluida de Git;
+  las dos respuestas/claims originales se conservan. 80 pruebas unitarias
+  dirigidas pasan; tipos/lint pasan. Sin publicación ni cambios de puntos/notas.
+- [ ] No se certifica todavía respuesta futura del modelo, niveles/calibración,
+  medición de audio o aceptación del esquema por API. Estas pruebas reutilizan
+  datos, no ejecutan otra evaluación. Ver
+  `speaking-quality/paid-response-offline-replay-2026-10-18.md`.
+
+## Calidad Speaking — prueba pagada del transporte de evidencias, 18/10/2026
+
+- [x] Nueva autorización del usuario para gastar: una llamada, máximo US$0.05,
+  sin reintentos, datos guardados y notas/producción intactos. Clave nominal
+  nueva, predecesor v2 rechazado verificado y preparación offline idéntica.
+  No desbloquea las dos autorizaciones previas. Timeout 60 s solo aquí.
+- [x] Proveedor acepta el esquema; respuesta completa VALIDATED_CANDIDATE.
+  7.944 tokens entrada / 2.535 salida: US$0.007056 calculado, debajo del margen
+  previo US$0.0181415. Registro local del administrador comprobado por lectura.
+  Score nulo y sin premios. Tres claims conservados, cero escrituras en producción.
+- [x] Revisión crítica cualitativa de Codex, NO calibración docente independiente:
+  se corrige la autoría literal y la falsa relación de 高兴 con destino; todavía
+  hay cita equivocada del acto preguntar nombre, motivos que explican otro
+  recurso/contexto, etiquetas EN/IDs técnicos y no observado confundido con
+  falta de oportunidad. Cuatro niveles 4 no aprobados como calificación.
+- [x] Solo 3/5 intervenciones claras citadas (cobertura de referencias, no nota
+  ni precisión); required=0 en este piloto no prueba cobertura obligatoria.
+  Respuesta/inspección originales intactas y decisión cualitativa privada HOLD.
+  Análisis completo `speaking-quality/evidence-live-trial-analysis-2026-10-18.md`.
+- [x] 40 tests simulados dirigidos, tipos/lint/formato/diff pasan. Sin nueva
+  llamada, modificación de notas/puntos/General Level, cuentas, build o despliegue.
+- [ ] Alineación semántica por acto, explicación fiel y cobertura observacional
+  requieren más trabajo offline; juicio/calibración docente y audio siguen
+  pendientes. No publicar ni seguir gastando automáticamente por este resultado.
+
+## Calidad Speaking — retención pedagógica offline, 18/10/2026
+
+- [x] Continuación sin más llamadas. Auditoría separada del formato técnico:
+  HOLD, studentReady=false, score=null. No cambia prompt/esquema, versiones
+  pagadas, claves/autorizaciones o respuesta original. No autoaprobación.
+- [x] Primera regla editorial acotada a preguntar nombre en Saludos: señala
+  presentación propia atribuida al acto equivocado. Acepta patrones simples y
+  reciprocidad contextual; paráfrasis/otros actos requieren revisión, no son
+  errores del alumno ni provocan reducción automática de nivel.
+- [x] Cobertura por intervenciones claras citadas/sin citar y STT excluido, sin
+  porcentajes de dominio; required=0 no certifica cobertura. NO_OPPORTUNITY
+  pendiente de contexto. Pantalla privada separa retención, citas y prosa de IA
+  sin aprobación docente; conserva niveles originales, sin narrativa corregida.
+- [x] Relectura gratuita de la tercera respuesta real con pins/hash y fetch
+  bloqueado: f3 señalado, 3/5 turnos claros citados, tres faltas de oportunidad
+  por revisar. Originales intactos; cero red, pago o escrituras de base.
+  Documento `speaking-quality/pedagogical-hold-and-citation-coverage-2026-10-18.md`.
+- [x] Regresión unitaria/componentes: 1.922/1.922 en 167 archivos; tipos, lint
+  dirigido, formato y diff pasan.
+  Solicitud completa (prompt, datos y esquema) idéntica al ensayo comprado;
+  auditoría final coincide con el artefacto privado sin sobrescribirlo.
+- [ ] Calibración docente/audio, reglas para los demás actos y explicaciones
+  semánticamente fieles siguen pendientes. No confundir un control limitado o
+  HOLD con una evaluación corregida/calibrada. Sin publicación en este bloque.
+
+## Calidad Speaking — cuatro objetivos de Saludos, 18/10/2026
+
+- [x] Auditoría v2: reglas editoriales por slug/etiquetas exactas para saludar,
+  decir nombre, preguntar nombre y preguntar origen. Reciprocidad usa tema local
+  y contexto inmediato; citas recortadas no ocultan negación/cambio de tema.
+  Formas no cubiertas requieren revisión, no se penalizan. Sin nota ni aprobación.
+- [x] Otras intervenciones con patrones pertinentes separadas de las citas de IA:
+  no se insertan en el juicio ni mejoran cobertura/niveles. Vista privada con
+  enlaces y explicación explícita; ningún botón de pago o escritura.
+- [x] Relectura del ensayo pagado: f1/f2/f4 con patrones localizados; f3 señalado
+  y otra frase original disponible, sin reparar el hallazgo. Cobertura 3/5,
+  HOLD y límites pendientes intactos. Auditorías v1/v2 privadas conservadas,
+  cero red, gasto o BD. Matriz editorial aclara compartir vs. preguntar origen;
+  no se modifica currículo persistente. Ver
+  `speaking-quality/greetings-act-evidence-expansion-2026-10-18.md`.
+- [x] 1.971/1.971 pruebas en 168 archivos; tipos, lint dirigido, formato y diff
+  pasan. Solicitud completa e integridad comparadas con el ensayo original;
+  auditorías v1/v2 separadas y solo tres claims. Matriz editorial v2, rúbrica
+  ordinal y contrato del proveedor sin cambios.
+- [ ] Calibración docente, niveles/motivos fieles, audio y reglas para otras
+  lecciones pendientes. Esta ampliación no demuestra calidad universal ni cambia
+  el evaluador activo de Vercel. Sin publicación en este bloque.
+
+## Calidad Speaking — restaurante y contrato piloto, 18/10/2026
+
+- [x] Contraste offline de inventario/misiones/paquetes ES antes de modificar.
+  Matriz editorial v3 corregida: restaurante exige plato/bebida/preguntar picante;
+  contrato alcance/objeción/documentación escrita. No cambios al currículo en BD.
+- [x] Seis reglas por slug/etiqueta exactos ES/EN; comida/bebida y petición/oferta
+  separadas, elipsis solo contextual inmediata. Contrato distingue consulta,
+  objeción y solicitud escrita; no certifica acuerdo, legalidad o registro nativo.
+- [x] Auditoría v3 y títulos privados; intención no acredita forma gramatical
+  explícita de dos objetivos de contrato. Variantes no cubiertas se revisan,
+  nunca se convierten automáticamente en error/nota cero. Continúa HOLD/null,
+  sin aprobar ni reparar el juicio original. Ver
+  `speaking-quality/restaurant-contract-act-evidence-2026-10-18.md`.
+- [x] 2.028/2.028 pruebas en 169 archivos; tipos, lint dirigido, formato y diff
+  pasan. Relectura gratuita del ensayo de Saludos sin regresión: f3 retenido,
+  solicitud/hash originales y tres claims intactos. Auditoría v3 nueva, v1/v2
+  conservadas; cero red/pago/BD. No hay ensayo pagado real de estas dos lecciones.
+- [ ] Calibración humana, precisión del modelo, audio y demás lecciones pendientes.
+  Esta entrega no habilita otro gasto ni publica el evaluador candidato en Vercel.
+
+## Calidad Speaking — preparación de calibración docente, 18/10/2026
+
+- [x] Usuario pide calibración docente: realizada revisión pedagógica asistida
+  por Codex, no presentada como validación de profesores independientes.
+  Rúbrica editorial v2, 18 casos sintéticos/108 propuestas con motivos/citas;
+  pronunciación/fluidez siempre null (36 valores), sin audio nuevo.
+- [x] Ficha sin clave con IDs/turnos opacos y orden por hash, clave separada,
+  comparador offline que mantiene null/ausencias y diferencia exacta/ordinal
+  por dimensión. Incluso autoacuerdo perfecto deja deploymentEligible=false,
+  independentHumanReviewVerified=false y score=null. Sin vía de autoaprobación.
+- [x] Fichas generadas y clave separada en almacenamiento ignorado por Git;
+  versión vigente v3, anteriores conservadas. Integridad de fuentes, ausencia
+  de clave en la ficha y 18 tablas legibles comprobadas. Cero llamadas/docentes
+  independientes/grabaciones. Regresión completa 2.040/2.040 en 170 archivos;
+  doce pruebas dirigidas finales pasan. Ninguna nota/cuenta/Vercel modificados.
+- [ ] Revisión independiente por dos docentes, consenso, corpus humano reservado,
+  precisión/estabilidad reales y calibración acústica siguen pendientes. No se
+  simulan personas o identidades ni se declara completada esa validación.
+  Ver `speaking-quality/calibration/README.md` y `editorial-rubric-v2.md`.
+
 ## Recuperación sin nueva IA — 18 de octubre de 2026
 
 - [x] Segundo ajuste publicado en PR #6, merge `f66dcd7`; CI 39037794809

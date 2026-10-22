@@ -1,6 +1,12 @@
 import { z } from "zod";
 import type { JourneySpeakingBanks } from "@/lib/content/journey-speaking-bank-contract";
 import type { JourneyAssessmentSnapshot } from "@/lib/journey-lesson-report";
+import type { JOURNEY_UNIFIED_POLICY } from "@/lib/journey-unified-policy";
+import type { JourneySpeakingLevel } from "@/lib/journey-speaking-level";
+import {
+  JourneySessionAudioResultSchema,
+  readJourneySessionAudio,
+} from "@/lib/journey-session-audio-review";
 
 export const JOURNEY_RUBRIC_VERSION = "journey-evidence-2026-10-11-v2";
 export const JOURNEY_CAPTURE_SOURCE = "browser-captured";
@@ -20,6 +26,9 @@ export type JourneyAttemptSnapshot = {
   successConditions: Array<{ id: string; text: string }>;
   banks: JourneySpeakingBanks;
   assessment?: JourneyAssessmentSnapshot;
+  /** Explicit algorithm policy, frozen with the server-owned snapshot. */
+  evaluationPolicy?: typeof JOURNEY_UNIFIED_POLICY;
+  speakingLevel?: JourneySpeakingLevel;
 };
 
 export const JourneyAttemptStartSchema = z
@@ -41,6 +50,7 @@ export const JourneyCaptureQualitySchema = z
   .object({
     pendingLearnerTurn: z.boolean(),
     interruptedAssistant: z.boolean(),
+    sessionAudio: JourneySessionAudioResultSchema.optional(),
   })
   .strict();
 
@@ -78,6 +88,20 @@ export const JourneyAttemptSealSchema = z
   })
   .strict()
   .superRefine((capture, context) => {
+    if (
+      capture.quality?.sessionAudio &&
+      !readJourneySessionAudio(
+        capture.quality.sessionAudio,
+        capture.attemptId,
+        capture.quality.sessionAudio.locale,
+        capture.turns,
+      )
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Session audio review does not match capture",
+        path: ["quality", "sessionAudio"],
+      });
     if (
       capture.turns.reduce((n, turn) => n + turn.content.length, 0) >
       JOURNEY_MAX_CAPTURE_CHARACTERS

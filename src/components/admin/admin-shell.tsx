@@ -28,6 +28,15 @@ const navigation = [
     icon: Megaphone,
   },
   { href: "/admin/feedback", label: "Feedback", icon: MessageSquareText },
+  ...(process.env.NODE_ENV === "development"
+    ? [
+        {
+          href: "/admin/speaking-quality",
+          label: "Calidad de Speaking",
+          icon: ShieldCheck,
+        },
+      ]
+    : []),
   { href: "/admin/limits", label: "Límites de IA", icon: Gauge },
   {
     href: "/admin/operations",

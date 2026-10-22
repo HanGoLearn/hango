@@ -1,4 +1,8 @@
 import "server-only";
+import { JOURNEY_UNIFIED_POLICY } from "@/lib/journey-unified-policy";
+import { readUnifiedJourneyReview } from "@/lib/journey-unified-speaking-server";
+import { readJourneySessionAudio } from "@/lib/journey-session-audio-review";
+import { canStartUndispatchedUnifiedEvaluation } from "@/lib/journey-evaluation-recovery";
 import { db } from "@/lib/db";
 import {
   canRecoverJourneyEvaluation,
@@ -143,6 +147,11 @@ function buildSelectedReport({
   assessment,
 }: Awaited<ReturnType<typeof getSelectedAttempt>>) {
   const evaluation = attempt.evaluation;
+  const matchingEvaluation =
+    !evaluation ||
+    (evaluation.rubricVersion === attempt.rubricVersion &&
+      evaluation.locale === attempt.locale);
+  const unifiedPolicy = snapshot.evaluationPolicy === JOURNEY_UNIFIED_POLICY;
   let state = evaluation?.status ?? "PENDING";
   // An empty/no-microphone capture has nothing to send to a judge. This is
   // a read-only derived state, not a fabricated zero or a provider request.
@@ -169,6 +178,7 @@ function buildSelectedReport({
     state = "FAILED";
   let report = null;
   if (
+    !unifiedPolicy &&
     evaluation?.report &&
     ["COMPLETE", "PARTIAL", "INSUFFICIENT"].includes(evaluation.status)
   ) {
@@ -200,7 +210,8 @@ function buildSelectedReport({
           )
         : null;
     if (!report) state = "FAILED";
-  } else if (["COMPLETE", "PARTIAL"].includes(state)) state = "FAILED";
+  } else if (!unifiedPolicy && ["COMPLETE", "PARTIAL"].includes(state))
+    state = "FAILED";
   const view = buildJourneyLessonReport(
     attempt.id,
     attempt.locale as "es" | "en",
@@ -208,6 +219,48 @@ function buildSelectedReport({
     state,
     report,
   );
+  const audio = readJourneySessionAudio(
+    JourneyCaptureQualitySchema.safeParse(attempt.captureQuality).data
+      ?.sessionAudio,
+    attempt.id,
+    attempt.locale as "es" | "en",
+    attempt.turns.map((turn) => ({
+      role: turn.role === "USER" ? "user" : "assistant",
+      content: turn.content,
+    })),
+    snapshot.speakingLevel ? attempt.snapshotHash : undefined,
+  );
+  if (audio) {
+    const { rejectedDraft: _privateRejectedDraft, ...visibleAudio } = audio;
+    view.speaking.sessionAudio = visibleAudio;
+  }
+  if (unifiedPolicy) {
+    const context: JourneyEvaluationContext = {
+      snapshot,
+      locale: attempt.locale as "es" | "en",
+      closeReason: attempt.closeReason!,
+      turns: attempt.turns.map((turn) => ({
+        id: turn.id,
+        sequence: turn.sequence,
+        role: turn.role === "USER" ? "user" : "assistant",
+        content: turn.content,
+        ...(turn.recognition
+          ? { recognition: JourneyRecognitionSchema.parse(turn.recognition) }
+          : {}),
+      })),
+      ...(attempt.captureQuality
+        ? { quality: JourneyCaptureQualitySchema.parse(attempt.captureQuality) }
+        : {}),
+    };
+    view.unified = readUnifiedJourneyReview(
+      attempt.id,
+      context,
+      assessment,
+      matchingEvaluation ? evaluation?.report : undefined,
+      matchingEvaluation ? state : "FAILED",
+      attempt.snapshotHash,
+    );
+  }
   if (
     attempt.status === "TECHNICAL_FAILURE" ||
     attempt.closeReason === "ABANDONED"
@@ -236,6 +289,24 @@ function buildSelectedReport({
     attempt.status === "SEALED" &&
     getJourneyEvaluationCandidate({ ...evaluation, status: state }),
   );
+  if (unifiedPolicy) {
+    const eligible =
+      matchingEvaluation && attempt.status === "SEALED" && state === "FAILED";
+    view.speaking.canRepairWithoutAi = Boolean(eligible && evaluation?.report);
+    view.speaking.canRetry = Boolean(
+      eligible &&
+      evaluation &&
+      (evaluation.report ||
+        canStartUndispatchedUnifiedEvaluation({
+          ...evaluation,
+          status: state,
+          failureCode:
+            evaluation.status === "PROCESSING"
+              ? "processing_expired"
+              : evaluation.failureCode,
+        })),
+    );
+  }
   return view;
 }
 
@@ -256,6 +327,7 @@ function projectionMatches(
     provenance.data.attemptId === report.attemptId &&
     provenance.data.progressId === assessment.progressId &&
     provenance.data.progressStartedAt === assessment.progressStartedAt &&
+    provenance.data.evaluationPolicy === report.unified?.version &&
     row.totalScore === report.overall.score &&
     row.vocabularyScore === report.categories.vocabulary.score &&
     row.grammarScore === report.categories.grammar.score &&
@@ -352,7 +424,7 @@ export async function persistJourneyLessonReport(
             comprehensionScore: report.categories.comprehension.score,
             speakingScore: report.speaking.score,
             totalScore: report.overall.score,
-            hanNarrative: feedback?.summary ?? "",
+            hanNarrative: feedback?.summary ?? report.unified?.hanNote ?? "",
             strengths: feedback?.achievement ? [feedback.achievement.text] : [],
             improvements: feedback?.priority ? [feedback.priority.text] : [],
             // Explicit provenance, NOT the old acoustic dimension structure.
@@ -361,6 +433,9 @@ export async function persistJourneyLessonReport(
               attemptId: report.attemptId,
               progressId: selected.assessment.progressId,
               progressStartedAt: selected.assessment.progressStartedAt,
+              ...(report.unified
+                ? { evaluationPolicy: report.unified.version }
+                : {}),
             },
             rewardsGrantedAt: report.rewards.eligible ? new Date() : null,
           };

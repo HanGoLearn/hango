@@ -234,6 +234,13 @@ export function SpeakingStep({
         <Body className="text-text-secondary">
           {messages.speaking.description}
         </Body>
+        {captureEnabled && (
+          <Caption className="mt-2 block">
+            {locale === "es"
+              ? "Al finalizar, revisaremos el audio disponible de esta sesión para darte observaciones experimentales de pronunciación, tonos y ritmo. El micrófono estará apagado durante la revisión. Este análisis consume IA adicional; la estimación por sesión no es un precio fijo garantizado."
+              : "At the end, we review the available session audio for experimental pronunciation, tone and rhythm observations. Your microphone is off during review. This analysis uses additional AI; the session estimate is not a guaranteed fixed price."}
+          </Caption>
+        )}
       </div>
 
       {!fallbackVisible && mission && rolePlay && !finishedTranscript && (
