@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildJourneySpeakingLevel } from "@/lib/journey-speaking-level";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -95,6 +96,20 @@ describe("Realtime session accounting route (mock provider)", () => {
     expect((await POST(tutor)).status).toBe(400);
   });
   it("uses the frozen server role and bank for a bound Journey handshake", async () => {
+    const audioContext = {
+      contextHash: "a".repeat(64),
+      level: buildJourneySpeakingLevel(1, "BEGINNER", 350),
+      lesson: {
+        id: "lesson",
+        slug: "greetings",
+        title: "Saludos",
+        difficulty: "BEGINNER",
+        objective: "Give your name",
+        successConditions: ["Say your own name"],
+        coreVocabulary: ["叫"],
+        coreGrammar: [],
+      },
+    };
     const banks = {
       version: "test-version",
       lessonId: "lesson",
@@ -112,8 +127,11 @@ describe("Realtime session accounting route (mock provider)", () => {
         ...rolePlay,
         aiRole: "New classmate",
         objective: "Give your name",
+        journeyLevel: audioContext.level,
       },
       banks,
+      locale: "es",
+      audioContext,
     });
     const input = request(
       "PRACTICE",
@@ -126,7 +144,13 @@ describe("Realtime session accounting route (mock provider)", () => {
     const payload = await response.json();
     expect(payload.journeyAttemptId).toBe("owned");
     expect(payload.journeySpeakingBanks).toEqual(banks);
+    expect(payload.journeySessionAudioReview).toEqual({
+      version: "journey-session-audio-2026-10-21-v1",
+      locale: "es",
+      context: audioContext,
+    });
     expect(payload.instructions).not.toContain("FORGED_ROLE");
+    expect(payload.instructions).toContain("350 points");
     expect(mocks.banks).not.toHaveBeenCalled();
   });
   it("resolves Journey exposure from the authenticated user and discards a forged bank", async () => {

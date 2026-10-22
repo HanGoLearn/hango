@@ -8,6 +8,7 @@ import {
   type JourneyAttemptSnapshot,
 } from "@/lib/journey-speaking-attempt-contract";
 import type { RolePlayContext } from "@/lib/ai-context";
+import { buildJourneyAudioLessonContext } from "@/lib/journey-speaking-level";
 
 /** Binding is optional during rollout, but a provided ID is never ignored. */
 export async function getJourneyRealtimeBinding(
@@ -30,6 +31,7 @@ export async function getJourneyRealtimeBinding(
     scenarioContext: snapshot.scenarioContext ?? snapshot.objective,
     objective: snapshot.objective,
     lessonHskLevel: snapshot.hskReference ?? undefined,
+    ...(snapshot.speakingLevel ? { journeyLevel: snapshot.speakingLevel } : {}),
     lessonVocabulary: [
       ...snapshot.banks.core.vocabulary,
       ...snapshot.banks.support.vocabulary,
@@ -42,5 +44,14 @@ export async function getJourneyRealtimeBinding(
     ].map((item) => item.text),
     lessonPhrases: snapshot.banks.phraseBank,
   };
-  return { attemptId: attempt.id, rolePlay, banks: snapshot.banks };
+  return {
+    attemptId: attempt.id,
+    locale: attempt.locale,
+    rolePlay,
+    banks: snapshot.banks,
+    audioContext: buildJourneyAudioLessonContext(
+      snapshot,
+      attempt.snapshotHash,
+    ),
+  };
 }

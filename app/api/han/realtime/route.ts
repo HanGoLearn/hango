@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { JOURNEY_SESSION_AUDIO_VERSION } from "@/lib/journey-session-audio-review";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serverEnv } from "@/lib/env/server";
@@ -132,6 +133,10 @@ export async function POST(request: Request) {
     return new Response("Invalid voice conversation surface", { status: 400 });
   const attemptId = request.headers.get("x-hango-journey-attempt-id");
   let boundAttemptId: string | null = null;
+  let boundLocale: "es" | "en" | null = null;
+  let boundAudioContext: Awaited<
+    ReturnType<typeof getJourneyRealtimeBinding>
+  >["audioContext"];
   if (attemptId !== null) {
     if (
       feature !== "journey-speaking-realtime-session" ||
@@ -147,6 +152,8 @@ export async function POST(request: Request) {
       context.rolePlay = binding.rolePlay;
       context.journeySpeakingBanks = binding.banks;
       boundAttemptId = binding.attemptId;
+      boundLocale = binding.locale === "es" ? "es" : "en";
+      boundAudioContext = binding.audioContext;
     } catch {
       return new Response("Journey attempt unavailable", { status: 403 });
     }
@@ -326,6 +333,15 @@ export async function POST(request: Request) {
       speechSpeed,
       rolePlayLevel: resolvedRolePlayLevel ?? null,
       ...(boundAttemptId ? { journeyAttemptId: boundAttemptId } : {}),
+      ...(boundAttemptId
+        ? {
+            journeySessionAudioReview: {
+              version: JOURNEY_SESSION_AUDIO_VERSION,
+              locale: boundLocale,
+              ...(boundAudioContext ? { context: boundAudioContext } : {}),
+            },
+          }
+        : {}),
       ...(feature === "journey-speaking-realtime-session"
         ? { journeySpeakingBanks: context.journeySpeakingBanks ?? null }
         : {}),

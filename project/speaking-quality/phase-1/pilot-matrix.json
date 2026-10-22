@@ -1,0 +1,173 @@
+{
+  "version": "journey-quality-pilot-2026-10-18-v3",
+  "status": "editorial-draft-not-human-calibrated",
+  "sourceInventory": "project/curriculum-audit-2026-10-10/final/matriz.json",
+  "runtimeEnabled": false,
+  "lessons": [
+    {
+      "slug": "foundations-greetings-and-introductions",
+      "difficulty": "BEGINNER",
+      "titleEs": "Saludos y presentaciones",
+      "coreWords": ["你好", "叫", "名字", "认识", "哪", "国"],
+      "coreGrammar": ["Subject + 叫 + Name", "Noun/Pronoun + 呢？"],
+      "supportGrammar": ["Statement + 吗？"],
+      "objectives": [
+        {
+          "id": "greet",
+          "description": "Saludar de forma pertinente",
+          "evidence": "Saludo propio en el intercambio, no solo palabras del personaje"
+        },
+        {
+          "id": "identify",
+          "description": "Presentarse por nombre",
+          "evidence": "Formulación propia de nombre; copia inmediata se etiqueta asistida"
+        },
+        {
+          "id": "ask-name",
+          "description": "Preguntar el nombre del interlocutor",
+          "evidence": "Pregunta comprensible o continuación elíptica pertinente como 你呢"
+        },
+        {
+          "id": "origin",
+          "description": "Preguntar el origen del interlocutor y compartir el propio de forma contextual",
+          "evidence": "El objetivo congelado Ask where they're from exige una pregunta propia o reciprocidad pertinente como 你呢. Decir solamente la propia nacionalidad no demuestra preguntar el origen; no se exige una nacionalidad concreta."
+        }
+      ],
+      "opportunities": [
+        "Dejar espacio para presentación y pregunta recíproca",
+        "Preguntar origen solo si no se ha proporcionado",
+        "Aceptar profesor, estudiante u otra identidad sin imponer el diálogo modelo"
+      ],
+      "notRequired": [
+        "Usar todas las palabras",
+        "Decir que es estudiante",
+        "Hablar sin pausas",
+        "Dar una respuesta larga",
+        "Repetir la nacionalidad ya expresada"
+      ],
+      "referenceExamples": {
+        "limited": "Ante 你叫什么名字, responde solo con un saludo repetido y no consigue comunicar un nombre incluso tras ayuda accesible.",
+        "developing": "Aplica 我叫小林 inmediatamente después del modelo y necesita apoyo para devolver la pregunta; hay logro asistido.",
+        "effective": "Se presenta y pregunta por el interlocutor; comparte origen, con un error local o ayuda puntual que debe identificarse.",
+        "strong": "Combina de forma propia saludo, presentación y reciprocidad, responde sobre origen sin apoyo constante; pronunciación y fluidez quedan pendientes de audio."
+      },
+      "acousticReviewTargets": [
+        "Pronunciación contextual de 你好 frente a tonos de diccionario",
+        "Tono léxico en 叫",
+        "Sílabas y pronunciación contextual de 名字 y 认识"
+      ],
+      "feedbackFocus": "Una estructura de presentación aplicada y una prioridad demostrada; no afirmar tonos perfectos desde el texto."
+    },
+    {
+      "slug": "restaurant-entering-and-ordering",
+      "difficulty": "INTERMEDIATE",
+      "titleEs": "Entrar y pedir",
+      "sourceMissionId": "cmstlaijt001w3weoz7i0bd7x",
+      "coreWords": ["几位", "点菜", "辣", "清淡"],
+      "coreGrammar": [
+        "我要 + [item]",
+        "[Adjective/Verb] + 不 + [Adjective/Verb]"
+      ],
+      "supportGrammar": [],
+      "objectives": [
+        {
+          "id": "order-dish",
+          "sourceText": "Order at least one dish",
+          "description": "Pedir al menos un plato elegido por el estudiante",
+          "evidence": "Petición comprensible propia o respuesta elíptica ante una pregunta pertinente del camarero. No imponer 宫保鸡丁. El número de personas es contexto, no sustituye este objetivo."
+        },
+        {
+          "id": "order-drink",
+          "sourceText": "Order at least one drink",
+          "description": "Pedir al menos una bebida",
+          "evidence": "Petición propia de bebida, separada de la de comida; una bebida ofrecida solo por el camarero o una declaración de gusto no bastan para afirmar que el alumno la pidió."
+        },
+        {
+          "id": "ask-spicy",
+          "sourceText": "Ask whether the dish is spicy",
+          "description": "Preguntar si el plato es picante cuando existe oportunidad",
+          "evidence": "Pregunta propia directa o elíptica con referente verificable. Pedir que no pique no demuestra por sí solo haber preguntado si pica; A-no-A se observa solo si se produce realmente."
+        }
+      ],
+      "opportunities": [
+        "Preguntar tamaño del grupo una sola vez si falta",
+        "Permitir elegir plato",
+        "Ofrecer espacio natural para aclarar sabor o preferencia sin forzar la frase exacta"
+      ],
+      "notRequired": [
+        "Pronunciar el nombre de un plato obligatorio",
+        "Repetir el saludo del camarero",
+        "Usar todos los tipos de pregunta",
+        "Inventar una alergia",
+        "Aceptar un pedido distinto al elegido"
+      ],
+      "referenceExamples": {
+        "limited": "No consigue comunicar un pedido o responder sobre el grupo tras apoyo adecuado; no se infiere incapacidad si hubo un fallo de audio.",
+        "developing": "Comunica 两位 y un plato, pero necesita el modelo del camarero para formular su petición o aclarar la preferencia.",
+        "effective": "Pide comida y bebida y consulta si pica de manera comprensible; hay un error local identificable o una reparación puntual.",
+        "strong": "Coordina sus peticiones de comida y bebida y la pregunta sobre picante con formulaciones propias; el grupo es contexto y los recursos no usados siguen no observados."
+      },
+      "acousticReviewTargets": [
+        "Sílabas/tonos de 点菜 y 清淡 cuando se pronuncian",
+        "Continuidad de una petición sin confundir latencia con vacilación"
+      ],
+      "feedbackFocus": "Separar pedido logrado, gramática realmente aplicada y vocabulario no demostrado; aceptar respuestas elípticas contextuales."
+    },
+    {
+      "slug": "negotiating-job-contract-reviewing-contract-terms",
+      "difficulty": "ADVANCED",
+      "titleEs": "Revisión de las condiciones del contrato",
+      "sourceMissionId": "cmstmhpca087e3weo70q24jwf",
+      "coreWords": ["条款", "确认", "涵盖", "期限", "考核", "书面文件"],
+      "coreGrammar": [
+        "具体涵盖哪些 + noun？",
+        "能不能把 + item + 写进 + document？"
+      ],
+      "supportGrammar": ["Subject + 是不是有点 + adjective？"],
+      "objectives": [
+        {
+          "id": "clarify-scope",
+          "sourceText": "Ask about a clause's scope using 具体涵盖哪些范围",
+          "description": "Preguntar por el alcance de una cláusula concreta",
+          "evidence": "Pregunta propia con referente verificable, aceptando paráfrasis comunicativas. El uso de la forma 具体涵盖哪些范围, mencionada en el objetivo fuente, requiere evidencia separada; no se certifica por lograr la intención."
+        },
+        {
+          "id": "pushback",
+          "sourceText": "Diplomatically push back using 是不是有点",
+          "description": "Cuestionar una condición con tacto",
+          "evidence": "Objeción o petición de ajuste propia. El patrón 是不是有点 y la adecuación del registro se revisan por separado; no inferir acuerdo o incorrección lingüística por una preferencia contractual."
+        },
+        {
+          "id": "request-record",
+          "sourceText": "Request written documentation",
+          "description": "Solicitar aclaración o constancia escrita cuando procede",
+          "evidence": "Petición pertinente; una paráfrasis puede lograr la comunicación sin demostrar necesariamente la estructura 把"
+        }
+      ],
+      "opportunities": [
+        "Responder a la condición realmente elegida",
+        "Permitir aclarar alcance y plazo",
+        "No afirmar condiciones legales universales ni un acuerdo firmado"
+      ],
+      "notRequired": [
+        "Aceptar dos años de restricción",
+        "Usar 竞业限制 si se eligió otra condición",
+        "Tener conocimientos jurídicos",
+        "Compartir datos confidenciales",
+        "Usar 把 si no hay oportunidad pertinente"
+      ],
+      "referenceExamples": {
+        "limited": "Enumera términos sin lograr una pregunta comprensible pese a apoyo; no confundir desacuerdo legal con error lingüístico.",
+        "developing": "Pregunta por un plazo de forma general, pero necesita modelos para precisar el alcance o formular una solicitud escrita.",
+        "effective": "Plantea una aclaración precisa y continúa el intercambio con alguna imprecisión de registro o estructura comprobable.",
+        "strong": "Precisa una condición, ajusta preguntas a la respuesta y solicita constancia con lenguaje adecuado; no se certifica validez jurídica ni dominio global avanzado."
+      },
+      "acousticReviewTargets": [
+        "Inteligibilidad de términos efectivamente pronunciados",
+        "Segmentación de preguntas más largas",
+        "Prosodia funcional de aclaración, sin exigir imitación de una voz nativa"
+      ],
+      "feedbackFocus": "Precisión y registro en una frase real; distinguir intención lograda de estructura concreta no demostrada."
+    }
+  ]
+}

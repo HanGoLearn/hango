@@ -10,6 +10,14 @@ import {
 import { JOURNEY_RUBRIC_VERSION } from "@/lib/journey-speaking-attempt-contract";
 import type { JourneyEvaluationReport } from "@/lib/journey-speaking-evaluation";
 import { JOURNEY_EVALUATION_POLICY } from "@/lib/journey-evaluation-policy";
+import { axe } from "jest-axe";
+import {
+  JOURNEY_SESSION_AUDIO_VERSION,
+  unavailableJourneySessionAudio,
+} from "@/lib/journey-session-audio-review";
+import { sessionAudioJudgment } from "../fixtures/journey-session-audio";
+import { unifiedView } from "../fixtures/journey-unified";
+import { buildJourneySpeakingLevel } from "@/lib/journey-speaking-level";
 afterEach(cleanup);
 function report(locale: "es" | "en", complete = true) {
   const dimension = {
@@ -81,6 +89,152 @@ function report(locale: "es" | "en", complete = true) {
 }
 describe("ES/EN final report", () => {
   it.each(["es", "en"] as const)(
+    "renders ONE real integrated reflection with six criteria, exercise grades, tone corrections and no legacy duplicate (%s)",
+    async (locale) => {
+      const result = report(locale);
+      result.unified = unifiedView(locale);
+      result.unified.level = buildJourneySpeakingLevel(1, "BEGINNER", 350);
+      const before = structuredClone(result);
+      const { container, rerender } = render(
+        <JourneyFinalReport report={result} />,
+      );
+      expect(
+        screen.getByRole("region", {
+          name:
+            locale === "es"
+              ? "Reflexión integrada de la lección"
+              : "Integrated lesson reflection",
+        }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("group", {
+          name:
+            locale === "es"
+              ? "Nota provisional de la lección: 93/100"
+              : "Provisional lesson score: 93/100",
+        }),
+      ).toBeVisible();
+      expect(container.querySelectorAll("details")).toHaveLength(7);
+      expect(
+        screen.getByRole("region", {
+          name:
+            locale === "es" ? "Nivel de este intento" : "This attempt's level",
+        }),
+      ).toHaveTextContent("350");
+      expect(
+        screen.getAllByRole("region", {
+          name: locale === "es" ? "Una nota de Han" : "A note from Han",
+        }),
+      ).toHaveLength(1);
+      expect(screen.getByText("wǒ")).toBeVisible();
+      expect(
+        screen.queryByText(/^(Autonomía|Autonomy)$/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", {
+          name:
+            locale === "es"
+              ? "Tu pronunciación, tonos y ritmo"
+              : "Your pronunciation, tones and rhythm",
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          locale === "es" ? /no.*concede puntos/ : /does not.*grant points/,
+        ),
+      ).toBeVisible();
+      expect((await axe(container)).violations).toEqual([]);
+      rerender(<JourneyFinalReport report={result} />);
+      expect(result).toEqual(before);
+    },
+  );
+  it("explains an incomplete integrated result without inventing a grade or hiding quiz results", () => {
+    const result = report("es");
+    result.unified = {
+      ...unifiedView(),
+      lessonScore: null,
+      speakingScore: null,
+      holds: ["Falta la revisión de audio."],
+      phase: "PARTIAL",
+    };
+    render(<JourneyFinalReport report={result} />);
+    expect(
+      screen.getByRole("group", { name: "Nota provisional de la lección: —" }),
+    ).toBeVisible();
+    expect(screen.getByText("Falta la revisión de audio.")).toBeVisible();
+    expect(screen.getByText("Vocabulario: 100/100")).toBeVisible();
+    expect(screen.queryByText(/Conversación: 0\/100/)).not.toBeInTheDocument();
+  });
+  it.each(["es", "en"] as const)(
+    "shows saved provisional audio observations without replacing or inflating the linguistic score (%s)",
+    async (locale) => {
+      const result = report(locale);
+      result.speaking.sessionAudio = {
+        version: JOURNEY_SESSION_AUDIO_VERSION,
+        attemptId: "attempt",
+        locale,
+        provenance: "UNVERIFIED_BROWSER_REALTIME_REVIEW",
+        status: "REVIEWED",
+        reason: "COMPLETED",
+        totalLearnerTurns: 1,
+        submittedItems: [{ sequence: 1, itemId: "audio-1" }],
+        judgment: sessionAudioJudgment(
+          "attempt",
+          "audio-1",
+          1,
+          "你好，我叫小明。",
+          locale,
+        ),
+      };
+      const before = structuredClone(result);
+      const { container, rerender } = render(
+        <JourneyFinalReport report={result} />,
+      );
+      expect(
+        screen.getByRole("region", {
+          name:
+            locale === "es"
+              ? "Tu pronunciación, tonos y ritmo"
+              : "Your pronunciation, tones and rhythm",
+        }),
+      ).toBeVisible();
+      expect(screen.getAllByText("3/4 · provisional")).toHaveLength(3);
+      expect(screen.getByText("nǐ")).toBeVisible();
+      expect(
+        screen.getByText(
+          locale === "es"
+            ? /no están calibrados con docentes/
+            : /not teacher-calibrated/,
+        ),
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          locale === "es" ? "Conversación: 75/100" : "Conversation: 75/100",
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: /audio|replay/i }),
+      ).not.toBeInTheDocument();
+      expect((await axe(container)).violations).toEqual([]);
+      rerender(<JourneyFinalReport report={result} />);
+      expect(result).toEqual(before);
+    },
+  );
+  it("shows an audio failure without erasing the saved language feedback or inventing a zero", () => {
+    const result = report("es");
+    result.speaking.sessionAudio = unavailableJourneySessionAudio(
+      "attempt",
+      "es",
+      "TIMEOUT",
+      1,
+    );
+    render(<JourneyFinalReport report={result} />);
+    expect(screen.getByText(/superó el tiempo de espera/)).toBeVisible();
+    expect(screen.getByText("Pudiste presentarte.")).toBeVisible();
+    expect(screen.getAllByText("Sin evaluar")).toHaveLength(3);
+    expect(screen.queryByText("0/4")).not.toBeInTheDocument();
+  });
+  it.each(["es", "en"] as const)(
     "explains excluded speech visibly without hiding the valid score (%s)",
     (locale) => {
       const result = report(locale);
@@ -106,17 +260,19 @@ describe("ES/EN final report", () => {
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText(
+        screen.queryByLabelText(
           locale === "es" ? "Nota global: —" : "Overall score: —",
         ),
       ).not.toBeInTheDocument();
     },
   );
-  it("keeps detailed counts and criteria collapsed, one feedback panel", () => {
+  it("shows the criteria while keeping their evidence collapsed, one feedback panel", () => {
     const { container } = render(<JourneyFinalReport report={report("es")} />);
     const details = container.querySelectorAll("details");
-    expect(details).toHaveLength(1);
-    expect(details[0]).not.toHaveAttribute("open");
+    expect(details).toHaveLength(8);
+    for (const detail of details) expect(detail).not.toHaveAttribute("open");
+    expect(screen.getByText("30 de 40 puntos")).toBeVisible();
+    expect(screen.getAllByText("Sin evaluar")).toHaveLength(3);
     expect(screen.getAllByText("Lo que hiciste bien")).toHaveLength(1);
     expect(
       screen.queryByText("Errores de expresión oral"),
@@ -137,7 +293,7 @@ describe("ES/EN final report", () => {
     expect(
       screen.queryByText(/conversación oral más larga/),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Nota global: —")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nota global: —")).toBeInTheDocument();
   });
   it.each(["es", "en"] as const)(
     "shows confirmed settlement in %s, not a promised extra payment",
@@ -167,7 +323,7 @@ describe("ES/EN final report", () => {
     expect(
       screen.getByRole("region", { name: "Tu resultado de la lección" }),
     ).toHaveAttribute("lang", "es");
-    expect(screen.getByText("Nota global: 93/100")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nota global: 93/100")).toBeInTheDocument();
     expect(screen.getAllByText("Lo que hiciste bien")).toHaveLength(1);
     expect(screen.getAllByText("Tu siguiente mejora")).toHaveLength(1);
     expect(screen.getByText("你叫什么名字？")).toHaveAttribute("lang", "zh");
@@ -180,7 +336,7 @@ describe("ES/EN final report", () => {
     const { container } = render(
       <JourneyFinalReport report={report("es", false)} />,
     );
-    expect(screen.getByText("Nota global: —")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nota global: —")).toBeInTheDocument();
     expect(screen.getByText("Resultado parcial")).toBeInTheDocument();
     expect(screen.queryByText(/^Estrellas:/)).not.toBeInTheDocument();
     expect(
@@ -215,12 +371,38 @@ describe("ES/EN final report", () => {
     expect(
       screen.queryByText("You introduced yourself."),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Overall score: —")).toBeInTheDocument();
+    expect(screen.getByLabelText("Overall score: —")).toBeInTheDocument();
     expect(
       screen.getByText("In assessed exercises: 3 of 3 answers correct."),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/system failure, not your mistake/),
     ).toBeInTheDocument();
+  });
+  it.each(["es", "en"] as const)(
+    "keeps the integrated report accessible (%s)",
+    async (locale) => {
+      const { container } = render(
+        <JourneyFinalReport report={report(locale)} />,
+      );
+      expect((await axe(container)).violations).toEqual([]);
+    },
+  );
+  it("does not infer separate vocabulary/grammar or acoustic scores from the saved grade", () => {
+    const result = report("es");
+    result.speaking.report!.dimensions.autonomy = {
+      observation: "NOT_OBSERVED",
+      level: null,
+      reason: "Sin evidencia independiente.",
+      citations: [],
+    };
+    render(<JourneyFinalReport report={result} />);
+    expect(
+      screen.getByText(/Uso del idioma combina vocabulario y gramática/),
+    ).toBeVisible();
+    expect(screen.getByText("Sin aporte calculable")).toBeVisible();
+    expect(screen.getAllByText("Sin evaluar")).toHaveLength(3);
+    expect(screen.queryByText(/Audio simulado/)).not.toBeInTheDocument();
+    expect(screen.getByText("Conversación: 75/100")).toBeVisible();
   });
 });

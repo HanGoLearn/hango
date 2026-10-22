@@ -1,4 +1,6 @@
 import "server-only";
+import { JOURNEY_UNIFIED_POLICY } from "@/lib/journey-unified-policy";
+import { buildJourneySpeakingLevel } from "@/lib/journey-speaking-level";
 import { createHash } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
@@ -55,7 +57,13 @@ export async function startJourneySpeakingAttempt(
     return existing;
   }
   const [user, lesson] = await Promise.all([
-    db.user.findUnique({ where: { id: userId }, select: { role: true } }),
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        learnerProfile: { select: { generalLevelPoints: true } },
+      },
+    }),
     db.lesson.findFirst({
       where: {
         id: parsed.lessonId,
@@ -115,6 +123,11 @@ export async function startJourneySpeakingAttempt(
     lessonTitle: lesson.title,
     difficulty: lesson.scenarioLevel.difficulty,
     hskReference: lesson.hskReference,
+    speakingLevel: buildJourneySpeakingLevel(
+      lesson.hskReference,
+      lesson.scenarioLevel.difficulty,
+      user.learnerProfile?.generalLevelPoints ?? 0,
+    ),
     aiRole: mission.aiRole ?? "conversation partner",
     learnerRole: mission.learnerRole ?? "learner",
     objective: mission.objective,
@@ -125,6 +138,11 @@ export async function startJourneySpeakingAttempt(
     })),
     banks,
     ...(assessment ? { assessment } : {}),
+    // Owner can test the real unified lesson report without silently switching
+    // other students or relabeling an existing frozen attempt as the new rubric.
+    ...(user.role === "ADMINISTRATOR"
+      ? { evaluationPolicy: JOURNEY_UNIFIED_POLICY }
+      : {}),
   };
   try {
     return await db.$transaction(
@@ -224,6 +242,13 @@ export async function sealJourneySpeakingAttempt(
       where: { id: capture.attemptId, userId, lessonId: capture.lessonId },
     });
     if (!current) throw new JourneyAttemptAccessError("Attempt unavailable");
+    if (
+      capture.quality?.sessionAudio &&
+      capture.quality.sessionAudio.locale !== current.locale
+    )
+      throw new JourneyAttemptConflictError(
+        "Session audio review locale mismatch",
+      );
     if (current.status !== "ACTIVE") {
       if (current.captureHash === captureHash) return current;
       throw new JourneyAttemptConflictError("Attempt already sealed");

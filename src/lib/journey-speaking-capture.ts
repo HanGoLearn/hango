@@ -7,6 +7,10 @@ import {
 } from "@/lib/journey-speaking-attempt-contract";
 import type { SpeakingTranscriptMessage } from "@/lib/reflection-prompt";
 import type { SpeakingTurnEvidence } from "@/lib/speech/speaking-pronunciation-evidence";
+import {
+  readJourneySessionAudio,
+  unavailableJourneySessionAudio,
+} from "@/lib/journey-session-audio-review";
 
 /** Browser adapter. Never replace original recognition with contextual guesses.
  * Oversized captures are bounded and explicitly technical/partial, not silently
@@ -83,6 +87,23 @@ export function buildJourneyAttemptCapture(
       pendingLearnerTurn:
         truncated || diagnostics.quality?.pendingLearnerTurn || false,
       interruptedAssistant: diagnostics.quality?.interruptedAssistant || false,
+      ...(diagnostics.quality?.sessionAudio
+        ? {
+            sessionAudio:
+              readJourneySessionAudio(
+                diagnostics.quality.sessionAudio,
+                attemptId,
+                diagnostics.quality.sessionAudio.locale,
+                turns,
+              ) ??
+              unavailableJourneySessionAudio(
+                attemptId,
+                diagnostics.quality.sessionAudio.locale,
+                "INVALID_REVIEW",
+                turns.filter((turn) => turn.role === "user").length,
+              ),
+          }
+        : {}),
     },
   });
 }

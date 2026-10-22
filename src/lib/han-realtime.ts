@@ -128,6 +128,7 @@ type RealtimeRolePlay = {
   level?: string;
   /** The lesson's own HSK reference (1-9). Drives per-turn pace/vocabulary scaling; ignored when `level` is set. Mirrors RolePlayContext.lessonHskLevel in ai-context.ts, which only reaches the realtime session's *initial* instructions - this field is what actually reaches every per-turn response.create call. */
   lessonHskLevel?: number;
+  journeyLevel?: import("./journey-speaking-level").JourneySpeakingLevel;
   pace?: "slow" | "normal" | "fast";
   isFreeTopic?: boolean;
   /** "tutor": briefly correct clear mistakes in the explanation language right after the in-character Mandarin reply. Unset/"scene": stay fully in character, no corrections mid-conversation (existing behavior). */
@@ -1324,7 +1325,10 @@ export function buildRealtimeTurnInstructions(
       "Never reproduce the lesson's reference dialogue verbatim. Keep the exchange natural and guide it toward the active goal.",
       rolePlayTurnStrategy === "direct"
         ? journeyPhase
-          ? buildJourneySpeakingPolicy(journeyPhase)
+          ? buildJourneySpeakingPolicy(
+              journeyPhase,
+              effectiveRolePlay.journeyLevel,
+            )
           : effectiveRolePlay.isFreeTopic
             ? "Continue this one live scene directly from the shared session history. Preserve its established roles, place, activity, and causal sequence; stay responsive and relaxed. The application timer, not this turn, decides when to close."
             : `Continue directly from the shared session history toward this objective: ${effectiveRolePlay.objective}. During the available time, create one natural opportunity at a time for the learner to use lesson vocabulary or grammar they have not yet attempted. Never name a target, coach the answer, or turn the scene into an oral exam. The application timer, not objective completion, decides when to close.`

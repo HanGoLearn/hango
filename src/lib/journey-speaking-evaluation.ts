@@ -208,6 +208,16 @@ export function getJourneyEvaluableContext(
 ): JourneyEvaluationContext {
   return {
     ...context,
+    // Browser-delivered acoustic opinions are not authoritative grade evidence.
+    // Keep them out of the textual judge, including reasons/injected instructions.
+    ...(context.quality
+      ? {
+          quality: {
+            pendingLearnerTurn: context.quality.pendingLearnerTurn,
+            interruptedAssistant: context.quality.interruptedAssistant,
+          },
+        }
+      : {}),
     turns: context.turns.filter(
       (turn) => turn.role !== "user" || !hasUncertainJourneyRecognition(turn),
     ),

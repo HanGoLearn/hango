@@ -124,6 +124,7 @@ export interface RolePlayContext {
    * explicit user override) is set.
    */
   lessonHskLevel?: number;
+  journeyLevel?: import("./journey-speaking-level").JourneySpeakingLevel;
   /** Explicit per-session speaking pace override; unset behaves like today (no special pace instruction). */
   pace?: "slow" | "normal" | "fast";
   /** True for Speaking Lab's free-topic practice (an open-length conversation) - false/unset for a lesson's short, scripted role-play scene. */
@@ -873,7 +874,7 @@ function buildRealtimeRolePlaySection(
     "- Open with one short conversational move and then stop. It may be a greeting plus one concise functional question, or one brief fact plus a reciprocal cue, but never a greeting, name, occupation, nationality, and question all together. Save every additional detail for later turns.",
     "- Use at most two very short sentences per turn at the target level: one simple response and, when useful, one short question. Never give a speech, list several facts about yourself, or offer several alternatives at once.",
     journeyPractice
-      ? buildJourneySpeakingPolicy()
+      ? buildJourneySpeakingPolicy("practice", rolePlay.journeyLevel)
       : rolePlay.isFreeTopic
         ? "- This is timed open practice. Continue naturally until the application asks for the closing line; never conclude early merely because one topic feels complete."
         : `- This is timed lesson practice. Continue naturally until the application asks for the closing line. Objective completion does not end the session: use the remaining time to create one natural opportunity at a time for unused lesson vocabulary or grammar, without naming or coaching the target.`,

@@ -11,7 +11,7 @@ describe("non-billing local Speaking preview", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Ver resultado y feedback" }),
     );
-    expect(screen.getByText("Nota global: 93/100")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nota global: 93/100")).toBeInTheDocument();
     expect(screen.getByText("Conversación: 75/100")).toBeInTheDocument();
     expect(
       screen.getByText(/Resultado de ejemplo: no se guarda/),
@@ -46,11 +46,13 @@ describe("non-billing local Speaking preview", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Ejemplo sin captura oral" }),
     );
-    expect(screen.getByText("Nota global: —")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nota global: —")).toBeInTheDocument();
     expect(
       screen.getByText(/La captura oral no se completó/),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Nota global: 0/100")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Nota global: 0/100"),
+    ).not.toBeInTheDocument();
   });
   it("keeps the fixture synthetic and localized", () => {
     const fixture = createJourneyReportPreview("en");
