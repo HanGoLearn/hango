@@ -9,8 +9,16 @@ Status: Active
   forma parte de esta publicación. Credenciales/exports privados excluidos.
 - [x] Alerta nueva de Vite detectada antes de publicar y corregida con parche
   compatible 8.3.5. Auditoría runtime cero; excepción braces existente sin ampliar.
-- [ ] Completar verificaciones finales, PR/CI y despliegue productivo; comprobar
-  alias/salud/lección y dejar instrucciones de un intento nuevo para el admin.
+- [x] PR #8 integrado con todos los controles verdes: commit de aplicación
+  `e948fa99ca68135b413d6c5b227b2df857e4c363`. PC sincronizada por fast-forward;
+  árbol idéntico al revisado. Vercel producción Ready
+  `dpl_BCyLVpK6WudhtWv284gPWwtbKLCm`, alias hango-three.vercel.app confirmado.
+- [x] Salud pública ok/200, login ES/EN 200, cabeceras de seguridad presentes;
+  previews Speaking/diseño 404. Lección real accesible con la sesión existente,
+  resultado antiguo conservado. Cero IA pagada, borrados o migraciones reales.
+- [ ] Usuario: iniciar un intento nuevo como administrador, completar Speaking
+  y pulsar «Evaluar esta conversación» en Reflexión. Verificar audio, variables,
+  nivel, nota y feedback. Precisión acústica/docente y P2 aún pendientes.
   Ver `speaking-quality/release-2026-10-22.md`.
 
 ## Speaking — tres P1 y nivel por experiencia, 22/10/2026
@@ -34,8 +42,9 @@ Status: Active
   40/40 integraciones repetidas con base desechable retirada, tipos, lint,
   formato y diff correctos. Compilación aislada de 73 páginas completada, sin
   conexión real ni claves de IA. No se publicó ni consumió OpenAI.
-- [ ] Prueba real, calibración docente, P2 de la auditoría y publicación autorizada
-  siguen pendientes; no declarar que estos cambios ya están en Vercel.
+- [x] Publicación autorizada completada con PR #8, CI verde y Vercel Ready;
+  ver registro de publicación arriba. Los intentos históricos no se convierten.
+- [ ] Prueba real, calibración docente y P2 de la auditoría siguen pendientes.
   Detalle: `speaking-quality/fixes-and-progression-2026-10-22.md`.
 
 ## Speaking — unión en la reflexión real, 21/10/2026
