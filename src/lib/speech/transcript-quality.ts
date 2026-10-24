@@ -6,6 +6,10 @@ export const HAN_STT_REPEAT_MESSAGE =
 
 export const MIN_HAN_STT_CONFIDENCE = 0.15;
 
+/** Realtime accepts a much smaller prompt than Han's conversation instructions.
+ * Budget the COMPLETE transcription hint, including its safety suffix. */
+export const MAX_HAN_STT_PROMPT_CHARACTERS = 1_024;
+
 const MULTILINGUAL_PROMPT =
   "HanGo Mandarin-learning conversation. The learner speaks only Spanish, English, or Standard Mainland Mandarin Chinese (普通话), and may switch languages inside one sentence. A Spanish or English carrier sentence may quote, ask about, or practice a Mandarin word. Write every clearly spoken Mandarin fragment in Simplified Chinese characters, even when the rest of that same sentence is Spanish or English; never render that Mandarin fragment as an English/Spanish homophone or raw pinyin. Preserve clearly spoken Spanish or English normally. Transcribe only words supported by the audio: never infer a common beginner phrase from silence, background noise, a cough, or an indistinct sound. Never transcribe the speech as Thai or Korean.";
 
@@ -49,22 +53,31 @@ export function buildHanSttPrompt(
   mode: SttTranscriptionMode,
   vocabulary: readonly string[] = [],
 ): string {
-  const lessonTerms = vocabulary
-    .map((term) => term.trim())
-    .filter(Boolean)
-    .slice(0, 12)
-    .join("、")
-    .slice(0, 300);
+  const multilingual = mode === "han-multilingual";
+  const base = multilingual ? MULTILINGUAL_PROMPT : MANDARIN_PROMPT;
+  if (base.length > MAX_HAN_STT_PROMPT_CHARACTERS)
+    throw new Error("Transcription base prompt exceeds the transport limit");
 
-  if (mode === "han-multilingual") {
-    return lessonTerms
-      ? `${MULTILINGUAL_PROMPT} Possible contextual terms: ${lessonTerms}. Use them only when the acoustic evidence clearly supports them; context is never evidence by itself.`
-      : MULTILINGUAL_PROMPT;
+  const prefix = multilingual
+    ? " Possible contextual terms: "
+    : " 本次练习可能会用到：";
+  const suffix = multilingual
+    ? ". Use them only when the acoustic evidence clearly supports them; context is never evidence by itself."
+    : "。这些词只用于辅助辨认，不能作为音频中出现了该词的证据。";
+  const contextBudget = Math.min(
+    300,
+    MAX_HAN_STT_PROMPT_CHARACTERS - base.length - prefix.length - suffix.length,
+  );
+  const terms: string[] = [];
+  const candidates = [
+    ...new Set(vocabulary.map((term) => term.trim()).filter(Boolean)),
+  ].slice(0, 12);
+  for (const term of candidates) {
+    // Never cut a Mandarin word, pinyin hint, surrogate pair or safety rule.
+    // An oversized optional term must not crowd out a later hint that fits.
+    if ([...terms, term].join("、").length <= contextBudget) terms.push(term);
   }
-
-  return lessonTerms
-    ? `${MANDARIN_PROMPT} 本次练习可能会用到：${lessonTerms}。这些词只用于辅助辨认，不能作为音频中出现了该词的证据。`
-    : MANDARIN_PROMPT;
+  return terms.length ? `${base}${prefix}${terms.join("、")}${suffix}` : base;
 }
 
 export function buildRealtimeSttConfig(

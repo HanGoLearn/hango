@@ -2,6 +2,22 @@
 
 Status: Active
 
+## Han — inicio de voz y longitud de transcripción, 24/10/2026
+
+- [x] Reproducido el rechazo de `session.audio.input.transcription.prompt`:
+  la base multilingüe (733 caracteres), el contexto (hasta 300) y sus reglas
+  sumaban 1.163. El límite solo se aplicaba al contexto, no al texto completo.
+- [x] Presupuesto completo de 1.024 caracteres; se conservan las reglas base y
+  la advertencia de no inferir desde el contexto. Solo caben términos enteros,
+  sin duplicados ni fragmentos cortados; uno excesivo no desplaza a otros cortos.
+- [x] Regresión roja/verde sin proveedor: Tutor, Companion, Journey, Speaking Lab
+  y placement. 195 pruebas dirigidas y 2.137/2.137 unitarias/componentes correctas,
+  incluidos idiomas e interrupción; tipos, lint y formato correctos. Sin cambiar
+  personalidad, evaluación, modelos, tarifas o datos.
+- [x] Usuario autoriza publicar esta corrección en GitHub/Vercel, sin abrir voz
+  ni ejecutar evaluaciones de pago. Cambios limitados a transcripción y pruebas.
+- [ ] CI final, publicación y comprobación de Vercel.
+
 ## Speaking — incidente real y recuperación, 24/10/2026
 
 - [x] Intento productivo revisado solo por lectura: texto conservado, un despacho

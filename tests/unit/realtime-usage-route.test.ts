@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildJourneySpeakingLevel } from "@/lib/journey-speaking-level";
+import { MAX_HAN_STT_PROMPT_CHARACTERS } from "@/lib/speech/transcript-quality";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -70,6 +71,59 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Realtime session accounting route (mock provider)", () => {
+  it.each([
+    ["TUTOR", undefined],
+    ["PRACTICE", undefined],
+    ["PRACTICE", "JOURNEY"],
+    ["PRACTICE", "SPEAKING_LAB"],
+    ["PRACTICE", "PLACEMENT"],
+  ] as const)(
+    "keeps the outbound transcription prompt within the provider cap on %s/%s",
+    async (mode, surface) => {
+      mocks.fetch.mockImplementationOnce(async (_url, options) => {
+        const form = options.body as FormData;
+        const session = JSON.parse(form.get("session") as string);
+        const prompt = session.audio.input.transcription.prompt as string;
+        // Model the reported handshake rejection without opening paid audio.
+        if (prompt.length > MAX_HAN_STT_PROMPT_CHARACTERS)
+          return Response.json(
+            { error: { message: "transcription.prompt: string too long" } },
+            { status: 400 },
+          );
+        expect(session.instructions.length).toBeGreaterThan(prompt.length);
+        return new Response("mock-answer", { status: 200 });
+      });
+      const vocabulary = Array.from({ length: 12 }, (_, index) => ({
+        chineseForm: `词${index}${"语".repeat(25)}`,
+        pinyin: "contextual pinyin ".repeat(12),
+        meaning: "contextual word",
+      }));
+      const response = await POST(
+        request(
+          mode,
+          {
+            selectedVocabulary: vocabulary[0],
+            lessonVocabulary: vocabulary,
+            ...(surface
+              ? {
+                  rolePlay: {
+                    ...rolePlay,
+                    lessonVocabulary: vocabulary.map(
+                      (item) => item.chineseForm,
+                    ),
+                  },
+                }
+              : {}),
+          },
+          surface,
+        ),
+      );
+      expect(response.status).toBe(200);
+      expect(mocks.fetch).toHaveBeenCalledTimes(1);
+      expect(mocks.record).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("checks a bound attempt before budget/provider calls and never silently falls back", async () => {
     mocks.binding.mockRejectedValueOnce(new Error("wrong owner"));
     const input = request(
