@@ -26,8 +26,14 @@ Status: Active
 - [x] QA tras parches: 2.126/2.126 en 173 archivos, 55/55 integraciones repetidas
   en otra base desechable retirada, tipos/lint/build aislado de 73 páginas,
   auditoría sin avisos y export privado excluido. Último ajuste de concisión
-  acústica cubierto además por pruebas dirigidas; CI final pendiente.
-- [ ] Publicar con CI verde, verificar Vercel y recuperación.
+  acústica cubierto además por 95 pruebas dirigidas. CI completo verde
+  (incluye navegación), sin proveedor de IA real.
+- [x] PR #9 integrado: `0093b4bfab224acf85edac7ba7807507aeb0d0cf`.
+  Vercel producción Ready `dpl_A33q1CKvockQGbh5k89avHWGApeR`, alias confirmado.
+  Salud/login ES/EN 200, cabeceras presentes y previews 404. Recuperación gratuita
+  del intento real aplicada desde la web: cuatro variables originales visibles,
+  persisten al reabrir, sin nuevo despacho de IA ni borrar datos. Audio anterior
+  permanece fallido explícitamente; no se fabrica una nota integral.
 - [ ] Ensayo real del transporte acústico nuevo y calibración humana: pendientes;
   no se promete exactitud tonal ni cero fallos de proveedor. La respuesta acústica
   anterior no contiene medición recuperable y no se inventa desde el texto.
