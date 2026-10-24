@@ -359,14 +359,11 @@ describe("Journey isolated attempt voice capture", () => {
           status: "completed",
           output: [
             {
-              content: [
-                {
-                  type: "output_text",
-                  text: JSON.stringify(
-                    sessionAudioJudgment("owned-attempt", "last-audio"),
-                  ),
-                },
-              ],
+              type: "function_call",
+              name: "submit_journey_audio_review",
+              arguments: JSON.stringify(
+                sessionAudioJudgment("owned-attempt", "last-audio"),
+              ),
             },
           ],
         },
@@ -480,9 +477,9 @@ describe("Journey isolated attempt voice capture", () => {
     expect(
       (request.response as { instructions: string }).instructions,
     ).toContain("planning pauses are expected");
-    expect((request.response as { input: unknown[] }).input).toEqual([
-      { type: "item_reference", id: "learner-audio" },
-    ]);
+    expect(
+      (request.response as { input: unknown[] }).input.slice(0, -1),
+    ).toEqual([{ type: "item_reference", id: "learner-audio" }]);
     expect(audioTrack.enabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "End conversation" }));
     await act(async () =>
@@ -505,14 +502,11 @@ describe("Journey isolated attempt voice capture", () => {
           status: "completed",
           output: [
             {
-              content: [
-                {
-                  type: "output_text",
-                  text: JSON.stringify(
-                    sessionAudioJudgment("owned-attempt", "learner-audio"),
-                  ),
-                },
-              ],
+              type: "function_call",
+              name: "submit_journey_audio_review",
+              arguments: JSON.stringify(
+                sessionAudioJudgment("owned-attempt", "learner-audio"),
+              ),
             },
           ],
         },

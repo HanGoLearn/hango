@@ -5,6 +5,7 @@ import {
   unavailableJourneySessionAudio,
   JOURNEY_SESSION_AUDIO_PHASE,
   JOURNEY_SESSION_AUDIO_VERSION,
+  JOURNEY_SESSION_AUDIO_TOOL,
 } from "@/lib/journey-session-audio-review";
 import { sessionAudioJudgment } from "../fixtures/journey-session-audio";
 import { buildJourneyAttemptCapture } from "@/lib/journey-speaking-capture";
@@ -53,12 +54,50 @@ function done(
       id: "response-1",
       status: "completed",
       output: [
-        { content: [{ type: "output_text", text: JSON.stringify(raw) }] },
+        {
+          type: "function_call",
+          name: JOURNEY_SESSION_AUDIO_TOOL,
+          arguments: JSON.stringify(raw),
+        },
       ],
     },
   });
 }
 describe("Journey in-session audio review, fictional provider", () => {
+  it.each(["WrongTool", "duplicate", "dialogue"])(
+    "rejects %s output rather than grading a continued role play",
+    (kind) => {
+      const instance = review();
+      created(instance);
+      const call = {
+        type: "function_call",
+        name: kind === "WrongTool" ? "other" : JOURNEY_SESSION_AUDIO_TOOL,
+        arguments: JSON.stringify(sessionAudioJudgment()),
+      };
+      const output =
+        kind === "duplicate"
+          ? [call, call]
+          : kind === "dialogue"
+            ? [
+                {
+                  content: [
+                    { type: "output_text", text: "好的，我们明天见。" },
+                  ],
+                },
+              ]
+            : [call];
+      const result = instance.handle({
+        type: "response.done",
+        response: { id: "response-1", status: "completed", output },
+      });
+      expect(result).toMatchObject({
+        status: "FAILED",
+        reason: "INVALID_REVIEW",
+        judgment: null,
+      });
+      expect(result).not.toHaveProperty("score");
+    },
+  );
   it("receives the frozen task, curricular acoustic anchors and earned progression, and binds the result on server read", () => {
     const snapshot = unifiedContext().snapshot;
     snapshot.speakingLevel = buildJourneySpeakingLevel(1, "BEGINNER", 350);
@@ -106,9 +145,18 @@ describe("Journey in-session audio review, fictional provider", () => {
   });
   it("references actual audio item IDs, stays silent/out-of-band and caps cost without a new session", () => {
     const request = review().request();
-    expect(request.response.input).toEqual([
+    expect(request.response.input.slice(0, -1)).toEqual([
       { type: "item_reference", id: "audio-1" },
     ]);
+    expect(request.response.input.at(-1)).toMatchObject({
+      type: "message",
+      role: "user",
+    });
+    expect(request.response.tool_choice).toEqual({
+      type: "function",
+      name: JOURNEY_SESSION_AUDIO_TOOL,
+    });
+    expect(request.response.tools).toHaveLength(1);
     expect(request.response.conversation).toBe("none");
     expect(request.response.output_modalities).toEqual(["text"]);
     expect(request.response.max_output_tokens).toBe(2200);
@@ -161,7 +209,7 @@ describe("Journey in-session audio review, fictional provider", () => {
       ).toBe("PROVIDER_FAILED");
     },
   );
-  it("accepts streamed JSON only from its own response ID", () => {
+  it("does not accept prose JSON as a successful forced review", () => {
     const instance = review();
     created(instance);
     instance.handle({
@@ -174,7 +222,7 @@ describe("Journey in-session audio review, fictional provider", () => {
         type: "response.done",
         response: { id: "response-1", status: "completed" },
       })?.status,
-    ).toBe("REVIEWED");
+    ).toBe("FAILED");
   });
   it.each([
     "attempt",
@@ -231,7 +279,7 @@ describe("Journey in-session audio review, fictional provider", () => {
       26,
       "request-1",
     );
-    expect(instance.request().response.input).toHaveLength(24);
+    expect(instance.request().response.input).toHaveLength(25); // 24 audio + explicit review command
     created(instance);
     expect(
       done(instance, sessionAudioJudgment("attempt", "item-0", 0, "你"))
@@ -280,7 +328,10 @@ describe("Journey in-session audio review, fictional provider", () => {
       response_id: "response-1",
       text: "{incomplete paid output",
     });
-    const result = done(instance)!;
+    const result = instance.handle({
+      type: "response.done",
+      response: { id: "response-1", status: "completed" },
+    })!;
     expect(result).toMatchObject({
       status: "FAILED",
       reason: "INVALID_REVIEW",

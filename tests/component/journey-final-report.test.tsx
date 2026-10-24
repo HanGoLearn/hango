@@ -17,6 +17,8 @@ import {
 } from "@/lib/journey-session-audio-review";
 import { sessionAudioJudgment } from "../fixtures/journey-session-audio";
 import { unifiedView } from "../fixtures/journey-unified";
+import { buildJourneyUnifiedView } from "@/lib/journey-unified-speaking";
+import { unifiedAssessment, unifiedContext } from "../fixtures/journey-unified";
 import { buildJourneySpeakingLevel } from "@/lib/journey-speaking-level";
 afterEach(cleanup);
 function report(locale: "es" | "en", complete = true) {
@@ -88,6 +90,49 @@ function report(locale: "es" | "en", complete = true) {
   );
 }
 describe("ES/EN final report", () => {
+  it.each(["es", "en"] as const)(
+    "shows a failed evaluation honestly without empty Han praise or a request to repeat (%s)",
+    async (locale) => {
+      const result = report(locale);
+      const context = unifiedContext(locale);
+      result.unified = buildJourneyUnifiedView({
+        locale,
+        turns: context.turns,
+        assessment: unifiedAssessment(),
+        state: "FAILED",
+        audio: unavailableJourneySessionAudio(
+          "attempt",
+          locale,
+          "INVALID_REVIEW",
+          1,
+        ),
+        technicallyComplete: true,
+        textIssues: ["INVALID_SCHEMA"],
+      });
+      const { container } = render(<JourneyFinalReport report={result} />);
+      expect(
+        screen.getByRole("status", {
+          name: locale === "es" ? "Estado de las revisiones" : "Review status",
+        }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("region", {
+          name: locale === "es" ? "Una nota de Han" : "A note from Han",
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          locale === "es" ? /no es una nota cero/ : /neither a zero grade/,
+        ),
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          locale === "es" ? "Vocabulario: 100/100" : "Vocabulary: 100/100",
+        ),
+      ).toBeVisible();
+      expect((await axe(container)).violations).toEqual([]);
+    },
+  );
   it.each(["es", "en"] as const)(
     "renders ONE real integrated reflection with six criteria, exercise grades, tone corrections and no legacy duplicate (%s)",
     async (locale) => {

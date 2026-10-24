@@ -156,6 +156,14 @@ export function readUnifiedJourneyReview(
       context.quality !== undefined &&
       !context.quality.pendingLearnerTurn,
     level: context.snapshot.speakingLevel,
+    textIssues:
+      inspection?.state === "REJECTED_CANDIDATE"
+        ? inspection.inspection.issues.map((issue) => issue.code)
+        : inspection && inspection.state !== "VALIDATED_CANDIDATE"
+          ? [inspection.state]
+          : raw && !inspection
+            ? ["STORED_REVIEW_MISMATCH"]
+            : [],
   });
   return result;
 }

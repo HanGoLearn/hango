@@ -2,6 +2,38 @@
 
 Status: Active
 
+## Speaking — incidente real y recuperación, 24/10/2026
+
+- [x] Intento productivo revisado solo por lectura: texto conservado, un despacho
+  textual completo y revisión acústica rechazada por continuar el diálogo.
+- [x] Causa textual reproducida: seis referencias por autor se resolvían a un
+  contrato de seis totales. Contenedor corregido a doce; autoría/citas/identidad
+  y semántica se mantienen. Respuesta real ya pagada validada offline con la
+  misma huella de solicitud y niveles originales 3/3/2/3; cero IA o escrituras.
+- [x] Audio: entrega mediante función forzada fuera de banda y orden explícita
+  de revisión tras los audios. Solo una función propia, salida acotada, silencio,
+  correlación, conservación privada de fallos y ninguna repetición automática.
+- [x] UI ES/EN distingue pendiente, evaluado y fallido; acción principal antes del
+  informe, aviso de audio antes de consumir texto, sin falsa nota/cero ni tarjetas
+  vacías de elogios. Se conserva evaluación textual aunque falte el audio.
+- [x] Usuario autoriza parches de seguridad y publicación. Next/ESLint 16.4.3,
+  Zod 4.6.6, Undici 6.29.1/8.12.2, fast-uri 3.1.9 y Vitest 4.1.12; sin cambios
+  mayores, `audit fix --force` ni ampliación de excepciones. Aviso braces retirado
+  por su mantenedor; su excepción antigua sigue vencida, no se renueva.
+- [x] QA previo a parches: 2.124 unitarias/componentes y 55 integraciones en base
+  desechable eliminada; tipos/lint/build de 73 páginas. Auditoría tras parches:
+  cero vulnerabilidades, respuesta real sigue validando sin gasto adicional.
+- [x] QA tras parches: 2.126/2.126 en 173 archivos, 55/55 integraciones repetidas
+  en otra base desechable retirada, tipos/lint/build aislado de 73 páginas,
+  auditoría sin avisos y export privado excluido. Último ajuste de concisión
+  acústica cubierto además por pruebas dirigidas; CI final pendiente.
+- [ ] Publicar con CI verde, verificar Vercel y recuperación.
+- [ ] Ensayo real del transporte acústico nuevo y calibración humana: pendientes;
+  no se promete exactitud tonal ni cero fallos de proveedor. La respuesta acústica
+  anterior no contiene medición recuperable y no se inventa desde el texto.
+
+Detalle: `speaking-quality/incident-2026-10-24.md`.
+
 ## Publicación autorizada de Speaking — 22/10/2026
 
 - [x] Usuario solicita actualizar Vercel para probar. Rama separada y destino

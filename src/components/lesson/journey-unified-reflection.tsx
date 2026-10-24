@@ -22,6 +22,13 @@ export function JourneyUnifiedReflection({
   const { locale } = view;
   const t = (es: string, en: string) => (locale === "es" ? es : en);
   const text = journeyReportMessages[locale];
+  const textUnavailable = view.reviewStatus?.text !== "ASSESSED";
+  const hasFeedback =
+    view.achievements.length > 0 ||
+    view.corrections.length > 0 ||
+    Object.values(view.dimensions).some(
+      (dimension) => dimension.level !== null,
+    );
   const number = (value: number) =>
     value.toLocaleString(locale, { maximumFractionDigits: 2 });
   const priorities = view.corrections.filter(
@@ -110,6 +117,56 @@ export function JourneyUnifiedReflection({
           className="pointer-events-none absolute right-0 top-12 hidden sm:block"
         />
       </div>
+      {view.reviewStatus &&
+        (textUnavailable || view.reviewStatus.audio !== "COMPLETED") && (
+          <section
+            className="space-y-2 rounded-panel border border-warning-500/40 bg-surface p-5"
+            role="status"
+            aria-label={t("Estado de las revisiones", "Review status")}
+          >
+            <CardTitle>
+              {t("Estado de las revisiones", "Review status")}
+            </CardTitle>
+            <Body>
+              {view.reviewStatus.text === "ASSESSED"
+                ? t(
+                    "Texto: evaluado. Sus variables y evidencias están disponibles aunque falte el audio.",
+                    "Text: assessed. Its dimensions and evidence remain available even when audio is missing.",
+                  )
+                : view.reviewStatus.text === "FAILED"
+                  ? t(
+                      "Texto: la evaluación falló sus controles. La conversación está conservada; esto no es una nota cero ni una falta del alumno.",
+                      "Text: evaluation failed its checks. The conversation is retained; this is neither a zero grade nor a learner failure.",
+                    )
+                  : t(
+                      "Texto: todavía no hay una evaluación completada.",
+                      "Text: no completed evaluation yet.",
+                    )}
+            </Body>
+            <Body>
+              {view.reviewStatus.audio === "COMPLETED"
+                ? t("Audio: revisión disponible.", "Audio: review available.")
+                : view.dimensions.pronunciation.reason}
+            </Body>
+            <Body>
+              {t(
+                "No repitas toda la lección para intentar recuperar el texto. Reabrir el informe o revisar la respuesta guardada no utiliza IA adicional. Una revisión de audio que falló no puede reconstruirse a partir de la transcripción.",
+                "Do not repeat the whole lesson to recover the text. Reopening this report or reviewing its saved response uses no additional AI. A failed audio review cannot be reconstructed from the transcript.",
+              )}
+            </Body>
+            {view.reviewStatus.textIssues.length > 0 && (
+              <details>
+                <summary className="min-h-11 cursor-pointer">
+                  {t(
+                    "Detalle técnico de la revisión",
+                    "Technical review details",
+                  )}
+                </summary>
+                <Caption>{view.reviewStatus.textIssues.join(" · ")}</Caption>
+              </details>
+            )}
+          </section>
+        )}
       {view.level && (
         <section
           aria-label={t("Nivel de este intento", "This attempt's level")}
@@ -291,75 +348,83 @@ export function JourneyUnifiedReflection({
           ))}
         </section>
       )}
-      <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+      {hasFeedback && (
+        <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+          <section
+            className="min-w-0 rounded-panel border border-border bg-surface p-5"
+            aria-label={text.achievement}
+          >
+            <CardTitle className="flex items-center gap-2">
+              <Check className="size-5 text-secondary-400" aria-hidden="true" />
+              {text.achievement}
+            </CardTitle>
+            {view.achievements.length ? (
+              view.achievements.map((achievement, index) => (
+                <div key={index} className="mt-3">
+                  <Body className="break-words">{achievement.text}</Body>
+                  {achievement.evidence.map((evidence, n) => (
+                    <blockquote
+                      key={n}
+                      className="mt-2 break-words font-chinese text-lg"
+                    >
+                      {evidence.quote}
+                    </blockquote>
+                  ))}
+                </div>
+              ))
+            ) : (
+              <Body className="mt-3">
+                {t(
+                  "Aún no hay logros coherentemente respaldados en esta revisión.",
+                  "This review does not yet contain consistently supported achievements.",
+                )}
+              </Body>
+            )}
+          </section>
+          <section
+            className="min-w-0 rounded-panel border border-border bg-surface p-5"
+            aria-label={text.hanNote}
+          >
+            <div className="flex items-center gap-2">
+              <HanAvatar size={36} pose="heart" />
+              <CardTitle>{text.hanNote}</CardTitle>
+            </div>
+            <Body className="mt-4 break-words">{view.hanNote}</Body>
+          </section>
+        </div>
+      )}
+      {hasFeedback && (
         <section
-          className="min-w-0 rounded-panel border border-border bg-surface p-5"
-          aria-label={text.achievement}
+          className="min-w-0 space-y-4 rounded-panel border border-border bg-elevated p-5"
+          aria-label={text.priority}
         >
-          <CardTitle className="flex items-center gap-2">
-            <Check className="size-5 text-secondary-400" aria-hidden="true" />
-            {text.achievement}
-          </CardTitle>
-          {view.achievements.length ? (
-            view.achievements.map((achievement, index) => (
-              <div key={index} className="mt-3">
-                <Body className="break-words">{achievement.text}</Body>
-                {achievement.evidence.map((evidence, n) => (
-                  <blockquote
-                    key={n}
-                    className="mt-2 break-words font-chinese text-lg"
-                  >
-                    {evidence.quote}
-                  </blockquote>
-                ))}
-              </div>
-            ))
+          <CardTitle>{text.priority}</CardTitle>
+          {priorities.length ? (
+            shownPriorities.map(correctionCard)
           ) : (
-            <Body className="mt-3">
+            <Body>
               {t(
-                "Aún no hay logros coherentemente respaldados en esta revisión.",
-                "This review does not yet contain consistently supported achievements.",
+                "No se han confirmado correcciones prioritarias en la evidencia disponible. Esto no equivale a demostrar perfección; el próximo intento puede ampliar lo observado.",
+                "No priority corrections have been confirmed in the available evidence. This does not demonstrate perfection; another attempt can broaden the evidence.",
               )}
             </Body>
           )}
         </section>
+      )}
+      {hasFeedback && (
         <section
-          className="min-w-0 rounded-panel border border-border bg-surface p-5"
-          aria-label={text.hanNote}
+          className="rounded-panel border border-secondary-500/30 bg-secondary-500/10 p-5"
+          aria-label={text.nextStep}
         >
-          <div className="flex items-center gap-2">
-            <HanAvatar size={36} pose="heart" />
-            <CardTitle>{text.hanNote}</CardTitle>
-          </div>
-          <Body className="mt-4 break-words">{view.hanNote}</Body>
-        </section>
-      </div>
-      <section
-        className="min-w-0 space-y-4 rounded-panel border border-border bg-elevated p-5"
-        aria-label={text.priority}
-      >
-        <CardTitle>{text.priority}</CardTitle>
-        {priorities.length ? (
-          shownPriorities.map(correctionCard)
-        ) : (
-          <Body>
-            {t(
-              "No se han confirmado correcciones prioritarias en la evidencia disponible. Esto no equivale a demostrar perfección; el próximo intento puede ampliar lo observado.",
-              "No priority corrections have been confirmed in the available evidence. This does not demonstrate perfection; another attempt can broaden the evidence.",
-            )}
+          <Caption className="flex items-center gap-2 uppercase tracking-wider">
+            <Target className="size-4" aria-hidden="true" />
+            {text.nextStep}
+          </Caption>
+          <Body className="mt-3 break-words font-semibold">
+            {view.nextStep}
           </Body>
-        )}
-      </section>
-      <section
-        className="rounded-panel border border-secondary-500/30 bg-secondary-500/10 p-5"
-        aria-label={text.nextStep}
-      >
-        <Caption className="flex items-center gap-2 uppercase tracking-wider">
-          <Target className="size-4" aria-hidden="true" />
-          {text.nextStep}
-        </Caption>
-        <Body className="mt-3 break-words font-semibold">{view.nextStep}</Body>
-      </section>
+        </section>
+      )}
       <details className="min-w-0 rounded-panel border border-border bg-surface p-4">
         <summary className="min-h-11 cursor-pointer">
           {t("Cobertura y todos los ajustes", "Coverage and all adjustments")}

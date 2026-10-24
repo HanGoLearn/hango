@@ -28,6 +28,11 @@ export type JourneyUnifiedView = {
   locale: "es" | "en";
   experimental: true;
   eligibleForRewards: false;
+  reviewStatus: {
+    text: "PENDING" | "PROCESSING" | "ASSESSED" | "FAILED" | "INSUFFICIENT";
+    textIssues: string[];
+    audio: JourneySessionAudioResult["reason"] | "MISSING" | "PARTIAL";
+  };
   level?: JourneySpeakingLevel;
   phase:
     | "WAITING"
@@ -86,9 +91,38 @@ export function buildJourneyUnifiedView(input: {
   audio: JourneySessionAudioResult | null;
   technicallyComplete: boolean;
   level?: JourneySpeakingLevel;
+  textIssues?: string[];
 }): JourneyUnifiedView {
   const { locale, inspection, audio } = input;
   const t = (es: string, en: string) => (locale === "es" ? es : en);
+  const audioReason = audio?.reason ?? "MISSING";
+  const audioProblem =
+    audioReason === "INVALID_REVIEW"
+      ? t(
+          "La revisión de audio falló: la respuesta no cumplió el formato de evaluación. No es un fallo de tu pronunciación.",
+          "Audio review failed: the response did not meet the evaluation contract. This is not a pronunciation error.",
+        )
+      : audioReason === "TIMEOUT"
+        ? t(
+            "La revisión de audio agotó su tiempo de espera. No se ha calculado una nota acústica.",
+            "Audio review timed out. No acoustic grade was calculated.",
+          )
+        : ["CONNECTION_CLOSED", "PENDING_TURN", "ABANDONED"].includes(
+              audioReason,
+            )
+          ? t(
+              "La sesión se cerró antes de completar la revisión de audio. No se ha calculado una nota acústica.",
+              "The session closed before audio review completed. No acoustic grade was calculated.",
+            )
+          : audioReason === "PROVIDER_FAILED"
+            ? t(
+                "El proveedor no completó la revisión de audio. No es un error del alumno.",
+                "The provider did not complete audio review. This is not a learner error.",
+              )
+            : t(
+                "La revisión de audio falta o solo cubre parte de las intervenciones.",
+                "Audio review is missing or covers only part of the turns.",
+              );
   const lookup = new Map(input.turns.map((turn) => [turn.id, turn]));
   const cite = (citations: { turnId: string; quote: string }[]): Evidence[] =>
     citations.map((c) => ({
@@ -164,8 +198,8 @@ export function buildJourneyUnifiedView(input: {
     };
   } else {
     dimensions.pronunciation.reason = dimensions.fluency.reason = t(
-      "La revisión de audio no está disponible; no se calcula a partir del texto.",
-      "Audio review is unavailable; it is not inferred from text.",
+      `${audioProblem} Los tonos y el ritmo no se deducen de la transcripción.`,
+      `${audioProblem} Tones and rhythm are not inferred from the transcript.`,
     );
   }
   const holds: string[] = [];
@@ -202,13 +236,7 @@ export function buildJourneyUnifiedView(input: {
         "One or more dimensions lack evidence; their weights are not redistributed.",
       ),
     );
-  if (audio?.status !== "REVIEWED")
-    holds.push(
-      t(
-        "La revisión de audio falta o solo cubre parte de las intervenciones.",
-        "Audio review is missing or covers only part of the turns.",
-      ),
-    );
+  if (audio?.status !== "REVIEWED") holds.push(audioProblem);
   const mismatchedFindings = new Set(
     inspection?.pedagogy.acts
       .filter((act) => act.status === "EVIDENCE_MISMATCH")
@@ -374,6 +402,19 @@ export function buildJourneyUnifiedView(input: {
     locale,
     experimental: true,
     eligibleForRewards: false,
+    reviewStatus: {
+      text: inspection
+        ? "ASSESSED"
+        : input.state === "PENDING"
+          ? "PENDING"
+          : input.state === "PROCESSING"
+            ? "PROCESSING"
+            : input.state === "INSUFFICIENT"
+              ? "INSUFFICIENT"
+              : "FAILED",
+      textIssues: (input.textIssues ?? []).slice(0, 8),
+      audio: audio?.status === "PARTIAL" ? "PARTIAL" : audioReason,
+    },
     ...(input.level ? { level: input.level } : {}),
     phase:
       input.state === "PENDING"
