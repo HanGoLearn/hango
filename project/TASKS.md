@@ -16,7 +16,15 @@ Status: Active
   personalidad, evaluación, modelos, tarifas o datos.
 - [x] Usuario autoriza publicar esta corrección en GitHub/Vercel, sin abrir voz
   ni ejecutar evaluaciones de pago. Cambios limitados a transcripción y pruebas.
-- [ ] CI final, publicación y comprobación de Vercel.
+- [x] CI completo y preview Vercel correctos. PR #10 integrado como
+  `dfb3b5c15cd93426667eaf274fa8d4dd8ccac268`; copia local sincronizada por
+  fast-forward con árbol idéntico al revisado. Auditorías de dependencias y
+  secretos correctas; no se cambiaron dependencias ni excepciones de seguridad.
+- [x] Producción Ready `dpl_4ZapmKZceEscET9fKhjTkUWALoJX`, alias
+  `hango-three.vercel.app` y commit contrastados en Vercel. Salud/login ES/EN 200,
+  cabeceras de seguridad presentes y previews 404. CI: 2.137 unitarias/componentes,
+  394 integraciones y una prueba de navegación; compilación de 73 páginas.
+  Sin iniciar voz, IA pagada, borrados, migraciones ni cambios de configuración.
 
 ## Speaking — incidente real y recuperación, 24/10/2026
 
