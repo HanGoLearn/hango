@@ -5,6 +5,7 @@ import {
   buildHanSttPrompt,
   buildRealtimeSttConfig,
   confidenceFromLogprobs,
+  MAX_HAN_STT_PROMPT_CHARACTERS,
   normalizeHanTranscript,
   transcriptHintsFromContext,
 } from "@/lib/speech/transcript-quality";
@@ -198,6 +199,60 @@ describe("Han STT language constraints", () => {
     expect(chat.prompt).not.toContain("ni hao → 你好");
     expect(rolePlay.prompt).toContain("不能作为音频中出现了该词的证据");
   });
+
+  it.each(["han-multilingual", "mandarin"] as const)(
+    "bounds the complete %s prompt, not just its contextual vocabulary",
+    (mode) => {
+      const vocabulary = Array.from(
+        { length: 40 },
+        (_, index) => `${index} 你好 (nǐ hǎo) ${"context ".repeat(10)}`,
+      );
+      const prompt = buildRealtimeSttConfig(mode, vocabulary).prompt;
+      expect(prompt.length).toBeLessThanOrEqual(MAX_HAN_STT_PROMPT_CHARACTERS);
+      expect(prompt).toContain(buildHanSttPrompt(mode));
+      expect(prompt).toMatch(
+        mode === "han-multilingual"
+          ? /context is never evidence by itself\.$/u
+          : /不能作为音频中出现了该词的证据。$/u,
+      );
+      expect(assessHanTranscript(prompt, 0.99)).toEqual({
+        ok: false,
+        reason: "prompt_leak",
+      });
+    },
+  );
+
+  it("reserves the whole safety suffix at the exact multilingual length boundary", () => {
+    const overhead = buildHanSttPrompt("han-multilingual", ["x"]).length - 1;
+    const term = "词".repeat(MAX_HAN_STT_PROMPT_CHARACTERS - overhead);
+    const prompt = buildRealtimeSttConfig("han-multilingual", [term]).prompt;
+    expect(prompt.length).toBe(MAX_HAN_STT_PROMPT_CHARACTERS);
+    expect(prompt).toContain(term);
+    expect(prompt).toMatch(/context is never evidence by itself\.$/u);
+  });
+
+  it("skips oversized hints intact and still includes later short hints", () => {
+    const prompt = buildRealtimeSttConfig("han-multilingual", [
+      " ",
+      "long-fragment-".repeat(100),
+      "  你好 (nǐ hǎo)  ",
+      "你好 (nǐ hǎo)",
+      "谢谢 (xiè xie)",
+    ]).prompt;
+    expect(prompt.length).toBeLessThanOrEqual(MAX_HAN_STT_PROMPT_CHARACTERS);
+    expect(prompt).not.toContain("long-fragment-");
+    expect(prompt).toContain("你好 (nǐ hǎo)、谢谢 (xiè xie)");
+    expect(prompt.match(/你好 \(nǐ hǎo\)/gu)).toHaveLength(1);
+  });
+
+  it.each(["han-multilingual", "mandarin"] as const)(
+    "omits the hint wrapper when no %s contextual term fits",
+    (mode) => {
+      expect(buildRealtimeSttConfig(mode, ["𠮷".repeat(1_000)]).prompt).toBe(
+        buildHanSttPrompt(mode),
+      );
+    },
+  );
 
   it("gives recorded Mandarin a dedicated Mandarin-only hint", () => {
     const prompt = buildHanSttPrompt("mandarin");
