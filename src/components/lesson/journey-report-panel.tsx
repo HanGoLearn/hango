@@ -115,16 +115,65 @@ export function JourneyReportPanel({
   const recoverable =
     report?.speaking.state === "FAILED" && report.speaking.canRetry;
   const freeRepair = report?.speaking.canRepairWithoutAi === true;
+  const waitingForReview = Boolean(report?.unified && (pending || processing));
   return (
     <div className="flex min-w-0 flex-col gap-4" aria-busy={busy}>
-      {report && <JourneyFinalReport report={report} />}
+      {waitingForReview && (
+        <section
+          className="space-y-3 rounded-panel border border-secondary-500/40 bg-surface p-5"
+          aria-label={
+            locale === "es" ? "Estado de la evaluación" : "Evaluation status"
+          }
+        >
+          <h2 className="font-display text-xl">
+            {processing
+              ? locale === "es"
+                ? "Estamos evaluando tu conversación"
+                : "Your conversation is being evaluated"
+              : locale === "es"
+                ? "Tu conversación está guardada y lista para evaluar"
+                : "Your conversation is saved and ready to assess"}
+          </h2>
+          <Body>
+            {pending
+              ? text.evaluateDescription
+              : locale === "es"
+                ? "Puedes comprobar el estado sin iniciar otra evaluación. No necesitas repetir la lección."
+                : "You can check status without starting another evaluation. You do not need to repeat the lesson."}
+          </Body>
+          {report?.unified?.reviewStatus.audio !== "COMPLETED" && (
+            <Body className="rounded-card border border-border p-3">
+              {report?.unified?.reviewStatus.audio === "PARTIAL"
+                ? locale === "es"
+                  ? "La revisión de audio es parcial. Puedes evaluar el texto guardado, pero la nota integral puede quedar pendiente."
+                  : "Audio review is partial. You can assess the saved text, but the integrated grade may remain pending."
+                : `${report?.unified?.dimensions.pronunciation.reason ?? ""} ${locale === "es" ? "Evaluar la conversación guardada revisará el texto; no recuperará los tonos de un audio no evaluado." : "Assessing the saved conversation reviews text; it cannot recover tones from unassessed audio."}`}
+            </Body>
+          )}
+          {pending && !state.error && (
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => void run("evaluate")}
+            >
+              {text.evaluate}
+            </Button>
+          )}
+          <Body>
+            {locale === "es"
+              ? "Los resultados de tus ejercicios se conservan. Las notas y el comentario de Han se mostrarán después de la revisión; no son ceros ni resultados vacíos."
+              : "Your exercise results are retained. Grades and Han's feedback appear after review; these are not zero or empty results."}
+          </Body>
+        </section>
+      )}
+      {report && !waitingForReview && <JourneyFinalReport report={report} />}
       {busy && <Body role="status">{text.loading}</Body>}
       {state.error && (
         <Body role="alert" className="text-error-500">
           {text.loadError}
         </Body>
       )}
-      {pending && <Body>{text.evaluateDescription}</Body>}
+      {pending && !waitingForReview && <Body>{text.evaluateDescription}</Body>}
       {recoverable && (
         <Body>
           {freeRepair ? text.repairDescription : text.recoverDescription}
@@ -140,7 +189,7 @@ export function JourneyReportPanel({
             {freeRepair ? text.repair : text.recover}
           </Button>
         )}
-        {pending && !state.error && (
+        {pending && !waitingForReview && !state.error && (
           <Button
             type="button"
             disabled={busy}

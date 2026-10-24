@@ -12,7 +12,7 @@ export const JOURNEY_QUALITY_CANDIDATE_VERSION =
 /** Inspector revision is separate from the response contract and dispatch key.
  * Tightening offline checks must not authorize purchasing another judgment. */
 export const JOURNEY_QUALITY_INSPECTION_VERSION =
-  "journey-quality-inspection-2026-10-18-v2";
+  "journey-quality-inspection-2026-10-24-v3";
 const TextDimensions = [
   "communication",
   "vocabulary",
@@ -24,7 +24,10 @@ const Id = z.string().trim().min(1).max(100);
 const Citation = z
   .object({ turnId: Id, quote: z.string().min(1).max(240) })
   .strict();
-const Citations = z.array(Citation).max(6);
+// Evidence-selection transport permits six learner AND six partner references.
+// Resolution preserves both catalogs; a valid paid response must not fail merely
+// because its two individually bounded lists were joined (up to twelve).
+const Citations = z.array(Citation).max(12);
 const Dimension = z
   .object({
     observation: z.enum(["OBSERVED", "NOT_OBSERVED"]),

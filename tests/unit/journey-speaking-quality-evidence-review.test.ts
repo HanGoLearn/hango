@@ -135,6 +135,38 @@ function codes(raw: ReturnType<typeof wire>, source = input()) {
   return result.inspection.issues.map((issue) => issue.code);
 }
 describe("server-owned evidence selection", () => {
+  it.each([7, 8, 9, 12])(
+    "accepts %i exact resolved citations allowed by the two role catalogs (24 Oct regression)",
+    (total) => {
+      const source = input();
+      source.capture.turns = Array.from({ length: 12 }, (_, sequence) => ({
+        id: `turn-${sequence}`,
+        sequence,
+        role: sequence % 2 ? ("user" as const) : ("assistant" as const),
+        content: sequence % 2 ? "我叫小林。" : "你叫什么名字？",
+      }));
+      const raw = wire();
+      const learnerCount = Math.min(6, total - 3);
+      raw.dimensions.communication.learnerEvidenceIds = Array.from(
+        { length: learnerCount },
+        (_, n) => `L${n * 2 + 1}_0`,
+      );
+      raw.dimensions.communication.partnerEvidenceIds = Array.from(
+        { length: total - learnerCount },
+        (_, n) => `P${n * 2}_0`,
+      );
+      for (const dimension of [
+        raw.dimensions.vocabulary,
+        raw.dimensions.grammar,
+        raw.dimensions.interaction,
+      ])
+        dimension.learnerEvidenceIds = ["L1_0"];
+      raw.dimensions.interaction.partnerEvidenceIds = ["P0_0"];
+      expect(inspect(raw, source).state).toBe("VALIDATED_CANDIDATE");
+      raw.dimensions.communication.learnerEvidenceIds.push("foreign");
+      expect(inspect(raw, source).state).toBe("REJECTED_CANDIDATE");
+    },
+  );
   it("reconstructs exact authors/text from the frozen catalog, without rewriting the candidate's level", () => {
     const result = inspect();
     expect(result.state).toBe("VALIDATED_CANDIDATE");

@@ -101,6 +101,11 @@ describe("Journey report action boundary", () => {
       name: "Evaluar esta conversación",
     });
     expect(mocks.evaluate).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("region", { name: "Estado de la evaluación" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Una nota de Han")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sin aporte calculable")).not.toBeInTheDocument();
     fireEvent.click(button);
     await screen.findByRole("group", {
       name: "Nota provisional de la lección: 93/100",

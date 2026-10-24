@@ -6,6 +6,7 @@ import {
 } from "@/lib/journey-unified-speaking-server";
 import { JOURNEY_UNIFIED_WEIGHTS } from "@/lib/journey-unified-policy";
 import { buildJourneySpeakingLevel } from "@/lib/journey-speaking-level";
+import { unavailableJourneySessionAudio } from "@/lib/journey-session-audio-review";
 import {
   unifiedAssessment,
   unifiedAudio,
@@ -28,6 +29,32 @@ function project() {
   };
 }
 describe("unified experimental reflection (synthetic evidence, no API)", () => {
+  it.each([
+    "INVALID_REVIEW",
+    "TIMEOUT",
+    "CONNECTION_CLOSED",
+    "PROVIDER_FAILED",
+  ] as const)(
+    "preserves evaluated language while disclosing %s as a system audio problem",
+    (reason) => {
+      const input = project();
+      const view = buildJourneyUnifiedView({
+        ...input,
+        audio: unavailableJourneySessionAudio("attempt", "es", reason, 1),
+      });
+      expect(view.reviewStatus).toMatchObject({
+        text: "ASSESSED",
+        audio: reason,
+      });
+      expect(view.dimensions.grammar.level).toBe(3);
+      expect(view.dimensions.pronunciation.level).toBeNull();
+      expect(view.speakingScore).toBeNull();
+      expect(view.holds.join(" ")).not.toContain(
+        "Falta evaluar la conversación",
+      );
+      expect(view.holds.join(" ")).toMatch(/falló|agotó|cerró|proveedor/);
+    },
+  );
   it("consistently holds real mismatched ask-name evidence in score, objective coverage, dimensions and Han's note", () => {
     const context = unifiedContext();
     context.snapshot.lessonSlug = "foundations-greetings-and-introductions";

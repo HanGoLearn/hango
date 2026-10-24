@@ -204,6 +204,7 @@ async function run(
   quickMisses = 0,
   withAudio = false,
   administrator = false,
+  exchanges = 1,
 ) {
   const userId = (
     await db.user.create({
@@ -286,7 +287,11 @@ async function run(
       id: "test-response",
       status: "completed",
       output: [
-        { content: [{ type: "output_text", text: JSON.stringify(judgment) }] },
+        {
+          type: "function_call",
+          name: "submit_journey_audio_review",
+          arguments: JSON.stringify(judgment),
+        },
       ],
     },
   })!;
@@ -322,13 +327,13 @@ async function run(
     attemptId: attempt.id,
     lessonId,
     closeReason: "USER_END",
-    turns: [
+    turns: Array.from({ length: exchanges }, () => [
       { role: "assistant", content: "你好，你叫什么名字？" },
       {
         role: "user",
         content: administrator ? "你好，我叫Ana。你叫什么名字？" : "我叫Ana。",
       },
-    ],
+    ]).flat(),
     ...(withAudio
       ? {
           quality: {
@@ -364,6 +369,65 @@ async function prepareFinalStep(userId: string) {
 }
 
 describe("Journey report integration (real disposable Postgres; mock AI only)", () => {
+  it("round-trips twelve resolved citations and recovers the saved text offline without another purchase (24 Oct incident)", async () => {
+    const capture = await run(true, "es", 0, false, true, 6);
+    await select(capture);
+    complete.mockImplementation(async (request: AiCompletionRequest) => {
+      const wire = unifiedWire(request.messages[0]!.content);
+      const data = JSON.parse(request.messages[0]!.content);
+      for (const key of [
+        "communication",
+        "vocabulary",
+        "grammar",
+        "interaction",
+      ] as const) {
+        wire.dimensions[key].learnerEvidenceIds = data.turns.map(
+          (turn: { id: string }) => turn.id,
+        );
+        wire.dimensions[key].partnerEvidenceIds = data.partnerContext.map(
+          (turn: { id: string }) => turn.id,
+        );
+      }
+      return {
+        content: JSON.stringify(wire),
+        provider: "openai",
+        model: "gpt-5-mini",
+        inputTokens: 1000,
+        outputTokens: 300,
+        outputStatus: "complete",
+      };
+    });
+    const evaluated = await evaluateJourneyLessonReport(
+      capture.userId,
+      lessonId,
+    );
+    expect(evaluated.unified?.reviewStatus.text).toBe("ASSESSED");
+    expect(evaluated.unified?.dimensions.grammar.level).toBe(3);
+    expect(evaluated.unified?.speakingScore).toBeNull(); // no audio, not an invented total
+    const original = await db.journeySpeakingEvaluation.findUniqueOrThrow({
+      where: { attemptId: capture.attemptId },
+    });
+    await db.journeySpeakingEvaluation.update({
+      where: { attemptId: capture.attemptId },
+      data: { status: "FAILED", failureCode: "unified_review_rejected" },
+    });
+    for (let n = 0; n < 2; n++)
+      await evaluateJourneyLessonReport(capture.userId, lessonId, {
+        recoverFailed: true,
+      });
+    const reopened = await getJourneyLessonReport(capture.userId, lessonId);
+    expect(reopened.unified?.reviewStatus.text).toBe("ASSESSED");
+    expect(complete).toHaveBeenCalledTimes(1);
+    const saved = await db.journeySpeakingEvaluation.findUniqueOrThrow({
+      where: { attemptId: capture.attemptId },
+    });
+    expect(saved).toMatchObject({
+      status: "PARTIAL",
+      requestCount: 1,
+      failureCode: null,
+    });
+    expect(saved.report).toEqual(original.report);
+  });
   it("rechecks the user's AI budget during explicit zero-dispatch recovery", async () => {
     const capture = await run(true, "es", 0, true, true);
     await select(capture);
